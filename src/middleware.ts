@@ -29,7 +29,16 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // Sederhana: Lindungi /admin, /operator, /dashboard
+  if (!user && (
+    request.nextUrl.pathname.startsWith('/admin') ||
+    request.nextUrl.pathname.startsWith('/operator') ||
+    request.nextUrl.pathname.startsWith('/dashboard')
+  )) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
 
   return response
 }

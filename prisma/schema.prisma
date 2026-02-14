@@ -27,6 +27,7 @@ enum QuotationStatus {
   sent
   accepted
   rejected
+  paid
 }
 
 model Profile {
@@ -41,10 +42,21 @@ model Profile {
   @@map("profiles")
 }
 
+model ServiceCategory {
+  id         String    @id @default(uuid())
+  name       String    @unique
+  created_at DateTime  @default(now())
+  services   Service[]
+
+  @@map("service_categories")
+}
+
 model Service {
-  id          String          @id @default(uuid())
-  category    String
-  name        String
+  id           String           @id @default(uuid())
+  category_id  String?
+  category_ref ServiceCategory? @relation(fields: [category_id], references: [id])
+  category     String?          // Made optional for migration
+  name         String
   price       Decimal         @db.Decimal
   parameters  Json?
   regulation  String?
@@ -86,13 +98,14 @@ model QuotationItem {
 }
 
 model JobOrder {
-  id             String    @id @default(uuid())
-  quotation_id   String
-  quotation      Quotation @relation(fields: [quotation_id], references: [id])
-  tracking_code  String    @unique
-  status         JobStatus @default(scheduled)
+  id              String    @id @default(uuid())
+  quotation_id    String
+  quotation       Quotation @relation(fields: [quotation_id], references: [id])
+  tracking_code   String    @unique
+  status          JobStatus @default(scheduled)
+  notes           String?   // Added for progress remarks
   certificate_url String?
-  created_at     DateTime  @default(now())
+  created_at      DateTime  @default(now())
 
   @@map("job_orders")
 }

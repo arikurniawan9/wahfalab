@@ -24,16 +24,17 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-emerald-50/30 px-4">
       <div className="absolute top-8 left-8">
-        <Link href="/" className="flex items-center gap-2 font-bold text-blue-900 text-xl">
+        <Link href="/" className="flex items-center gap-2 font-bold text-emerald-900 text-xl font-[family-name:var(--font-montserrat)]">
           <img src="/logo-wahfalab.png" alt="Logo" className="h-10 w-auto" />
+          WahfaLab
         </Link>
       </div>
       
-      <Card className="w-full max-w-md shadow-lg border-blue-100">
+      <Card className="w-full max-w-md shadow-lg border-emerald-100">
         <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-bold tracking-tight">Login</CardTitle>
+          <CardTitle className="text-2xl font-bold tracking-tight text-emerald-900">Login</CardTitle>
           <CardDescription>
             Masukkan email dan password untuk masuk ke akun Anda
           </CardDescription>
@@ -47,23 +48,23 @@ export default function LoginPage() {
             )}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" type="email" placeholder="nama@perusahaan.com" required />
+              <Input id="email" name="email" type="email" placeholder="nama@perusahaan.com" className="focus-visible:ring-emerald-500" required />
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
               </div>
-              <Input id="password" name="password" type="password" required />
+              <Input id="password" name="password" type="password" className="focus-visible:ring-emerald-500" required />
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button className="w-full bg-blue-600 hover:bg-blue-700" type="submit" disabled={loading}>
+            <Button className="w-full bg-emerald-600 hover:bg-emerald-700" type="submit" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Login
             </Button>
             <div className="text-center text-sm text-slate-500">
               Belum punya akun?{" "}
-              <Link href="/register" className="text-blue-600 hover:underline font-medium">
+              <Link href="/register" className="text-emerald-600 hover:underline font-medium">
                 Daftar Sekarang
               </Link>
             </div>

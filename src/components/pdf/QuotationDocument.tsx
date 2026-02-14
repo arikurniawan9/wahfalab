@@ -4,70 +4,124 @@ import {
   Text,
   View,
   StyleSheet,
-  Font,
+  Image,
 } from "@react-pdf/renderer";
 
-// Register fonts if needed, or use defaults
 const styles = StyleSheet.create({
   page: {
     padding: 40,
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: "Helvetica",
-    lineHeight: 1.5,
+    color: "#333",
   },
   header: {
-    marginBottom: 20,
-    borderBottom: 2,
+    flexDirection: "row",
+    borderBottomWidth: 2,
+    borderBottomColor: "#059669",
     paddingBottom: 10,
-    textAlign: "center",
+    marginBottom: 15,
+    alignItems: "center",
+  },
+  logo: {
+    width: 50,
+    height: "auto",
+  },
+  headerText: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  companyName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#064e3b",
+  },
+  companySub: {
+    fontSize: 7,
+    color: "#666",
+    marginTop: 1,
   },
   title: {
-    fontSize: 18,
+    fontSize: 12,
     fontWeight: "bold",
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 10,
-    color: "#666",
+    textAlign: "center",
+    textDecoration: "underline",
+    marginBottom: 15,
+    color: "#064e3b",
+    textTransform: "uppercase"
   },
   infoSection: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 20,
+    marginBottom: 15,
+    padding: 10,
+    backgroundColor: "#f8fafc",
+    borderRadius: 5,
   },
-  infoBox: {
-    width: "45%",
+  infoCol: {
+    width: "48%",
   },
   label: {
     fontWeight: "bold",
-    marginBottom: 2,
+    color: "#064e3b",
   },
   table: {
     width: "auto",
     borderStyle: "solid",
     borderWidth: 1,
-    borderColor: "#bfbfbf",
-    marginBottom: 20,
+    borderColor: "#e2e8f0",
+    marginBottom: 15,
   },
-  tableRow: {
+  tableHeader: {
     flexDirection: "row",
-    borderBottomColor: "#bfbfbf",
-    borderBottomWidth: 1,
+    backgroundColor: "#064e3b",
+    color: "white",
+    fontWeight: "bold",
     minHeight: 25,
     alignItems: "center",
   },
-  tableHeader: {
-    backgroundColor: "#f0f0f0",
-    fontWeight: "bold",
+  tableRow: {
+    flexDirection: "row",
+    borderBottomColor: "#e2e8f0",
+    borderBottomWidth: 1,
+    minHeight: 30,
+    paddingVertical: 5,
   },
-  col1: { width: "5%", textAlign: "center", borderRightWidth: 1, borderColor: "#bfbfbf" },
-  col2: { width: "45%", paddingLeft: 5, borderRightWidth: 1, borderColor: "#bfbfbf" },
-  col3: { width: "10%", textAlign: "center", borderRightWidth: 1, borderColor: "#bfbfbf" },
-  col4: { width: "20%", textAlign: "right", paddingRight: 5, borderRightWidth: 1, borderColor: "#bfbfbf" },
-  col5: { width: "20%", textAlign: "right", paddingRight: 5 },
+  colNo: { width: "6%", textAlign: "center" },
+  colDesc: { width: "54%", paddingLeft: 8 },
+  colQty: { width: "8%", textAlign: "center" },
+  colPrice: { width: "16%", textAlign: "right", paddingRight: 8 },
+  colTotal: { width: "16%", textAlign: "right", paddingRight: 8 },
+  
+  categoryText: {
+    fontSize: 7,
+    fontWeight: "bold",
+    color: "#059669",
+    textTransform: "uppercase",
+    marginBottom: 2,
+  },
+  serviceName: {
+    fontSize: 10,
+    fontWeight: "bold",
+    color: "#1e293b",
+  },
+  parameters: {
+    fontSize: 7,
+    color: "#64748b",
+    marginTop: 3,
+    fontStyle: "italic",
+    paddingLeft: 2,
+  },
+  regulation: {
+    fontSize: 7,
+    color: "#0f172a",
+    marginTop: 2,
+    backgroundColor: "#f1f5f9",
+    padding: 2,
+  },
+
   summarySection: {
     marginLeft: "auto",
-    width: "40%",
+    width: "35%",
   },
   summaryRow: {
     flexDirection: "row",
@@ -76,86 +130,92 @@ const styles = StyleSheet.create({
   },
   totalRow: {
     borderTopWidth: 1,
-    marginTop: 5,
-    paddingTop: 5,
+    borderTopColor: "#059669",
+    marginTop: 4,
+    paddingTop: 4,
     fontWeight: "bold",
+    fontSize: 10,
+    color: "#064e3b",
   },
   footer: {
-    marginTop: 40,
+    marginTop: 30,
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  signatureBox: {
-    width: "40%",
+  signBox: {
+    width: "35%",
     textAlign: "center",
   },
-  signatureSpace: {
-    height: 60,
+  signSpace: {
+    height: 50,
+  },
+  note: {
+    marginTop: 20,
+    fontSize: 7,
+    color: "#94a3b8",
   }
 });
 
-interface QuotationItem {
-  name: string;
-  qty: number;
-  price: number;
-  total: number;
-}
-
-interface QuotationProps {
-  data: {
-    quotation_number: string;
-    date: string;
-    client_name: string;
-    company_name: string;
-    items: QuotationItem[];
-    subtotal: number;
-    tax: number;
-    total: number;
-  };
-}
-
-export const QuotationDocument = ({ data }: QuotationProps) => (
+export const QuotationDocument = ({ data }: any) => (
   <Document>
     <Page size="A4" style={styles.page}>
-      {/* Header Kop Surat */}
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>WAHFA LAB</Text>
-        <Text style={styles.subtitle}>Laboratorium Pengujian Lingkungan & Kalibrasi</Text>
-        <Text style={styles.subtitle}>Jl. Contoh No. 123, Jakarta Selatan | Telp: (021) 12345678</Text>
+        <Image src="/logo-wahfalab.png" style={styles.logo} />
+        <View style={styles.headerText}>
+          <Text style={styles.companyName}>WahfaLab</Text>
+          <Text style={styles.companySub}>Laboratorium Pengujian Lingkungan & Kalibrasi Terakreditasi</Text>
+          <Text style={styles.companySub}>Jl. Contoh No. 123, Jakarta Selatan | (021) 12345678 | info@wahfalab.com</Text>
+        </View>
       </View>
 
-      <Text style={{ textAlign: "center", fontSize: 14, fontWeight: "bold", marginBottom: 20, textDecoration: "underline" }}>
-        PENAWARAN HARGA (QUOTATION)
-      </Text>
+      <Text style={styles.title}>Penawaran Harga / Faktur Uji</Text>
 
       <View style={styles.infoSection}>
-        <View style={styles.infoBox}>
-          <Text style={styles.label}>Kepada Yth:</Text>
-          <Text>{data.client_name}</Text>
-          <Text>{data.company_name}</Text>
+        <View style={styles.infoCol}>
+          <Text style={styles.label}>PELANGGAN:</Text>
+          <Text style={{ fontSize: 11, fontWeight: "bold", marginTop: 2 }}>{data.profile?.full_name}</Text>
+          <Text>{data.profile?.company_name || "Personal"}</Text>
         </View>
-        <View style={styles.infoBox}>
-          <Text><Text style={styles.label}>No. Penawaran: </Text>{data.quotation_number}</Text>
-          <Text><Text style={styles.label}>Tanggal: </Text>{data.date}</Text>
+        <View style={styles.infoCol}>
+          <Text style={{ textAlign: "right" }}><Text style={styles.label}>No. Faktur: </Text>{data.quotation_number}</Text>
+          <Text style={{ textAlign: "right" }}><Text style={styles.label}>Tanggal: </Text>{new Date(data.date).toLocaleDateString("id-ID", { day: 'numeric', month: 'long', year: 'numeric' })}</Text>
+          <Text style={{ textAlign: "right" }}><Text style={styles.label}>Status: </Text>{data.status.toUpperCase()}</Text>
         </View>
       </View>
 
-      {/* Table Items */}
+      {/* Table Content */}
       <View style={styles.table}>
-        <View style={[styles.tableRow, styles.tableHeader]}>
-          <Text style={styles.col1}>No</Text>
-          <Text style={styles.col2}>Deskripsi Layanan</Text>
-          <Text style={styles.col3}>Qty</Text>
-          <Text style={styles.col4}>Harga Satuan</Text>
-          <Text style={styles.col5}>Total</Text>
+        <View style={styles.tableHeader}>
+          <Text style={styles.colNo}>No</Text>
+          <Text style={styles.colDesc}>Deskripsi Layanan & Parameter</Text>
+          <Text style={styles.colQty}>Qty</Text>
+          <Text style={styles.colPrice}>Harga (Rp)</Text>
+          <Text style={styles.colTotal}>Total (Rp)</Text>
         </View>
-        {data.items.map((item, index) => (
+
+        {data?.items?.map((item: any, index: number) => (
           <View key={index} style={styles.tableRow} wrap={false}>
-            <Text style={styles.col1}>{index + 1}</Text>
-            <Text style={styles.col2}>{item.name}</Text>
-            <Text style={styles.col3}>{item.qty}</Text>
-            <Text style={styles.col4}>{item.price.toLocaleString("id-ID")}</Text>
-            <Text style={styles.col5}>{item.total.toLocaleString("id-ID")}</Text>
+            <Text style={styles.colNo}>{index + 1}</Text>
+            <View style={styles.colDesc}>
+              <Text style={styles.categoryText}>
+                {item.service?.category_ref?.name || item.service?.category || "Layanan Lab"}
+              </Text>
+              <Text style={styles.serviceName}>{item.service?.name}</Text>
+              
+              {item.service?.parameters && (
+                <Text style={styles.parameters}>
+                  Parameter: {typeof item.service.parameters === 'string' ? item.service.parameters : JSON.stringify(item.service.parameters)}
+                </Text>
+              )}
+              
+              {item.service?.regulation && (
+                <Text style={styles.regulation}>Acuan: {item.service.regulation}</Text>
+              )}
+            </View>
+            <Text style={styles.colQty}>{item.qty}</Text>
+            <Text style={styles.colPrice}>{Number(item.price_snapshot).toLocaleString("id-ID")}</Text>
+            <Text style={styles.colTotal}>{(Number(item.qty) * Number(item.price_snapshot)).toLocaleString("id-ID")}</Text>
           </View>
         ))}
       </View>
@@ -164,31 +224,31 @@ export const QuotationDocument = ({ data }: QuotationProps) => (
       <View style={styles.summarySection}>
         <View style={styles.summaryRow}>
           <Text>Subtotal</Text>
-          <Text>Rp {data.subtotal.toLocaleString("id-ID")}</Text>
+          <Text>Rp {Number(data.subtotal).toLocaleString("id-ID")}</Text>
         </View>
         <View style={styles.summaryRow}>
           <Text>PPN (11%)</Text>
-          <Text>Rp {data.tax.toLocaleString("id-ID")}</Text>
+          <Text>Rp {Number(data.tax_amount).toLocaleString("id-ID")}</Text>
         </View>
         <View style={[styles.summaryRow, styles.totalRow]}>
-          <Text>TOTAL</Text>
-          <Text>Rp {data.total.toLocaleString("id-ID")}</Text>
+          <Text>TOTAL AKHIR</Text>
+          <Text>Rp {Number(data.total_amount).toLocaleString("id-ID")}</Text>
         </View>
       </View>
 
-      {/* Footer / Signatures */}
+      <Text style={styles.note}>* Dokumen ini sah dan diterbitkan secara elektronik oleh sistem WahfaLab.</Text>
+
+      {/* Signatures */}
       <View style={styles.footer} wrap={false}>
-        <View style={styles.signatureBox}>
-          <Text>Hormat Kami,</Text>
-          <View style={styles.signatureSpace} />
-          <Text style={{ fontWeight: "bold", textDecoration: "underline" }}>( Wahfa Lab Admin )</Text>
-          <Text>Administrasi</Text>
+        <View style={styles.signBox}>
+          <Text>Dicetak Oleh,</Text>
+          <View style={styles.signSpace} />
+          <Text style={{ fontWeight: "bold" }}>( WahfaLab Administration )</Text>
         </View>
-        <View style={styles.signatureBox}>
-          <Text>Menyetujui,</Text>
-          <View style={styles.signatureSpace} />
-          <Text style={{ fontWeight: "bold", textDecoration: "underline" }}>( ____________________ )</Text>
-          <Text>Customer</Text>
+        <View style={styles.signBox}>
+          <Text>Penerima / Pelanggan,</Text>
+          <View style={styles.signSpace} />
+          <Text style={{ fontWeight: "bold" }}>( ____________________ )</Text>
         </View>
       </View>
     </Page>

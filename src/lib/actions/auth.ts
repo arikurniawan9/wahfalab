@@ -79,3 +79,14 @@ export async function logout() {
   await supabase.auth.signOut()
   redirect('/login')
 }
+
+export async function getProfile() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) return null
+
+  return await prisma.profile.findUnique({
+    where: { id: user.id }
+  })
+}

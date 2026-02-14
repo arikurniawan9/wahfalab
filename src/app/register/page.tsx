@@ -24,16 +24,17 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 py-12">
+    <div className="min-h-screen flex items-center justify-center bg-emerald-50/30 px-4 py-12">
       <div className="absolute top-8 left-8">
-        <Link href="/" className="flex items-center gap-2 font-bold text-blue-900 text-xl">
+        <Link href="/" className="flex items-center gap-2 font-bold text-emerald-900 text-xl font-[family-name:var(--font-montserrat)]">
           <img src="/logo-wahfalab.png" alt="Logo" className="h-10 w-auto" />
+          WahfaLab
         </Link>
       </div>
 
-      <Card className="w-full max-w-md shadow-lg border-blue-100">
+      <Card className="w-full max-w-md shadow-lg border-emerald-100">
         <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-bold tracking-tight">Daftar Akun</CardTitle>
+          <CardTitle className="text-2xl font-bold tracking-tight text-emerald-900">Daftar Akun</CardTitle>
           <CardDescription>
             Buat akun baru untuk mulai menggunakan layanan WahfaLab
           </CardDescription>
@@ -47,25 +48,25 @@ export default function RegisterPage() {
             )}
             <div className="space-y-2">
               <Label htmlFor="full_name">Nama Lengkap</Label>
-              <Input id="full_name" name="full_name" placeholder="John Doe" required />
+              <Input id="full_name" name="full_name" placeholder="John Doe" className="focus-visible:ring-emerald-500" required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" type="email" placeholder="nama@perusahaan.com" required />
+              <Input id="email" name="email" type="email" placeholder="nama@perusahaan.com" className="focus-visible:ring-emerald-500" required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" name="password" type="password" required />
+              <Input id="password" name="password" type="password" className="focus-visible:ring-emerald-500" required />
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button className="w-full bg-blue-600 hover:bg-blue-700" type="submit" disabled={loading}>
+            <Button className="w-full bg-emerald-600 hover:bg-emerald-700" type="submit" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Daftar
             </Button>
             <div className="text-center text-sm text-slate-500">
               Sudah punya akun?{" "}
-              <Link href="/login" className="text-blue-600 hover:underline font-medium">
+              <Link href="/login" className="text-emerald-600 hover:underline font-medium">
                 Login di sini
               </Link>
             </div>
