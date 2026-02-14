@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("POSTGRES_PRISMA_URL")
+  directUrl = env("POSTGRES_URL_NON_POOLING")
+}
+
+enum UserRole {
+  admin
+  operator
+  client
+}
+
+enum JobStatus {
+  scheduled
+  sampling
+  analysis
+  reporting
+  completed
+}
+
+enum QuotationStatus {
+  draft
+  sent
+  accepted
+  rejected
+}
+
+model Profile {
+  id           String      @id @default(uuid())
+  email        String?     @unique
+  full_name    String?
+  role         UserRole    @default(client)
+  company_name String?
+  created_at   DateTime    @default(now())
+  quotations   Quotation[]
+
+  @@map("profiles")
+}
+
+model Service {
+  id          String          @id @default(uuid())
+  category    String
+  name        String
+  price       Decimal         @db.Decimal
+  parameters  Json?
+  regulation  String?
+  unit        String?
+  created_at  DateTime        @default(now())
+  items       QuotationItem[]
+
+  @@map("services")
+}
+
+model Quotation {
+  id               String          @id @default(uuid())
+  quotation_number String          @unique
+  user_id          String
+  profile          Profile         @relation(fields: [user_id], references: [id])
+  date             DateTime        @default(now())
+  subtotal         Decimal         @default(0) @db.Decimal
+  tax_amount       Decimal         @default(0) @db.Decimal
+  total_amount     Decimal         @default(0) @db.Decimal
+  status           QuotationStatus @default(draft)
+  created_at       DateTime        @default(now())
+  items            QuotationItem[]
+  job_orders       JobOrder[]
+
+  @@map("quotations")
+}
+
+model QuotationItem {
+  id                 String    @id @default(uuid())
+  quotation_id       String
+  quotation          Quotation @relation(fields: [quotation_id], references: [id], onDelete: Cascade)
+  service_id         String
+  service            Service   @relation(fields: [service_id], references: [id])
+  qty                Int       @default(1)
+  price_snapshot     Decimal   @db.Decimal
+  parameter_snapshot String?
+
+  @@map("quotation_items")
+}
+
+model JobOrder {
+  id             String    @id @default(uuid())
+  quotation_id   String
+  quotation      Quotation @relation(fields: [quotation_id], references: [id])
+  tracking_code  String    @unique
+  status         JobStatus @default(scheduled)
+  certificate_url String?
+  created_at     DateTime  @default(now())
+
+  @@map("job_orders")
+}
