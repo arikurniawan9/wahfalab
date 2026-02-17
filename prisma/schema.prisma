@@ -12,6 +12,7 @@ enum UserRole {
   admin
   operator
   client
+  field_officer
 }
 
 enum JobStatus {
@@ -30,14 +31,22 @@ enum QuotationStatus {
   paid
 }
 
+enum SamplingStatus {
+  pending
+  in_progress
+  completed
+  cancelled
+}
+
 model Profile {
-  id           String      @id @default(uuid())
-  email        String?     @unique
-  full_name    String?
-  role         UserRole    @default(client)
-  company_name String?
-  created_at   DateTime    @default(now())
-  quotations   Quotation[]
+  id                   String              @id @default(uuid())
+  email                String?             @unique
+  full_name            String?
+  role                 UserRole            @default(client)
+  company_name         String?
+  created_at           DateTime            @default(now())
+  quotations           Quotation[]
+  sampling_assignments SamplingAssignment[]
 
   @@map("profiles")
 }
@@ -98,14 +107,72 @@ model QuotationItem {
 }
 
 model JobOrder {
-  id              String    @id @default(uuid())
-  quotation_id    String
-  quotation       Quotation @relation(fields: [quotation_id], references: [id])
-  tracking_code   String    @unique
-  status          JobStatus @default(scheduled)
-  notes           String?   // Added for progress remarks
-  certificate_url String?
-  created_at      DateTime  @default(now())
+  id                  String              @id @default(uuid())
+  quotation_id        String
+  quotation           Quotation           @relation(fields: [quotation_id], references: [id])
+  tracking_code       String              @unique
+  status              JobStatus           @default(scheduled)
+  notes               String?             // Added for progress remarks
+  certificate_url     String?
+  created_at          DateTime            @default(now())
+  sampling_assignment SamplingAssignment?
 
   @@map("job_orders")
+}
+
+model SamplingAssignment {
+  id               String          @id @default(uuid())
+  job_order_id     String          @unique
+  job_order        JobOrder        @relation(fields: [job_order_id], references: [id], onDelete: Cascade)
+  field_officer_id String
+  field_officer    Profile         @relation(fields: [field_officer_id], references: [id])
+  status           SamplingStatus  @default(pending)
+  scheduled_date   DateTime
+  actual_date      DateTime?
+  location         String
+  notes            String?
+  photos           Json?           // Array of photo URLs
+  created_at       DateTime        @default(now())
+  updated_at       DateTime        @default(now())
+  travel_order     TravelOrder?
+
+  @@map("sampling_assignments")
+}
+
+model TravelOrder {
+  id                  String           @id @default(uuid())
+  assignment_id       String           @unique
+  assignment          SamplingAssignment @relation(fields: [assignment_id], references: [id], onDelete: Cascade)
+  document_number     String           @unique
+  departure_date      DateTime
+  return_date         DateTime
+  destination         String
+  purpose             String
+  transportation_type String?
+  accommodation_type  String?
+  daily_allowance     Decimal?         @db.Decimal(10, 2)
+  total_budget        Decimal?         @db.Decimal(10, 2)
+  notes               String?
+  pdf_url             String?
+  created_at          DateTime         @default(now())
+  updated_at          DateTime         @default(now())
+
+  @@map("travel_orders")
+}
+
+model CompanyProfile {
+  id              String   @id @default(uuid())
+  company_name    String   @default("WahfaLab")
+  address         String?
+  phone           String?
+  whatsapp        String?
+  email           String?
+  website         String?
+  logo_url        String?
+  tagline         String?
+  npwp            String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @default(now())
+
+  @@map("company_profiles")
 }

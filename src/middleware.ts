@@ -31,11 +31,12 @@ export async function updateSession(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Sederhana: Lindungi /admin, /operator, /dashboard
+  // Sederhana: Lindungi /admin, /operator, /dashboard, /field
   if (!user && (
     request.nextUrl.pathname.startsWith('/admin') ||
     request.nextUrl.pathname.startsWith('/operator') ||
-    request.nextUrl.pathname.startsWith('/dashboard')
+    request.nextUrl.pathname.startsWith('/dashboard') ||
+    request.nextUrl.pathname.startsWith('/field')
   )) {
     return NextResponse.redirect(new URL('/login', request.url))
   }

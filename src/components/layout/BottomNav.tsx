@@ -32,6 +32,11 @@ const clientNavItems = [
   { icon: FileText, label: "Pesanan", href: "/dashboard/orders" },
 ];
 
+const fieldOfficerNavItems = [
+  { icon: LayoutDashboard, label: "Beranda", href: "/field" },
+  { icon: FileText, label: "Assignment", href: "/field/assignments" },
+];
+
 export function BottomNav() {
   const pathname = usePathname();
   const [role, setRole] = useState<string | null>(null);
@@ -44,11 +49,13 @@ export function BottomNav() {
     fetchRole();
   }, []);
 
-  const navItems = role === 'admin' 
-    ? adminNavItems 
-    : role === 'operator' 
-      ? operatorNavItems 
-      : clientNavItems;
+  const navItems = role === 'admin'
+    ? adminNavItems
+    : role === 'operator'
+      ? operatorNavItems
+      : role === 'field_officer'
+        ? fieldOfficerNavItems
+        : clientNavItems;
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 px-4 pb-4">

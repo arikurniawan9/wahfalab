@@ -3,16 +3,17 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { 
-  LayoutDashboard, 
-  FileText, 
-  Users, 
-  FlaskConical, 
-  LogOut, 
+import {
+  LayoutDashboard,
+  FileText,
+  Users,
+  FlaskConical,
+  LogOut,
   Menu,
   ChevronLeft,
   Settings,
-  Tag
+  Tag,
+  MapPin
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { logout } from "@/lib/actions/auth";
 import { createClient } from "@/lib/supabase/client";
 import { getProfile } from "@/lib/actions/auth";
+import Image from "next/image";
 
 const adminMenuItems = [
   { icon: LayoutDashboard, label: "Beranda", href: "/admin" },
@@ -27,6 +29,8 @@ const adminMenuItems = [
   { icon: Tag, label: "Kategori Layanan", href: "/admin/categories" },
   { icon: FlaskConical, label: "Katalog Layanan", href: "/admin/services" },
   { icon: Users, label: "Data Pengguna", href: "/admin/users" },
+  { icon: MapPin, label: "Assignment Sampling", href: "/admin/sampling/create" },
+  { icon: Settings, label: "Pengaturan", href: "/admin/settings/company" },
 ];
 
 const operatorMenuItems = [
@@ -39,10 +43,17 @@ const clientMenuItems = [
   { icon: FileText, label: "Riwayat Pesanan", href: "/dashboard/orders" },
 ];
 
+const fieldOfficerMenuItems = [
+  { icon: LayoutDashboard, label: "Beranda", href: "/field" },
+  { icon: FileText, label: "Assignment Sampling", href: "/field/assignments" },
+];
+
 export function Sidebar({ className }: { className?: string }) {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [role, setRole] = useState<string | null>(null);
+  const [companyName, setCompanyName] = useState("WahfaLab");
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const supabase = createClient();
 
   useEffect(() => {
@@ -53,17 +64,50 @@ export function Sidebar({ className }: { className?: string }) {
     fetchRole();
   }, []);
 
-  const menuItems = role === 'admin' 
-    ? adminMenuItems 
-    : role === 'operator' 
-      ? operatorMenuItems 
-      : clientMenuItems;
+  useEffect(() => {
+    async function fetchCompanyProfile() {
+      try {
+        const response = await fetch('/api/company-profile');
+        const data = await response.json();
+        if (data) {
+          setCompanyName(data.company_name || "WahfaLab");
+          setLogoUrl(data.logo_url);
+        }
+      } catch (error) {
+        console.error('Error fetching company profile:', error);
+      }
+    }
+    fetchCompanyProfile();
+  }, []);
+
+  const menuItems = role === 'admin'
+    ? adminMenuItems
+    : role === 'operator'
+      ? operatorMenuItems
+      : role === 'field_officer'
+        ? fieldOfficerMenuItems
+        : clientMenuItems;
 
   const NavContent = () => (
     <div className="flex flex-col h-full py-4">
       <div className={cn("px-6 mb-8 flex items-center gap-3", isCollapsed && "px-4 justify-center")}>
-        <img src="/logo-wahfalab.png" alt="Logo" className="h-10 w-auto brightness-0 invert" />
-        {!isCollapsed && <span className="text-xl font-bold tracking-tighter" style={{ fontFamily: 'var(--font-montserrat)' }}>WahfaLab</span>}
+        {logoUrl ? (
+          <div className="relative h-10 w-10">
+            <Image
+              src={logoUrl}
+              alt="Logo"
+              fill
+              className="object-contain"
+            />
+          </div>
+        ) : (
+          <img src="/logo-wahfalab.png" alt="Logo" className="h-10 w-auto brightness-0 invert" />
+        )}
+        {!isCollapsed && (
+          <span className="text-xl font-bold tracking-tighter text-white" style={{ fontFamily: 'var(--font-montserrat)' }}>
+            {companyName}
+          </span>
+        )}
       </div>
 
       <nav className="flex-1 space-y-1 px-3">

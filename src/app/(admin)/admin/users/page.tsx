@@ -59,6 +59,22 @@ export default function UserManagementPage() {
     }
   });
 
+  const roleOptions = [
+    { value: "admin", label: "Administrator", color: "bg-red-100 text-red-700 border-red-200" },
+    { value: "operator", label: "Petugas / Operator", color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+    { value: "field_officer", label: "Petugas Lapangan", color: "bg-blue-100 text-blue-700 border-blue-200" },
+    { value: "client", label: "Pelanggan", color: "bg-slate-100 text-slate-700 border-slate-200" }
+  ];
+
+  const getRoleBadgeVariant = (role: string) => {
+    switch (role) {
+      case 'admin': return 'destructive';
+      case 'operator': return 'default';
+      case 'field_officer': return 'secondary';
+      default: return 'secondary';
+    }
+  };
+
   const loadUsers = async () => {
     setLoading(true);
     try {
@@ -215,8 +231,8 @@ export default function UserManagementPage() {
                 )}
                 <div className="space-y-2">
                   <label className="text-sm font-semibold">Role</label>
-                  <Select 
-                    onValueChange={(val) => setValue("role", val)} 
+                  <Select
+                    onValueChange={(val) => setValue("role", val)}
                     defaultValue={editingUser?.role || "operator"}
                   >
                     <SelectTrigger className="focus:ring-emerald-500 cursor-pointer">
@@ -225,6 +241,7 @@ export default function UserManagementPage() {
                     <SelectContent>
                       <SelectItem value="admin" className="cursor-pointer">Administrator</SelectItem>
                       <SelectItem value="operator" className="cursor-pointer">Petugas / Operator</SelectItem>
+                      <SelectItem value="field_officer" className="cursor-pointer">Petugas Lapangan</SelectItem>
                       <SelectItem value="client" className="cursor-pointer">Pelanggan</SelectItem>
                     </SelectContent>
                   </Select>
@@ -305,11 +322,8 @@ export default function UserManagementPage() {
                       </TableCell>
                       <TableCell className="text-slate-600 px-4">{user.email || "-"}</TableCell>
                       <TableCell className="px-4">
-                        <Badge variant={
-                          user.role === 'admin' ? 'destructive' : 
-                          user.role === 'operator' ? 'default' : 'secondary'
-                        } className="capitalize">
-                          {user.role}
+                        <Badge variant={getRoleBadgeVariant(user.role)} className="capitalize">
+                          {user.role === 'field_officer' ? 'Petugas Lapangan' : user.role}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-slate-500 text-sm px-4">
@@ -380,8 +394,8 @@ export default function UserManagementPage() {
                         <p className="text-xs text-slate-500 mt-0.5">{user.email || "-"}</p>
                       </div>
                     </div>
-                    <Badge variant={user.role === 'admin' ? 'destructive' : user.role === 'operator' ? 'default' : 'secondary'} className="capitalize">
-                      {user.role}
+                    <Badge variant={getRoleBadgeVariant(user.role)} className="capitalize">
+                      {user.role === 'field_officer' ? 'Petugas Lapangan' : user.role}
                     </Badge>
                   </div>
                   <div className="flex justify-between items-center pt-2">

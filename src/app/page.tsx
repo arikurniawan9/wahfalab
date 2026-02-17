@@ -20,6 +20,7 @@ export default function LandingPage() {
   const [user, setUser] = useState<any>(null);
   const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
   const supabase = createClient();
 
   useEffect(() => {
@@ -35,6 +36,19 @@ export default function LandingPage() {
     checkUser();
   }, []);
 
+  useEffect(() => {
+    async function fetchCompanyProfile() {
+      try {
+        const response = await fetch('/api/company-profile');
+        const data = await response.json();
+        setCompanyProfile(data);
+      } catch (error) {
+        console.error('Error fetching company profile:', error);
+      }
+    }
+    fetchCompanyProfile();
+  }, []);
+
   const getDashboardHref = () => {
     if (role === 'admin') return '/admin';
     if (role === 'operator') return '/operator';
@@ -46,8 +60,14 @@ export default function LandingPage() {
       {/* Navigation */}
       <header className="px-4 lg:px-6 h-16 flex items-center border-b bg-white/80 backdrop-blur-md sticky top-0 z-50">
         <Link className="flex items-center justify-center gap-2" href="#">
-          <img src="/logo-wahfalab.png" alt="WahfaLab Logo" className="h-10 w-auto" />
-          <span className="font-bold text-xl tracking-tighter text-emerald-900 font-[family-name:var(--font-montserrat)]">WahfaLab</span>
+          {companyProfile?.logo_url ? (
+            <img src={companyProfile.logo_url} alt="Company Logo" className="h-10 w-auto" />
+          ) : (
+            <img src="/logo-wahfalab.png" alt="WahfaLab Logo" className="h-10 w-auto" />
+          )}
+          <span className="font-bold text-xl tracking-tighter text-emerald-900 font-[family-name:var(--font-montserrat)]">
+            {companyProfile?.company_name || 'WahfaLab'}
+          </span>
         </Link>
         <nav className="ml-auto flex gap-4 sm:gap-6 items-center">
           <Link className="text-sm font-medium hover:text-emerald-600 transition-colors hidden md:block" href="#services">

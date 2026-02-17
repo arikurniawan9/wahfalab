@@ -29,6 +29,8 @@ export async function login(formData: FormData) {
     redirect('/admin')
   } else if (profile?.role === 'operator') {
     redirect('/operator')
+  } else if (profile?.role === 'field_officer') {
+    redirect('/field')
   } else {
     redirect('/dashboard')
   }
@@ -39,6 +41,7 @@ export async function signup(formData: FormData) {
   const email = formData.get('email') as string
   const password = formData.get('password') as string
   const full_name = formData.get('full_name') as string
+  const role = formData.get('role') as 'client' | 'field_officer' || 'client'
 
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -59,11 +62,11 @@ export async function signup(formData: FormData) {
     try {
       await prisma.profile.upsert({
         where: { id: data.user.id },
-        update: { full_name },
+        update: { full_name, role },
         create: {
           id: data.user.id,
           full_name,
-          role: 'client',
+          role,
         },
       })
     } catch (e) {

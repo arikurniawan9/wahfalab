@@ -6,16 +6,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Beaker, Loader2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Beaker, Loader2, User, ShieldCheck } from "lucide-react";
 import { signup } from "@/lib/actions/auth";
 
 export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [role, setRole] = useState("client");
 
   async function handleSubmit(formData: FormData) {
     setLoading(true);
     setError(null);
+    // Tambahkan role ke formData
+    formData.append("role", role);
     const result = await signup(formData);
     if (result?.error) {
       setError(result.error);
@@ -57,6 +67,31 @@ export default function RegisterPage() {
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input id="password" name="password" type="password" className="focus-visible:ring-emerald-500" required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="role">Role Akun</Label>
+              <Select value={role} onValueChange={setRole}>
+                <SelectTrigger className="focus-visible:ring-emerald-500">
+                  <SelectValue placeholder="Pilih role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="client">Client / Customer</SelectItem>
+                  <SelectItem value="field_officer">Petugas Lapangan</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-500 flex items-center gap-1">
+                {role === 'field_officer' ? (
+                  <>
+                    <ShieldCheck className="h-3 w-3" />
+                    Bertugas untuk pengambilan sampel di lapangan
+                  </>
+                ) : (
+                  <>
+                    <User className="h-3 w-3" />
+                    Membuat pesanan dan melihat hasil analisis
+                  </>
+                )}
+              </p>
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
