@@ -290,24 +290,28 @@ export default function EngineerCostsPage() {
 
   const handleEdit = (item: any) => {
     const relatedItems = data.filter((d: any) => d.name === item.name && d.category === "perdiem");
-    
+
     setSelectedItem(item);
     setValue("category", "perdiem");
     setValue("name", item.name);
     setValue("description", item.description || "");
     setValue("unit", item.unit);
-    
+
     const items = relatedItems.map((d: any) => ({
       perdiem_type: d.perdiem_type || "",
       location: d.location || "",
       price: Number(d.price)
     }));
-    
-    while (fields.length > 0) {
-      remove(0);
-    }
-    items.forEach((item: any) => append(item));
-    
+
+    // Reset field array dengan cara yang benar
+    reset({
+      category: "perdiem",
+      name: item.name,
+      description: item.description || "",
+      unit: item.unit,
+      items: items
+    });
+
     setIsDialogOpen(true);
   };
 

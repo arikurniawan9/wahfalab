@@ -48,6 +48,7 @@ model OperationalCatalog {
   category    OperationalCategory
   perdiem_type String?
   location    String?
+  distance_category String?
   name        String
   description String?
   price       Decimal             @db.Decimal
