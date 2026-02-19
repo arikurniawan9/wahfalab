@@ -36,16 +36,16 @@ async function main() {
       console.log('ℹ️ User admin sudah terdaftar di Supabase Auth.')
     } else {
       console.error('❌ Gagal membuat user auth:', authError.message)
-      return
+      // Don't return, try to find the existing user instead
     }
   }
 
   // 2. Get user ID (either newly created or existing)
-  let userId = authUser.user?.id
+  let userId = authUser?.user?.id
 
   if (!userId) {
-    const { data: existingUser } = await supabase.auth.admin.listUsers()
-    userId = existingUser.users.find(u => u.email === adminEmail)?.id
+    const { data: existingUsers } = await supabase.auth.admin.listUsers()
+    userId = existingUsers.users.find(u => u.email === adminEmail)?.id
   }
 
   if (userId) {
@@ -66,6 +66,25 @@ async function main() {
     console.log(`📧 Email: ${adminEmail}`)
     console.log(`🔑 Password: ${adminPassword}`)
   }
+
+  // 4. Create Default Company Profile
+  console.log('🏢 Menyiapkan data perusahaan...')
+  await prisma.companyProfile.upsert({
+    where: { id: 'default-company-id' }, // We can use a fixed ID for the main profile
+    update: {},
+    create: {
+      id: 'default-company-id',
+      company_name: 'WahfaLab',
+      address: 'Jl. Raya Lab No. 123, Kawasan Industri, Jakarta',
+      phone: '021-12345678',
+      whatsapp: '081234567890',
+      email: 'info@wahfalab.com',
+      website: 'www.wahfalab.com',
+      tagline: 'Laboratorium Pengujian Lingkungan Terpercaya',
+      npwp: '01.234.567.8-901.000'
+    }
+  })
+  console.log('✅ Pengaturan perusahaan berhasil disiapkan!')
 }
 
 main()

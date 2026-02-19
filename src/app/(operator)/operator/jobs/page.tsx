@@ -11,9 +11,8 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Plus, 
-  Loader2, 
+import {
+  Plus,
   Search,
   Eye,
   FileText,
@@ -29,6 +28,7 @@ import {
   MessageSquare,
   Banknote
 } from "lucide-react";
+import { ChemicalLoader } from "@/components/ui";
 import { getQuotations, createQuotation, processPayment, getNextInvoiceNumber } from "@/lib/actions/quotation";
 import { getJobOrders, updateJobStatus } from "@/lib/actions/jobs";
 import { getClients, createOrUpdateUser } from "@/lib/actions/users";
@@ -50,9 +50,9 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PDFDownloadLink } from "@react-pdf/renderer";
-import { QuotationDocument } from "@/components/pdf/QuotationDocument";
 import { Textarea } from "@/components/ui/textarea";
+import { LazyPDFButton, PDFButtonFallback } from "@/components/ui/lazy-pdf-button";
+import { Suspense } from "react";
 
 const quotationSchema = z.object({
   quotation_number: z.string().min(1, "Wajib diisi"),
@@ -268,7 +268,7 @@ export default function OperatorJobsPage() {
                 <TableHead className="px-6 text-center font-bold text-emerald-900">Aksi</TableHead>
               </TableRow></TableHeader>
               <TableBody>
-                {loading ? <TableRow><TableCell colSpan={4} className="text-center py-10"><Loader2 className="animate-spin mx-auto" /></TableCell></TableRow>
+                {loading ? <TableRow><TableCell colSpan={4} className="text-center py-10"><ChemicalLoader /></TableCell></TableRow>
                 : quotations.items.map((item: any) => (
                   <TableRow key={item.id} className="hover:bg-slate-50/50">
                     <TableCell className="px-6 font-bold text-emerald-900">{item.quotation_number}</TableCell>
@@ -281,9 +281,9 @@ export default function OperatorJobsPage() {
                       <div className="flex justify-center gap-2">
                         {item.status === 'draft' && <Button size="sm" className="bg-amber-500 hover:bg-amber-600 h-8" onClick={() => { setSelectedQuotation(item); setIsPaymentDialogOpen(true); }}><CreditCard className="h-3 w-3 mr-1" /> Bayar</Button>}
                         {item.items && (
-                          <PDFDownloadLink document={<QuotationDocument data={item} />} fileName={`${item.quotation_number}.pdf`}>
-                            {({ loading }) => <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50" disabled={loading}><FileDown className="h-4 w-4" /></Button>}
-                          </PDFDownloadLink>
+                          <Suspense fallback={<PDFButtonFallback />}>
+                            <LazyPDFButton data={item} fileName={`${item.quotation_number}.pdf`} />
+                          </Suspense>
                         )}
                       </div>
                     </TableCell>
@@ -304,7 +304,7 @@ export default function OperatorJobsPage() {
                 <TableHead className="px-6 text-center font-bold text-emerald-900">Update Progres</TableHead>
               </TableRow></TableHeader>
               <TableBody>
-                {loading ? <TableRow><TableCell colSpan={4} className="text-center py-10"><Loader2 className="animate-spin mx-auto text-emerald-600" /></TableCell></TableRow>
+                {loading ? <TableRow><TableCell colSpan={4} className="text-center py-10"><ChemicalLoader /></TableCell></TableRow>
                 : jobs.items.map((job: any) => (
                   <TableRow key={job.id} className="hover:bg-slate-50/50">
                     <TableCell className="px-6 font-mono font-bold text-emerald-700">{job.tracking_code}</TableCell>
@@ -384,7 +384,7 @@ export default function OperatorJobsPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsStatusDialogOpen(false)} className="rounded-xl">Batal</Button>
             <Button onClick={confirmStatusUpdate} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl px-8" disabled={submitting}>
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Simpan Progres"}
+              {submitting ? <ChemicalLoader size="sm" /> : "Simpan Progres"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,6 +1,5 @@
 import { Sidebar } from "@/components/layout/Sidebar";
 import { BottomNav } from "@/components/layout/BottomNav";
-import { Toaster } from "@/components/ui/sonner";
 
 export default function AdminLayout({
   children,
@@ -18,7 +17,6 @@ export default function AdminLayout({
         </main>
       </div>
       <BottomNav />
-      <Toaster position="top-right" richColors closeButton />
     </div>
   );
 }

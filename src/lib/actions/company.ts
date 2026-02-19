@@ -6,20 +6,28 @@ import { createClient } from '@/lib/supabase/server'
 
 export async function getCompanyProfile() {
   try {
-    // Get the first (and only) company profile
-    let profile = await prisma.companyProfile.findFirst()
+    // Get the first company profile
+    let profile = await prisma.companyProfile.findFirst({
+      orderBy: { created_at: 'asc' }
+    })
 
     // If doesn't exist, create default one
     if (!profile) {
       profile = await prisma.companyProfile.create({
         data: {
           company_name: 'WahfaLab',
-          tagline: 'Laboratorium Analisis & Kalibrasi'
+          tagline: 'Laboratorium Analisis & Kalibrasi',
+          address: '',
+          phone: '',
+          whatsapp: '',
+          email: '',
+          website: '',
+          npwp: ''
         }
       })
     }
 
-    return profile
+    return JSON.parse(JSON.stringify(profile))
   } catch (error: any) {
     console.error('Error fetching company profile:', error)
     return null

@@ -223,13 +223,38 @@ export const QuotationDocument = ({ data }: any) => (
       {/* Summary */}
       <View style={styles.summarySection}>
         <View style={styles.summaryRow}>
-          <Text>Subtotal</Text>
-          <Text>Rp {Number(data.subtotal).toLocaleString("id-ID")}</Text>
+          <Text>Subtotal Item</Text>
+          <Text>Rp {Number(data.items.reduce((acc: any, item: any) => acc + (item.qty * Number(item.price_snapshot)), 0)).toLocaleString("id-ID")}</Text>
         </View>
-        <View style={styles.summaryRow}>
-          <Text>PPN (11%)</Text>
-          <Text>Rp {Number(data.tax_amount).toLocaleString("id-ID")}</Text>
-        </View>
+
+        {(Number(data.perdiem_price) > 0) && (
+          <View style={styles.summaryRow}>
+            <Text>Biaya Perdiem ({data.perdiem_qty} Hari)</Text>
+            <Text>Rp {(Number(data.perdiem_price) * data.perdiem_qty).toLocaleString("id-ID")}</Text>
+          </View>
+        )}
+
+        {(Number(data.transport_price) > 0) && (
+          <View style={styles.summaryRow}>
+            <Text>Transportasi ({data.transport_qty} Vol)</Text>
+            <Text>Rp {(Number(data.transport_price) * data.transport_qty).toLocaleString("id-ID")}</Text>
+          </View>
+        )}
+
+        {Number(data.discount_amount) > 0 && (
+          <View style={[styles.summaryRow, { color: "#dc2626" }]}>
+            <Text>Diskon</Text>
+            <Text>- Rp {Number(data.discount_amount).toLocaleString("id-ID")}</Text>
+          </View>
+        )}
+
+        {data.use_tax && (
+          <View style={styles.summaryRow}>
+            <Text>PPN (11%)</Text>
+            <Text>Rp {Number(data.tax_amount).toLocaleString("id-ID")}</Text>
+          </View>
+        )}
+
         <View style={[styles.summaryRow, styles.totalRow]}>
           <Text>TOTAL AKHIR</Text>
           <Text>Rp {Number(data.total_amount).toLocaleString("id-ID")}</Text>

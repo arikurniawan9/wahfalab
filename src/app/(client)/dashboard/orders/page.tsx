@@ -12,8 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { 
-  Loader2, 
+import {
   Search,
   FileDown,
   History,
@@ -25,8 +24,9 @@ import {
 import { getQuotations } from "@/lib/actions/quotation";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import { PDFDownloadLink } from "@react-pdf/renderer";
-import { QuotationDocument } from "@/components/pdf/QuotationDocument";
+import { ChemicalLoader } from "@/components/ui";
+import { LazyPDFButton, PDFButtonFallback } from "@/components/ui/lazy-pdf-button";
+import { Suspense } from "react";
 
 export default function OrderHistoryPage() {
   const [data, setData] = useState<any>({ items: [], total: 0, pages: 1 });
@@ -110,7 +110,7 @@ export default function OrderHistoryPage() {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-20"><Loader2 className="animate-spin mx-auto text-emerald-600" /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center py-20"><ChemicalLoader /></TableCell></TableRow>
               ) : data.items.length === 0 ? (
                 <TableRow><TableCell colSpan={5} className="text-center py-20 text-slate-400 italic text-sm">Anda belum memiliki riwayat pesanan.</TableCell></TableRow>
               ) : (
@@ -125,16 +125,12 @@ export default function OrderHistoryPage() {
                     </TableCell>
                     <TableCell className="px-4">{getStatusBadge(item.status)}</TableCell>
                     <TableCell className="px-6 text-center">
-                      <PDFDownloadLink
-                        document={<QuotationDocument data={item} />}
-                        fileName={`${item.quotation_number}.pdf`}
-                      >
-                        {({ loading }) => (
-                          <Button variant="ghost" size="sm" className="h-8 text-emerald-600 hover:bg-emerald-50 font-bold text-[10px]" disabled={loading}>
-                            <FileDown className="h-3 w-3 mr-1" /> FAKTUR
-                          </Button>
-                        )}
-                      </PDFDownloadLink>
+                      <Suspense fallback={<PDFButtonFallback />}>
+                        <LazyPDFButton
+                          data={item}
+                          fileName={`${item.quotation_number}.pdf`}
+                        />
+                      </Suspense>
                     </TableCell>
                   </TableRow>
                 ))
@@ -158,14 +154,13 @@ export default function OrderHistoryPage() {
               </div>
               <div className="flex justify-between items-center pt-2">
                 <p className="text-sm font-bold text-slate-900">Rp {Number(item.total_amount).toLocaleString("id-ID")}</p>
-                <PDFDownloadLink
-                  document={<QuotationDocument data={item} />}
-                  fileName={`${item.quotation_number}.pdf`}
-                >
-                  <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold border-emerald-100 text-emerald-700">
-                    <FileDown className="h-3 w-3 mr-1" /> UNDUH FAKTUR
-                  </Button>
-                </PDFDownloadLink>
+                <Suspense fallback={<PDFButtonFallback />}>
+                  <LazyPDFButton
+                    data={item}
+                    fileName={`${item.quotation_number}.pdf`}
+                    className="h-8 text-[10px] font-bold border-emerald-100 text-emerald-700"
+                  />
+                </Suspense>
               </div>
             </div>
           ))}

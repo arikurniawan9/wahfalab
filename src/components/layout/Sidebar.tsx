@@ -13,7 +13,9 @@ import {
   ChevronLeft,
   Settings,
   Tag,
-  MapPin
+  MapPin,
+  Truck,
+  Wrench
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -24,28 +26,71 @@ import { getProfile } from "@/lib/actions/auth";
 import Image from "next/image";
 
 const adminMenuItems = [
-  { icon: LayoutDashboard, label: "Beranda", href: "/admin" },
-  { icon: FileText, label: "Penawaran Harga", href: "/admin/quotations" },
-  { icon: Tag, label: "Kategori Layanan", href: "/admin/categories" },
-  { icon: FlaskConical, label: "Katalog Layanan", href: "/admin/services" },
-  { icon: Users, label: "Data Pengguna", href: "/admin/users" },
-  { icon: MapPin, label: "Assignment Sampling", href: "/admin/sampling/create" },
-  { icon: Settings, label: "Pengaturan", href: "/admin/settings/company" },
+  {
+    group: "Dashboard",
+    items: [
+      { icon: LayoutDashboard, label: "Beranda", href: "/admin" },
+    ]
+  },
+  {
+    group: "Manajemen Pesanan",
+    items: [
+      { icon: FileText, label: "Penawaran Harga", href: "/admin/quotations" },
+    ]
+  },
+  {
+    group: "Manajemen Sampling",
+    items: [
+      { icon: MapPin, label: "Penugasan Sampling", href: "/admin/sampling" },
+      { icon: Truck, label: "Biaya Transport", href: "/admin/transport-costs" },
+      { icon: Users, label: "Biaya Engineer", href: "/admin/engineer-costs" },
+    ]
+  },
+  {
+    group: "Manajemen Laboratorium",
+    items: [
+      { icon: FlaskConical, label: "Katalog Layanan", href: "/admin/services" },
+      { icon: Tag, label: "Kategori Layanan", href: "/admin/categories" },
+      { icon: Wrench, label: "Sewa Alat", href: "/admin/equipment" },
+    ]
+  },
+  {
+    group: "Administrasi",
+    items: [
+      { icon: Users, label: "Data Pengguna", href: "/admin/users" },
+      { icon: Settings, label: "Pengaturan", href: "/admin/settings/company" },
+    ]
+  },
 ];
 
 const operatorMenuItems = [
-  { icon: LayoutDashboard, label: "Beranda", href: "/operator" },
-  { icon: FileText, label: "Pekerjaan Lab", href: "/operator/jobs" },
+  {
+    group: "Utama",
+    items: [
+      { icon: LayoutDashboard, label: "Beranda", href: "/operator" },
+      { icon: FileText, label: "Pekerjaan Lab", href: "/operator/jobs" },
+    ]
+  },
 ];
 
 const clientMenuItems = [
-  { icon: LayoutDashboard, label: "Beranda", href: "/dashboard" },
-  { icon: FileText, label: "Riwayat Pesanan", href: "/dashboard/orders" },
+  {
+    group: "Utama",
+    items: [
+      { icon: LayoutDashboard, label: "Beranda", href: "/dashboard" },
+      { icon: FileText, label: "Riwayat Pesanan", href: "/dashboard/orders" },
+    ]
+  },
 ];
 
 const fieldOfficerMenuItems = [
-  { icon: LayoutDashboard, label: "Beranda", href: "/field" },
-  { icon: FileText, label: "Assignment Sampling", href: "/field/assignments" },
+  {
+    group: "Utama",
+    items: [
+      { icon: LayoutDashboard, label: "Beranda", href: "/field" },
+      { icon: FileText, label: "Penugasan Sampling", href: "/field/assignments" },
+    ]
+  },
 ];
 
 export function Sidebar({ className }: { className?: string }) {
@@ -110,23 +155,34 @@ export function Sidebar({ className }: { className?: string }) {
         )}
       </div>
 
-      <nav className="flex-1 space-y-1 px-3">
-        {menuItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn(
-              "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group",
-              pathname === item.href 
-                ? "bg-emerald-600 text-white shadow-lg shadow-emerald-900/20" 
-                : "text-emerald-100 hover:bg-emerald-800/50 hover:text-white",
-              isCollapsed && "justify-center px-0"
+      <nav className="flex-1 space-y-6 px-3 overflow-y-auto">
+        {menuItems.map((group, groupIndex) => (
+          <div key={groupIndex}>
+            {!isCollapsed && group.group && (
+              <h3 className="px-3 mb-2 text-xs font-semibold text-emerald-400 uppercase tracking-wider">
+                {group.group}
+              </h3>
             )}
-            title={isCollapsed ? item.label : ""}
-          >
-            <item.icon className={cn("h-5 w-5 shrink-0", pathname === item.href ? "text-white" : "text-emerald-400 group-hover:text-emerald-200")} />
-            {!isCollapsed && <span className="font-medium">{item.label}</span>}
-          </Link>
+            <div className="space-y-1">
+              {group.items.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group",
+                    pathname === item.href
+                      ? "bg-emerald-600 text-white shadow-lg shadow-emerald-900/20"
+                      : "text-emerald-100 hover:bg-emerald-800/50 hover:text-white",
+                    isCollapsed && "justify-center px-0"
+                  )}
+                  title={isCollapsed ? item.label : ""}
+                >
+                  <item.icon className={cn("h-5 w-5 shrink-0", pathname === item.href ? "text-white" : "text-emerald-400 group-hover:text-emerald-200")} />
+                  {!isCollapsed && <span className="font-medium">{item.label}</span>}
+                </Link>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 

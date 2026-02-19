@@ -38,12 +38,47 @@ enum SamplingStatus {
   cancelled
 }
 
+enum OperationalCategory {
+  perdiem
+  transport
+}
+
+model OperationalCatalog {
+  id          String              @id @default(uuid())
+  category    OperationalCategory
+  perdiem_type String?
+  location    String?
+  name        String
+  description String?
+  price       Decimal             @db.Decimal
+  unit        String              @default("unit")
+  created_at  DateTime            @default(now())
+  updated_at  DateTime            @updatedAt
+  history     OperationalHistory[]
+
+  @@map("operational_catalog")
+}
+
+model OperationalHistory {
+  id          String   @id @default(uuid())
+  catalog_id  String
+  catalog     OperationalCatalog @relation(fields: [catalog_id], references: [id], onDelete: Cascade)
+  action      String   // create, update, delete
+  old_price   Decimal? @db.Decimal
+  new_price   Decimal? @db.Decimal
+  changed_by  String?
+  changed_at  DateTime @default(now())
+
+  @@map("operational_history")
+}
+
 model Profile {
   id                   String              @id @default(uuid())
   email                String?             @unique
   full_name            String?
   role                 UserRole            @default(client)
   company_name         String?
+  address              String?
   created_at           DateTime            @default(now())
   quotations           Quotation[]
   sampling_assignments SamplingAssignment[]
@@ -83,7 +118,16 @@ model Quotation {
   profile          Profile         @relation(fields: [user_id], references: [id])
   date             DateTime        @default(now())
   subtotal         Decimal         @default(0) @db.Decimal
+  discount_amount  Decimal         @default(0) @db.Decimal
+  use_tax          Boolean         @default(true)
   tax_amount       Decimal         @default(0) @db.Decimal
+  
+  // Additional Costs
+  perdiem_price    Decimal         @default(0) @db.Decimal
+  perdiem_qty      Int             @default(0)
+  transport_price  Decimal         @default(0) @db.Decimal
+  transport_qty    Int             @default(0)
+  
   total_amount     Decimal         @default(0) @db.Decimal
   status           QuotationStatus @default(draft)
   created_at       DateTime        @default(now())
@@ -175,4 +219,21 @@ model CompanyProfile {
   updated_at      DateTime @default(now())
 
   @@map("company_profiles")
+}
+
+model Equipment {
+  id                String   @id @default(uuid())
+  name              String
+  category          String?
+  specification     String?
+  price             Decimal  @db.Decimal
+  unit              String   @default("unit")
+  availability_status String @default("available")
+  quantity          Int      @default(1)
+  description       String?
+  image_url         String?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  @@map("equipment")
 }

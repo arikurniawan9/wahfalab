@@ -15,7 +15,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft, MapPin, Calendar, User } from "lucide-react";
+import { ChemicalLoader } from "@/components/ui";
+import { ArrowLeft, MapPin, Calendar, User } from "lucide-react";
 import Link from "next/link";
 import { createSamplingAssignment } from "@/lib/actions/sampling";
 import { getUsers } from "@/lib/actions/users";
@@ -68,19 +69,19 @@ export default function CreateAssignmentPage() {
         return;
       }
       
-      toast.success("Assignment berhasil dibuat");
-      
+      toast.success("Penugasan berhasil dibuat");
+
       // Redirect ke halaman create travel order dengan assignment ID
       const assignmentId = result.assignment?.id;
       if (assignmentId) {
         router.push(`/admin/travel-orders/create/${assignmentId}`);
       } else {
-        toast.error("Assignment ID tidak ditemukan");
+        toast.error("ID penugasan tidak ditemukan");
         router.push("/admin");
       }
     } catch (error: any) {
       console.error('Error creating assignment:', error);
-      toast.error(error.message || "Gagal membuat assignment");
+      toast.error(error.message || "Gagal membuat penugasan");
     } finally {
       setLoading(false);
     }
@@ -93,19 +94,19 @@ export default function CreateAssignmentPage() {
   return (
     <div className="p-4 md:p-8 pb-24 md:pb-8">
       <div className="mb-6">
-        <Link href="/admin" className="flex items-center gap-2 text-slate-500 hover:text-emerald-600 transition-colors mb-4">
+        <Link href="/admin/sampling" className="flex items-center gap-2 text-slate-500 hover:text-emerald-600 transition-colors mb-4">
           <ArrowLeft className="h-4 w-4" />
-          <span className="text-sm font-medium">Kembali</span>
+          <span className="text-sm font-medium">Kembali ke Daftar Penugasan</span>
         </Link>
         <h1 className="text-2xl font-bold text-emerald-900 font-[family-name:var(--font-montserrat)] uppercase">
-          Buat Assignment Sampling
+          Buat Penugasan Sampling Baru
         </h1>
-        <p className="text-slate-500 text-sm">Assign petugas lapangan untuk pengambilan sampel.</p>
+        <p className="text-slate-500 text-sm">Tugaskan petugas lapangan untuk pengambilan sampel.</p>
       </div>
 
       <Card className="max-w-2xl">
         <CardHeader>
-          <CardTitle className="text-base">Informasi Assignment</CardTitle>
+          <CardTitle className="text-base">Informasi Penugasan</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -134,7 +135,7 @@ export default function CreateAssignmentPage() {
                 <div className="text-xs text-amber-600 space-y-1">
                   <p>Tidak ada job order yang tersedia untuk sampling.</p>
                   <p className="text-slate-500">
-                    Job order harus memiliki status <strong>"scheduled"</strong> atau <strong>"sampling"</strong> untuk bisa di-assign.
+                    Job order harus memiliki status <strong>"scheduled"</strong> atau <strong>"sampling"</strong> untuk bisa ditugaskan.
                   </p>
                 </div>
               )}
@@ -147,7 +148,7 @@ export default function CreateAssignmentPage() {
                 onValueChange={(val) => handleChange("field_officer_id", val)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Pilih Petugas" />
+                  <SelectValue placeholder="Pilih Petugas Lapangan" />
                 </SelectTrigger>
                 <SelectContent>
                   {fieldOfficers.length === 0 ? (
@@ -216,8 +217,8 @@ export default function CreateAssignmentPage() {
                 className="bg-emerald-600 hover:bg-emerald-700 flex-1"
                 disabled={loading || !formData.job_order_id || !formData.field_officer_id}
               >
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Buat Assignment
+                {loading && <ChemicalLoader size="sm" />}
+                Buat Penugasan
               </Button>
               <Button
                 type="button"

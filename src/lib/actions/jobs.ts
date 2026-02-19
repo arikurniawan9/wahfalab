@@ -19,16 +19,35 @@ export async function getJobOrders(page = 1, limit = 10, search = "") {
       where,
       skip,
       take: limit,
-      include: {
+      select: {
+        id: true,
+        tracking_code: true,
+        status: true,
+        notes: true,
+        certificate_url: true,
+        created_at: true,
         quotation: {
-          include: {
-            profile: true,
-            items: { 
-              include: { 
+          select: {
+            id: true,
+            quotation_number: true,
+            profile: {
+              select: {
+                id: true,
+                full_name: true,
+                company_name: true
+              }
+            },
+            items: {
+              take: 1,
+              select: {
                 service: {
-                  include: { category_ref: true }
-                } 
-              } 
+                  select: {
+                    id: true,
+                    name: true,
+                    category: true
+                  }
+                }
+              }
             }
           }
         }

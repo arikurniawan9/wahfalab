@@ -20,7 +20,8 @@ import {
   DialogFooter,
   DialogDescription
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Loader2, Search, Tag } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Search, Tag } from "lucide-react";
+import { ChemicalLoader } from "@/components/ui";
 import { getCategories, createOrUpdateCategory, deleteCategory, deleteManyCategories } from "@/lib/actions/categories";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -185,7 +186,7 @@ export default function CategoriesPage() {
                 </div>
                 <DialogFooter className="pt-4">
                   <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 w-full cursor-pointer" disabled={submitting}>
-                    {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {submitting && <ChemicalLoader size="sm" />}
                     {editingItem ? "Simpan Perubahan" : "Buat Kategori"}
                   </Button>
                 </DialogFooter>
@@ -232,7 +233,10 @@ export default function CategoriesPage() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-20">
-                    <Loader2 className="h-8 w-8 animate-spin mx-auto text-emerald-600" />
+                    <div className="flex justify-center">
+                      <ChemicalLoader />
+                    </div>
+                    <p className="mt-4 text-sm text-slate-500">Memuat data...</p>
                   </TableCell>
                 </TableRow>
               ) : data.items.length === 0 ? (
@@ -277,8 +281,10 @@ export default function CategoriesPage() {
         {/* Mobile View */}
         <div className="md:hidden divide-y divide-slate-100">
           {loading ? (
-            <div className="p-10 text-center">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto text-emerald-600" />
+            <div className="p-10 text-center flex flex-col items-center justify-center">
+              <div className="flex justify-center mb-4">
+                <ChemicalLoader />
+              </div>
             </div>
           ) : data.items.length === 0 ? (
             <div className="p-10 text-center text-slate-500">Belum ada kategori.</div>

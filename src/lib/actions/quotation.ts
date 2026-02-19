@@ -25,19 +25,42 @@ export async function getQuotations(page = 1, limit = 10, search = "") {
       where,
       skip,
       take: limit,
-      include: {
+      select: {
+        id: true,
+        quotation_number: true,
+        date: true,
+        status: true,
+        subtotal: true,
+        discount_amount: true,
+        use_tax: true,
+        tax_amount: true,
+        perdiem_price: true,
+        perdiem_qty: true,
+        transport_price: true,
+        transport_qty: true,
+        total_amount: true,
+        created_at: true,
+        user_id: true,
         profile: {
-          select: { full_name: true, company_name: true, id: true }
-        },
-        items: {
-          include: { 
-            service: {
-              include: { category_ref: true }
-            } 
+          select: {
+            id: true,
+            full_name: true,
+            company_name: true
           }
         },
-        _count: {
-          select: { items: true }
+        items: {
+          select: {
+            id: true,
+            qty: true,
+            price_snapshot: true,
+            service: {
+              select: {
+                id: true,
+                name: true,
+                category: true
+              }
+            }
+          }
         }
       },
       orderBy: { created_at: 'desc' }
@@ -80,7 +103,15 @@ export async function createQuotation(formData: any) {
         quotation_number: formData.quotation_number,
         user_id: formData.user_id,
         subtotal: formData.subtotal,
+        discount_amount: formData.discount_amount || 0,
+        use_tax: formData.use_tax,
         tax_amount: formData.tax_amount,
+        
+        perdiem_price: formData.perdiem_price || 0,
+        perdiem_qty: formData.perdiem_qty || 0,
+        transport_price: formData.transport_price || 0,
+        transport_qty: formData.transport_qty || 0,
+        
         total_amount: formData.total_amount,
         status: 'draft',
         items: {
@@ -88,14 +119,12 @@ export async function createQuotation(formData: any) {
             service_id: item.service_id,
             qty: item.qty,
             price_snapshot: item.price,
-            parameter_snapshot: item.parameters,
           })),
         },
       },
     })
 
     revalidatePath('/admin/quotations')
-    revalidatePath('/operator/jobs')
     return { success: true, id: quotation.id }
   } catch (error) {
     console.error('Prisma Error:', error)

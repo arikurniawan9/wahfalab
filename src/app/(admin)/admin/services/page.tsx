@@ -29,11 +29,12 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Loader2, FlaskConical, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, FlaskConical, Search } from "lucide-react";
 import { getServices, createOrUpdateService, deleteService, deleteManyServices } from "@/lib/actions/services";
 import { getAllCategories } from "@/lib/actions/categories";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
+import { ChemicalLoader } from "@/components/ui";
 
 export default function ServicesPage() {
   const [data, setData] = useState<any>({ items: [], total: 0, pages: 1 });
@@ -236,8 +237,13 @@ export default function ServicesPage() {
                 </div>
                 <DialogFooter className="pt-4">
                   <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 w-full cursor-pointer" disabled={submitting}>
-                    {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    {editingItem ? "Simpan Perubahan" : "Tambahkan ke Katalog"}
+                    {submitting ? (
+                      <span className="flex items-center justify-center">
+                        <ChemicalLoader size="sm" />
+                      </span>
+                    ) : (
+                      editingItem ? "Simpan Perubahan" : "Tambahkan ke Katalog"
+                    )}
                   </Button>
                 </DialogFooter>
               </form>
@@ -284,7 +290,10 @@ export default function ServicesPage() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-20">
-                    <Loader2 className="h-8 w-8 animate-spin mx-auto text-emerald-600" />
+                    <div className="flex justify-center">
+                      <ChemicalLoader />
+                    </div>
+                    <p className="mt-4 text-sm text-slate-500">Memuat data...</p>
                   </TableCell>
                 </TableRow>
               ) : data.items.length === 0 ? (
@@ -330,7 +339,7 @@ export default function ServicesPage() {
         <div className="md:hidden divide-y divide-slate-100">
           {loading ? (
             <div className="p-10 text-center">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto text-emerald-600" />
+              <ChemicalLoader />
             </div>
           ) : data.items.length === 0 ? (
             <div className="p-10 text-center text-slate-500">Katalog masih kosong.</div>

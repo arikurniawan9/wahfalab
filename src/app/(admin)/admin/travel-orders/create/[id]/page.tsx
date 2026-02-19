@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft, Calendar, MapPin, DollarSign } from "lucide-react";
+import { ChemicalLoader } from "@/components/ui";
+import { ArrowLeft, Calendar, MapPin, DollarSign } from "lucide-react";
 import Link from "next/link";
 import { createTravelOrder, getTravelOrderByAssignmentId } from "@/lib/actions/travel-order";
 import { getAssignmentById } from "@/lib/actions/sampling";
@@ -107,7 +108,7 @@ export default function CreateTravelOrderPage() {
     return (
       <div className="p-4 md:p-8">
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+          <ChemicalLoader />
         </div>
       </div>
     );
@@ -276,7 +277,7 @@ export default function CreateTravelOrderPage() {
                   className="bg-emerald-600 hover:bg-emerald-700 flex-1"
                   disabled={loading}
                 >
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {loading && <ChemicalLoader size="sm" />}
                   {existingTravelOrder ? 'Simpan Perubahan' : 'Buat Surat Tugas'}
                 </Button>
                 <Button

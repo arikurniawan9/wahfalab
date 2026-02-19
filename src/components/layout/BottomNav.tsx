@@ -3,13 +3,14 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { 
-  LayoutDashboard, 
-  FileText, 
-  Users, 
+import {
+  LayoutDashboard,
+  FileText,
+  Users,
   FlaskConical,
-  UserCircle,
-  Tag
+  MapPin,
+  Settings,
+  Wrench
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
@@ -18,8 +19,9 @@ import { getProfile } from "@/lib/actions/auth";
 const adminNavItems = [
   { icon: LayoutDashboard, label: "Beranda", href: "/admin" },
   { icon: FileText, label: "Penawaran", href: "/admin/quotations" },
-  { icon: Tag, label: "Kategori", href: "/admin/categories" },
-  { icon: FlaskConical, label: "Layanan", href: "/admin/services" },
+  { icon: MapPin, label: "Sampling", href: "/admin/sampling" },
+  { icon: Wrench, label: "Sewa Alat", href: "/admin/equipment" },
+  { icon: Settings, label: "Pengaturan", href: "/admin/settings/company" },
 ];
 
 const operatorNavItems = [

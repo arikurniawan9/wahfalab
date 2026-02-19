@@ -1,13 +1,12 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { 
-  Box, 
-  Clock, 
+import {
+  Box,
+  Clock,
   FileDown,
   ArrowRight,
   FlaskConical,
-  Loader2,
   Truck,
   Beaker,
   FileText,
@@ -19,11 +18,11 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
   DialogDescription,
   DialogFooter
 } from "@/components/ui/dialog"
@@ -32,6 +31,7 @@ import { getJobOrders } from "@/lib/actions/jobs"
 import { getProfile } from "@/lib/actions/auth"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { ChemicalLoader } from "@/components/ui"
 
 export default function ClientDashboard() {
   const [profile, setProfile] = useState<any>(null);
@@ -77,7 +77,7 @@ export default function ClientDashboard() {
   const getCurrentStepIndex = (status: string) => steps.findIndex(s => s.id === status);
 
   if (loading) {
-    return <div className="flex h-[80vh] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-emerald-600" /></div>;
+    return <div className="flex h-[80vh] items-center justify-center"><ChemicalLoader /></div>;
   }
 
   return (

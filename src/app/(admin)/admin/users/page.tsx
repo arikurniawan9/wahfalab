@@ -28,7 +28,8 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ChemicalLoader } from "@/components/ui";
 import { getUsers, createOrUpdateUser, deleteUser, deleteManyUsers } from "@/lib/actions/users";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -248,7 +249,7 @@ export default function UserManagementPage() {
                 </div>
                 <DialogFooter className="pt-4">
                   <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 cursor-pointer" disabled={submitting}>
-                    {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {submitting && <ChemicalLoader size="sm" />}
                     {editingUser ? "Simpan Perubahan" : "Buat User"}
                   </Button>
                 </DialogFooter>
@@ -296,7 +297,10 @@ export default function UserManagementPage() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-20">
-                    <Loader2 className="h-8 w-8 animate-spin mx-auto text-emerald-600" />
+                    <div className="flex justify-center">
+                      <ChemicalLoader />
+                    </div>
+                    <p className="mt-4 text-sm text-slate-500">Memuat data...</p>
                   </TableCell>
                 </TableRow>
               ) : data.users.length === 0 ? (
@@ -362,8 +366,10 @@ export default function UserManagementPage() {
         {/* Mobile View */}
         <div className="md:hidden divide-y divide-slate-100">
           {loading ? (
-            <div className="p-10 text-center">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto text-emerald-600" />
+            <div className="p-10 text-center flex flex-col items-center justify-center">
+              <div className="flex justify-center mb-4">
+                <ChemicalLoader />
+              </div>
             </div>
           ) : data.users.length === 0 ? (
             <div className="p-10 text-center text-slate-500 font-sans">Tidak ada data user.</div>

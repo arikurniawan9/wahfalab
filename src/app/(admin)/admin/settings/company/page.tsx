@@ -7,9 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Upload, Trash2, Building2, MapPin, Phone, Mail, Globe, FileText } from "lucide-react";
+import { Upload, Trash2, Building2, MapPin, Phone, Mail, Globe, FileText } from "lucide-react";
 import { getCompanyProfile, updateCompanyProfile, uploadCompanyLogo, deleteCompanyLogo } from "@/lib/actions/company";
 import Image from "next/image";
+import { ChemicalLoader } from "@/components/ui";
 
 export default function CompanySettingsPage() {
   const [loading, setLoading] = useState(false);
@@ -33,8 +34,8 @@ export default function CompanySettingsPage() {
   async function loadProfile() {
     try {
       const data = await getCompanyProfile();
-      setProfile(data);
       if (data) {
+        setProfile(data);
         setFormData({
           company_name: data.company_name || "",
           address: data.address || "",
@@ -328,8 +329,13 @@ export default function CompanySettingsPage() {
                   className="bg-emerald-600 hover:bg-emerald-700 flex-1"
                   disabled={loading}
                 >
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Simpan Perubahan
+                  {loading ? (
+                    <span className="flex items-center justify-center">
+                      <ChemicalLoader size="sm" />
+                    </span>
+                  ) : (
+                    "Simpan Perubahan"
+                  )}
                 </Button>
                 <Button
                   type="button"

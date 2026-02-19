@@ -270,3 +270,38 @@ export async function createSamplingAssignment(data: {
     return { error: error.message }
   }
 }
+
+export async function getAllSamplingAssignments(page = 1, limit = 10, search = "") {
+  const skip = (page - 1) * limit
+  const where = search ? {
+    OR: [
+      { location: { contains: search, mode: 'insensitive' as const } },
+      { job_order: { tracking_code: { contains: search, mode: 'insensitive' as const } } },
+      { field_officer: { full_name: { contains: search, mode: 'insensitive' as const } } }
+    ]
+  } : {}
+
+  const [assignments, total] = await Promise.all([
+    prisma.samplingAssignment.findMany({
+      where,
+      skip,
+      take: limit,
+      include: {
+        job_order: {
+          include: {
+            quotation: {
+              include: {
+                profile: true
+              }
+            }
+          }
+        },
+        field_officer: true
+      },
+      orderBy: { created_at: 'desc' }
+    }),
+    prisma.samplingAssignment.count({ where })
+  ])
+
+  return serializeData({ items: assignments, total, pages: Math.ceil(total / limit) })
+}
