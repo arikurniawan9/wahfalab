@@ -43,8 +43,8 @@ export async function generateTravelOrderNumber(prefix: string = "ST") {
   const year = now.getFullYear();
   const month = (now.getMonth() + 1).toString().padStart(2, "0");
 
-  // Format: ST/2026/02/0001 (ST = Surat Tugas)
-  const searchPattern = `${prefix}/${year}/${month}/`;
+  // Format: ST/wl/2026/02/0001 (ST = Surat Tugas, wl = wahfalab)
+  const searchPattern = `${prefix}/wl/${year}/${month}/`;
 
   // Cari nomor terakhir di bulan dan tahun yang sama
   const lastTravelOrder = await prisma.travelOrder.findFirst({

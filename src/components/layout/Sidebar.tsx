@@ -15,17 +15,18 @@ import {
   Tag,
   MapPin,
   Truck,
-  Wrench
+  Wrench,
+  Bell
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { logout } from "@/lib/actions/auth";
+import { logout, getProfile } from "@/lib/actions/auth";
 import { createClient } from "@/lib/supabase/client";
-import { getProfile } from "@/lib/actions/auth";
+import { getPendingApprovalCount } from "@/lib/actions/approval";
 import Image from "next/image";
 
-const adminMenuItems = [
+const adminMenuItems = (pendingApprovals: number = 0) => [
   {
     group: "Dashboard",
     items: [
@@ -58,6 +59,12 @@ const adminMenuItems = [
     group: "Administrasi",
     items: [
       { icon: Users, label: "Data Pengguna", href: "/admin/users" },
+      {
+        icon: Bell,
+        label: "Persetujuan",
+        href: "/admin/approval-requests",
+        badge: pendingApprovals > 0 ? pendingApprovals : undefined
+      },
       { icon: Settings, label: "Pengaturan", href: "/admin/settings/company" },
     ]
   },
@@ -68,7 +75,23 @@ const operatorMenuItems = [
     group: "Utama",
     items: [
       { icon: LayoutDashboard, label: "Beranda", href: "/operator" },
-      { icon: FileText, label: "Pekerjaan Lab", href: "/operator/jobs" },
+      { icon: FileText, label: "Penawaran Harga", href: "/operator/quotations" },
+      { icon: FileText, label: "Progress Pekerjaan", href: "/operator/jobs" },
+    ]
+  },
+  {
+    group: "Biaya Operasional",
+    items: [
+      { icon: Truck, label: "Biaya Transport", href: "/operator/transport-costs" },
+      { icon: Users, label: "Biaya Engineer", href: "/operator/engineer-costs" },
+    ]
+  },
+  {
+    group: "Manajemen Laboratorium",
+    items: [
+      { icon: FlaskConical, label: "Katalog Layanan", href: "/operator/services" },
+      { icon: Tag, label: "Kategori Layanan", href: "/operator/categories" },
+      { icon: Wrench, label: "Sewa Alat", href: "/operator/equipment" },
     ]
   },
 ];
@@ -99,6 +122,7 @@ export function Sidebar({ className }: { className?: string }) {
   const [role, setRole] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState("WahfaLab");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [pendingApprovals, setPendingApprovals] = useState(0);
   const supabase = createClient();
 
   useEffect(() => {
@@ -125,13 +149,33 @@ export function Sidebar({ className }: { className?: string }) {
     fetchCompanyProfile();
   }, []);
 
+  useEffect(() => {
+    async function fetchPendingApprovals() {
+      if (role === 'admin') {
+        try {
+          const count = await getPendingApprovalCount();
+          setPendingApprovals(count);
+        } catch (error) {
+          console.error('Error fetching pending approvals:', error);
+        }
+      }
+    }
+    fetchPendingApprovals();
+    
+    // Poll every 30 seconds for new approvals
+    const interval = setInterval(fetchPendingApprovals, 30000);
+    return () => clearInterval(interval);
+  }, [role]);
+
   const menuItems = role === 'admin'
-    ? adminMenuItems
+    ? adminMenuItems(pendingApprovals)
     : role === 'operator'
       ? operatorMenuItems
       : role === 'field_officer'
         ? fieldOfficerMenuItems
-        : clientMenuItems;
+        : role === 'client'
+          ? clientMenuItems
+          : []; // Don't show any menu if role is null/unknown
 
   const NavContent = () => (
     <div className="flex flex-col h-full py-4">
@@ -164,7 +208,7 @@ export function Sidebar({ className }: { className?: string }) {
               </h3>
             )}
             <div className="space-y-1">
-              {group.items.map((item) => (
+              {group.items.map((item: any) => (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -178,7 +222,27 @@ export function Sidebar({ className }: { className?: string }) {
                   title={isCollapsed ? item.label : ""}
                 >
                   <item.icon className={cn("h-5 w-5 shrink-0", pathname === item.href ? "text-white" : "text-emerald-400 group-hover:text-emerald-200")} />
-                  {!isCollapsed && <span className="font-medium">{item.label}</span>}
+                  {!isCollapsed && (
+                    <div className="flex items-center justify-between flex-1">
+                      <span className="font-medium">{item.label}</span>
+                      {item.badge && (
+                        typeof item.badge === 'number' ? (
+                          // Notification badge (red)
+                          <span className="ml-2 px-2 py-0.5 text-xs font-bold bg-red-500 text-white rounded-full min-w-[20px] text-center">
+                            {item.badge}
+                          </span>
+                        ) : (
+                          // Text badge (amber for "View Only")
+                          <span className="ml-2 px-2 py-0.5 text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded uppercase">
+                            {item.badge}
+                          </span>
+                        )
+                      )}
+                    </div>
+                  )}
+                  {isCollapsed && item.badge && (
+                    <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
+                  )}
                 </Link>
               ))}
             </div>

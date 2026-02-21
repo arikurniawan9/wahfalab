@@ -5,37 +5,59 @@ import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { 
-  ChevronLeft, 
-  Printer, 
-  Trash2, 
-  FileText, 
-  User, 
+import {
+  ChevronLeft,
+  Printer,
+  Trash2,
+  FileText,
+  User,
   Calendar,
   CreditCard,
   Truck,
-  Users
+  Users,
+  Send,
+  CheckCircle,
+  XCircle,
+  FileDown
 } from "lucide-react";
 import { toast } from "sonner";
-import { getQuotations, deleteQuotation, updateQuotationStatus } from "@/lib/actions/quotation";
+import { getQuotationById, deleteQuotation, updateQuotationStatus } from "@/lib/actions/quotation";
 import { ChemicalLoader } from "@/components/ui";
 import Link from "next/link";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog";
+import { downloadQuotationPDF } from "@/lib/generate-quotation-pdf";
+import { cn } from "@/lib/utils";
 
 export default function QuotationDetailPage() {
   const params = useParams();
   const router = useRouter();
   const [quotation, setQuotation] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const loadQuotation = async () => {
     setLoading(true);
     try {
-      // We use getQuotations but filter for the ID since we don't have a single getter yet
-      // Or we can assume a getQuotationById exists/needs to be created.
-      // For now let's fetch all and find (less efficient but works for now)
-      const result = await getQuotations(1, 1, params.id as string);
-      if (result.items.length > 0) {
-        setQuotation(result.items[0]);
+      const result = await getQuotationById(params.id as string);
+      if (result) {
+        setQuotation(result);
       } else {
         toast.error("Penawaran tidak ditemukan");
         router.push("/admin/quotations");
@@ -51,24 +73,63 @@ export default function QuotationDetailPage() {
     if (params.id) loadQuotation();
   }, [params.id]);
 
-  const handleDelete = async () => {
-    if (!confirm("Hapus penawaran ini secara permanen?")) return;
+  const handleDelete = () => {
+    setIsDeleting(true);
+  };
+
+  const confirmDelete = async () => {
     try {
       await deleteQuotation(quotation.id);
-      toast.success("Penawaran dihapus");
+      toast.success("Penawaran berhasil dihapus");
       router.push("/admin/quotations");
     } catch (error) {
-      toast.error("Gagal menghapus");
+      toast.error("Gagal menghapus penawaran");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDownloadPDF = async () => {
+    setIsDownloading(true);
+    try {
+      await downloadQuotationPDF(quotation);
+      toast.success("PDF berhasil diunduh");
+    } catch (error) {
+      toast.error("Gagal mengunduh PDF");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleStatusUpdate = async (newStatus: string) => {
+    try {
+      await updateQuotationStatus(quotation.id, newStatus);
+      toast.success(`Status berhasil diubah menjadi ${newStatus.toUpperCase()}`);
+      setQuotation({ ...quotation, status: newStatus });
+    } catch (error) {
+      toast.error("Gagal mengubah status");
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "draft": return "bg-slate-100 text-slate-700";
-      case "sent": return "bg-blue-100 text-blue-700";
-      case "accepted": return "bg-emerald-100 text-emerald-700";
-      case "rejected": return "bg-red-100 text-red-700";
+      case "draft": return "bg-slate-100 text-slate-700 border-slate-200";
+      case "sent": return "bg-blue-100 text-blue-700 border-blue-200";
+      case "accepted": return "bg-emerald-100 text-emerald-700 border-emerald-200";
+      case "rejected": return "bg-red-100 text-red-700 border-red-200";
+      case "paid": return "bg-purple-100 text-purple-700 border-purple-200";
       default: return "bg-slate-100";
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "draft": return FileText;
+      case "sent": return Send;
+      case "accepted": return CheckCircle;
+      case "rejected": return XCircle;
+      case "paid": return CreditCard;
+      default: return FileText;
     }
   };
 
@@ -95,12 +156,53 @@ export default function QuotationDetailPage() {
             <p className="text-slate-500 text-sm">Dibuat pada {new Date(quotation.date).toLocaleDateString("id-ID", { day: 'numeric', month: 'long', year: 'numeric' })}</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="destructive" onClick={handleDelete}>
+        <div className="flex gap-2 flex-wrap">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="cursor-pointer">
+                <FileDown className="mr-2 h-4 w-4" /> Ubah Status
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={() => handleStatusUpdate('draft')} className="cursor-pointer">
+                <FileText className="mr-2 h-4 w-4 text-slate-400" /> Draft
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleStatusUpdate('accepted')} className="cursor-pointer">
+                <CheckCircle className="mr-2 h-4 w-4 text-emerald-500" /> Tandai Diterima
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleStatusUpdate('rejected')} className="cursor-pointer">
+                <XCircle className="mr-2 h-4 w-4 text-red-500" /> Tandai Ditolak
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => handleStatusUpdate('paid')} className="cursor-pointer">
+                <CreditCard className="mr-2 h-4 w-4 text-purple-500" /> Tandai Dibayar
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <Button 
+            variant="destructive" 
+            onClick={handleDelete}
+            disabled={isDeleting}
+          >
             <Trash2 className="mr-2 h-4 w-4" /> Hapus
           </Button>
-          <Button className="bg-emerald-600 hover:bg-emerald-700">
-            <Printer className="mr-2 h-4 w-4" /> Cetak PDF
+
+          <Button 
+            onClick={handleDownloadPDF}
+            disabled={isDownloading}
+            className="bg-emerald-600 hover:bg-emerald-700"
+          >
+            {isDownloading ? (
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                <span>Proses...</span>
+              </div>
+            ) : (
+              <>
+                <Printer className="mr-2 h-4 w-4" /> Cetak PDF
+              </>
+            )}
           </Button>
         </div>
       </div>
@@ -126,19 +228,24 @@ export default function QuotationDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {quotation.items.map((item: any) => (
-                    <tr key={item.id}>
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-slate-800">{item.service.name}</div>
-                        <div className="text-[10px] text-slate-400 uppercase tracking-wider">{item.service.category}</div>
-                      </td>
-                      <td className="px-6 py-4 text-center">{item.qty}</td>
-                      <td className="px-6 py-4 text-right">Rp {Number(item.price_snapshot).toLocaleString("id-ID")}</td>
-                      <td className="px-6 py-4 text-right font-bold text-emerald-700">
-                        Rp {(item.qty * Number(item.price_snapshot)).toLocaleString("id-ID")}
-                      </td>
-                    </tr>
-                  ))}
+                  {quotation.items.map((item: any) => {
+                    const itemName = item.service?.name || item.equipment?.name || "Item Tidak Dikenal";
+                    const itemCategory = item.service?.category || "ALAT LAB";
+                    
+                    return (
+                      <tr key={item.id}>
+                        <td className="px-6 py-4">
+                          <div className="font-medium text-slate-800">{itemName}</div>
+                          <div className="text-[10px] text-slate-400 uppercase tracking-wider">{itemCategory}</div>
+                        </td>
+                        <td className="px-6 py-4 text-center">{item.qty}</td>
+                        <td className="px-6 py-4 text-right">Rp {Number(item.price_snapshot).toLocaleString("id-ID")}</td>
+                        <td className="px-6 py-4 text-right font-bold text-emerald-700">
+                          Rp {(item.qty * Number(item.price_snapshot)).toLocaleString("id-ID")}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </CardContent>
@@ -236,6 +343,31 @@ export default function QuotationDetailPage() {
           </Card>
         </div>
       </div>
+
+      {/* Delete Confirmation AlertDialog */}
+      <AlertDialog open={isDeleting} onOpenChange={(open) => !open && setIsDeleting(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" />
+              Konfirmasi Hapus
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm text-muted-foreground">
+              Apakah Anda yakin ingin menghapus penawaran <strong className="text-slate-900">{quotation?.quotation_number}</strong>?
+              <p className="mt-2 text-sm text-amber-600 font-medium">⚠️ Tindakan ini tidak dapat dibatalkan.</p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel onClick={() => setIsDeleting(false)}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              <Trash2 className="mr-2 h-4 w-4" /> Ya, Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

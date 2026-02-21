@@ -26,7 +26,8 @@ const adminNavItems = [
 
 const operatorNavItems = [
   { icon: LayoutDashboard, label: "Beranda", href: "/operator" },
-  { icon: FileText, label: "Pekerjaan", href: "/operator/jobs" },
+  { icon: FileText, label: "Penawaran", href: "/operator/quotations" },
+  { icon: FileText, label: "Progress", href: "/operator/jobs" },
 ];
 
 const clientNavItems = [
@@ -57,7 +58,9 @@ export function BottomNav() {
       ? operatorNavItems
       : role === 'field_officer'
         ? fieldOfficerNavItems
-        : clientNavItems;
+        : role === 'client'
+          ? clientNavItems
+          : []; // Don't show any menu if role is null/unknown
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 px-4 pb-4">
@@ -73,13 +76,13 @@ export function BottomNav() {
               {isActive && (
                 <div className="absolute -top-2 w-8 h-1 bg-emerald-400 rounded-full shadow-[0_0_10px_rgba(52,211,153,0.8)]" />
               )}
-              <item.icon 
+              <item.icon
                 className={cn(
                   "h-6 w-6 transition-all duration-300",
                   isActive ? "text-emerald-400 scale-110" : "text-emerald-500/50"
-                )} 
+                )}
               />
-              <span 
+              <span
                 className={cn(
                   "text-[10px] mt-1 font-medium transition-all duration-300",
                   isActive ? "text-white opacity-100" : "text-emerald-100/40 opacity-70"

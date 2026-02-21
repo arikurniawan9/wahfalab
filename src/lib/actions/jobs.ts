@@ -26,6 +26,24 @@ export async function getJobOrders(page = 1, limit = 10, search = "") {
         notes: true,
         certificate_url: true,
         created_at: true,
+        sampling_assignment: {
+          select: {
+            id: true,
+            status: true,
+            field_officer: {
+              select: {
+                id: true,
+                full_name: true
+              }
+            },
+            travel_order: {
+              select: {
+                id: true,
+                document_number: true
+              }
+            }
+          }
+        },
         quotation: {
           select: {
             id: true,

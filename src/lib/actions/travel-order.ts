@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { generateTravelOrderNumber } from '@/lib/utils/generateNumber'
+import { serializeData } from '@/lib/utils/serialize'
 
 export async function createTravelOrder(data: {
   assignment_id: string
@@ -105,7 +106,7 @@ export async function getTravelOrderById(id: string) {
       }
     })
 
-    return travelOrder
+    return serializeData(travelOrder)
   } catch (error: any) {
     console.error('Error fetching travel order:', error)
     return null
@@ -143,7 +144,7 @@ export async function getTravelOrderByAssignmentId(assignmentId: string) {
       }
     })
 
-    return travelOrder
+    return serializeData(travelOrder)
   } catch (error: any) {
     console.error('Error fetching travel order:', error)
     return null

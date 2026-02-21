@@ -19,7 +19,8 @@ import {
   Upload,
   Image as ImageIcon,
   FileText,
-  User
+  User,
+  Download
 } from "lucide-react";
 import Link from "next/link";
 import { getAssignmentById, updateSamplingStatus } from "@/lib/actions/sampling";
@@ -294,13 +295,28 @@ export default function AssignmentDetailPage() {
                   </p>
                 </div>
               )}
-              <div className="pt-2">
-                <Link href={`/admin/travel-orders/${travelOrder.id}/preview`} target="_blank">
+              <div className="pt-2 flex gap-2">
+                <Link href={`/admin/travel-orders/${travelOrder.id}/preview`} target="_blank" className="flex-1">
                   <Button variant="outline" size="sm" className="w-full">
                     <FileText className="h-3 w-3 mr-2" />
-                    Lihat Surat Tugas
+                    Preview PDF
                   </Button>
                 </Link>
+                <Button 
+                  variant="default" 
+                  size="sm" 
+                  className="w-full bg-emerald-600 hover:bg-emerald-700"
+                  onClick={() => {
+                    // Direct download trigger
+                    const link = document.createElement('a');
+                    link.href = `/admin/travel-orders/${travelOrder.id}/preview`;
+                    link.target = '_blank';
+                    link.click();
+                  }}
+                >
+                  <Download className="h-3 w-3 mr-2" />
+                  Download
+                </Button>
               </div>
             </CardContent>
           </Card>

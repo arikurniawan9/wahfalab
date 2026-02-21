@@ -1,0 +1,1609 @@
+// ============================================================================
+// OPTIMIZED QUOTATIONS PAGE - v2.0
+// Fitur Optimasi:
+// 1. ✅ Loading Modal saat menyimpan
+// 2. ✅ AlertDialog untuk konfirmasi hapus
+// 3. ✅ Export/Import CSV
+// 4. ✅ Empty state yang lebih menarik
+// 5. ✅ Filter by status
+// 6. ✅ Stats bar (Total, Draft, Sent, Accepted, dll)
+// 7. ✅ Bulk delete dengan validasi
+// 8. ✅ Quick view detail
+// ============================================================================
+
+"use client";
+
+import React, { useState, useEffect } from "react";
+import Link from "next/link";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Plus,
+  FileDown,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  MoreVertical,
+  Eye,
+  Download,
+  Upload,
+  FileText,
+  CheckCircle,
+  Clock,
+  XCircle,
+  Send,
+  DollarSign,
+  Truck,
+  Wrench,
+  Copy,
+  LayoutGrid,
+  MapPin,
+  Car
+} from "lucide-react";
+import { ChemicalLoader } from "@/components/ui";
+import { 
+  getQuotations, 
+  deleteQuotation, 
+  createQuotation, 
+  deleteManyQuotations, 
+  getNextInvoiceNumber,
+  cloneQuotation,
+  updateQuotationStatus
+} from "@/lib/actions/quotation";
+import { getClients, createOrUpdateUser } from "@/lib/actions/users";
+import { getAllServices } from "@/lib/actions/services";
+import { getAllOperationalCatalogs } from "@/lib/actions/operational-catalog";
+import { getAllEquipment } from "@/lib/actions/equipment";
+import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogDescription
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import { useForm, useFieldArray, Controller, useWatch } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { cn } from "@/lib/utils";
+
+const quotationSchema = z.object({
+  quotation_number: z.string().min(1, "Wajib diisi"),
+  user_id: z.string().min(1, "Pilih pelanggan"),
+  use_tax: z.boolean().default(true),
+  discount_amount: z.number().min(0).default(0),
+  perdiem_name: z.string().optional(),
+  perdiem_price: z.number().min(0).default(0),
+  perdiem_qty: z.number().min(0).default(0),
+  transport_name: z.string().optional(),
+  transport_price: z.number().min(0).default(0),
+  transport_qty: z.number().min(0).default(0),
+  items: z.array(z.object({
+    service_id: z.string().min(1).optional(),
+    equipment_id: z.string().min(1).optional(),
+    qty: z.number().min(1),
+    price: z.number().min(0),
+    name: z.string().optional(),
+    specification: z.string().optional(),
+    unit: z.string().optional(),
+  })).min(1, "Minimal 1 item"),
+});
+
+const statusOptions = [
+  { value: "all", label: "Semua Status", color: "bg-slate-100 text-slate-700" },
+  { value: "draft", label: "Draft", color: "bg-slate-100 text-slate-700 border-slate-200", icon: FileText },
+  { value: "sent", label: "Terkirim", color: "bg-blue-100 text-blue-700 border-blue-200", icon: Send },
+  { value: "accepted", label: "Diterima", color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: CheckCircle },
+  { value: "rejected", label: "Ditolak", color: "bg-red-100 text-red-700 border-red-200", icon: XCircle },
+  { value: "paid", label: "Dibayar", color: "bg-purple-100 text-purple-700 border-purple-200", icon: DollarSign }
+];
+
+export default function QuotationListPage() {
+  const [data, setData] = useState<any>({ items: [], total: 0, pages: 1 });
+  const [clients, setClients] = useState<any[]>([]);
+  const [services, setServices] = useState<any[]>([]);
+  const [operationalCatalogs, setOperationalCatalogs] = useState<any[]>([]);
+  const [equipment, setEquipment] = useState<any[]>([]);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isPerdiemDialogOpen, setIsPerdiemDialogOpen] = useState(false);
+  const [isTransportDialogOpen, setIsTransportDialogOpen] = useState(false);
+  const [isEquipmentDialogOpen, setIsEquipmentDialogOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [importData, setImportData] = useState<string>("");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("date");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  const [activeTab, setActiveTab] = useState("info");
+  const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
+
+  // Form Hooks
+  const { register, control, handleSubmit, setValue, getValues, reset, formState: { errors } } = useForm({
+    resolver: zodResolver(quotationSchema),
+    mode: 'onChange',
+    defaultValues: {
+      quotation_number: "INV-",
+      user_id: "",
+      use_tax: true,
+      discount_amount: 0,
+      perdiem_name: "",
+      perdiem_price: 0,
+      perdiem_qty: 0,
+      transport_name: "",
+      transport_price: 0,
+      transport_qty: 0,
+      items: [{ service_id: "", equipment_id: "", qty: 1, price: 0 }]
+    }
+  });
+
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: "items"
+  });
+
+  // Targeted Watches using useWatch for stability
+  const watchedItems = useWatch({ control, name: "items" }) || [];
+  const watchedUseTax = useWatch({ control, name: "use_tax" });
+  const watchedUserId = useWatch({ control, name: "user_id" });
+  const watchedDiscount = useWatch({ control, name: "discount_amount" }) || 0;
+  const watchedPerdiemPrice = useWatch({ control, name: "perdiem_price" }) || 0;
+  const watchedPerdiemQty = useWatch({ control, name: "perdiem_qty" }) || 0;
+  const watchedTransportPrice = useWatch({ control, name: "transport_price" }) || 0;
+  const watchedTransportQty = useWatch({ control, name: "transport_qty" }) || 0;
+  const watchedPerdiemName = useWatch({ control, name: "perdiem_name" });
+  const watchedTransportName = useWatch({ control, name: "transport_name" });
+
+  // Stable Calculations with useMemo
+  const { itemsSubtotal, perdiemTotal, transportTotal, subtotalBeforeDiscount, subtotal, tax, total } = React.useMemo(() => {
+    const iSubtotal = watchedItems.reduce((acc: number, item: any) => acc + (Number(item.qty || 0) * Number(item.price || 0)), 0);
+    const pTotal = Number(watchedPerdiemPrice) * Number(watchedPerdiemQty);
+    const tTotal = Number(watchedTransportPrice) * Number(watchedTransportQty);
+    const sBeforeDiscount = iSubtotal + pTotal + tTotal;
+    const sTotal = sBeforeDiscount - Number(watchedDiscount);
+    const tAmount = watchedUseTax ? sTotal * 0.11 : 0;
+    const gTotal = sTotal + tAmount;
+
+    return {
+      itemsSubtotal: iSubtotal,
+      perdiemTotal: pTotal,
+      transportTotal: tTotal,
+      subtotalBeforeDiscount: sBeforeDiscount,
+      subtotal: sTotal,
+      tax: tAmount,
+      total: gTotal
+    };
+  }, [watchedItems, watchedPerdiemPrice, watchedPerdiemQty, watchedTransportPrice, watchedTransportQty, watchedDiscount, watchedUseTax]);
+
+  const handleTaxToggle = React.useCallback(() => {
+    setValue("use_tax", !watchedUseTax, { shouldValidate: true, shouldDirty: true });
+  }, [setValue, watchedUseTax]);
+
+  // Keyboard Shortcuts Logic
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Hanya aktif jika Modal Penawaran terbuka
+      if (!isDialogOpen) return;
+
+      // Cegah shortcut saat sedang mengetik di input/textarea kecuali Ctrl+Enter
+      const isInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+      
+      if (e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault();
+        handleSubmit(onSubmit)();
+      }
+
+      if (isInput && e.key !== 'Escape') return;
+
+      if (e.altKey) {
+        e.preventDefault();
+        switch (e.key) {
+          case '1': setActiveTab("info"); break;
+          case '2': setActiveTab("items"); break;
+          case '3': setActiveTab("ops"); break;
+          case '4': setActiveTab("summary"); break;
+          case 'n': 
+            setActiveTab("items");
+            append({ service_id: "", equipment_id: "", qty: 1, price: 0 }); 
+            break;
+          case 'p': setActiveTab("ops"); setIsPerdiemDialogOpen(true); break;
+          case 't': setActiveTab("ops"); setIsTransportDialogOpen(true); break;
+          case 'e': setActiveTab("ops"); setIsEquipmentDialogOpen(true); break;
+          case 'k': setIsCustomerDialogOpen(true); break;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isDialogOpen, activeTab, handleSubmit, append]);
+
+  const [customerData, setCustomerData] = useState({
+    full_name: "",
+    email: "",
+    company_name: "",
+    address: "",
+    password: "123456"
+  });
+
+  const handleCreateCustomer = async () => {
+    if (!customerData.full_name || !customerData.email) {
+      toast.error("Nama dan Email wajib diisi");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await createOrUpdateUser({ ...customerData, role: 'client' });
+      toast.success("Customer baru berhasil ditambahkan");
+      setIsCustomerDialogOpen(false);
+      // Reload clients
+      const cResult = await getClients();
+      setClients(cResult);
+      setCustomerData({
+        full_name: "",
+        email: "",
+        company_name: "",
+        address: "",
+        password: "123456"
+      });
+    } catch (error: any) {
+      toast.error("Gagal menambahkan customer", { description: error.message });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const loadData = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const [qResult] = await Promise.all([
+        getQuotations(page, limit, search),
+      ]);
+      setData(qResult);
+      setSelectedIds([]);
+    } catch (error: any) {
+      toast.error("Gagal memuat data", {
+        description: error?.message || "Silakan refresh halaman"
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [page, limit, search]);
+
+  // Load clients separately (only once)
+  useEffect(() => {
+    const loadClients = async () => {
+      try {
+        const cResult = await getClients();
+        setClients(cResult);
+      } catch (error: any) {
+        console.error("Failed to load clients:", error);
+      }
+    };
+    loadClients();
+  }, []);
+
+  // Load services separately (only once)
+  useEffect(() => {
+    const loadServices = async () => {
+      try {
+        const sResult = await getAllServices();
+        setServices(sResult);
+      } catch (error: any) {
+        console.error("Failed to load services:", error);
+      }
+    };
+    loadServices();
+  }, []);
+
+  // Load operational catalogs separately (only once)
+  useEffect(() => {
+    const loadCatalogs = async () => {
+      try {
+        const oResult = await getAllOperationalCatalogs();
+        setOperationalCatalogs(oResult);
+      } catch (error: any) {
+        console.error("Failed to load catalogs:", error);
+      }
+    };
+    loadCatalogs();
+  }, []);
+
+  // Load equipment separately (only once)
+  useEffect(() => {
+    const loadEquipment = async () => {
+      try {
+        const eResult = await getAllEquipment();
+        setEquipment(eResult);
+      } catch (error: any) {
+        console.error("Failed to load equipment:", error);
+      }
+    };
+    loadEquipment();
+  }, []);
+
+  const handleClone = async (id: string) => {
+    try {
+      const result = await cloneQuotation(id);
+      if (result.success) {
+        toast.success("Penawaran berhasil diduplikasi");
+        loadData();
+      }
+    } catch (error: any) {
+      toast.error("Gagal duplikasi", { description: error.message });
+    }
+  };
+
+  const handleStatusUpdate = async (id: string, status: string) => {
+    try {
+      await updateQuotationStatus(id, status);
+      toast.success(`Status berhasil diperbarui menjadi ${status}`);
+      loadData();
+    } catch (error: any) {
+      toast.error("Gagal update status", { description: error.message });
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadData();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [loadData]);
+
+  // Set quotation number only when dialog opens
+  useEffect(() => {
+    if (isDialogOpen) {
+      getNextInvoiceNumber().then(num => setValue("quotation_number", num));
+    }
+  }, [isDialogOpen, setValue]);
+
+  const onSubmit = async (formData: any) => {
+    setShowSubmitModal(true);
+    setSubmitting(true);
+    try {
+      await createQuotation({
+        ...formData,
+        subtotal: subtotalBeforeDiscount,
+        tax_amount: tax,
+        total_amount: total
+      });
+      toast.success("Penawaran berhasil dibuat", {
+        description: `No. Penawaran: ${formData.quotation_number}`
+      });
+      setIsDialogOpen(false);
+      reset();
+      loadData();
+    } catch (error: any) {
+      toast.error("Gagal menyimpan penawaran", {
+        description: error?.message || "Silakan coba lagi"
+      });
+    } finally {
+      setSubmitting(false);
+      setShowSubmitModal(false);
+    }
+  };
+
+  const handleServiceChange = (index: number, serviceId: string) => {
+    const service = services.find(s => s.id === serviceId);
+    if (service) {
+      setValue(`items.${index}.service_id`, serviceId);
+      setValue(`items.${index}.price`, Number(service.price));
+    }
+  };
+
+  const handleDelete = (id: string) => {
+    setDeleteId(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    try {
+      await deleteQuotation(deleteId);
+      loadData();
+      toast.success("Penawaran berhasil dihapus", {
+        description: "Data telah dihapus permanen"
+      });
+      setDeleteId(null);
+    } catch (error: any) {
+      toast.error("Gagal menghapus penawaran", {
+        description: error?.message || "Silakan coba lagi"
+      });
+    }
+  };
+
+  const handleBulkDelete = () => {
+    setDeleteId("bulk");
+  };
+
+  const confirmBulkDelete = async () => {
+    try {
+      await deleteManyQuotations(selectedIds);
+      loadData();
+      toast.success(`${selectedIds.length} penawaran berhasil dihapus`);
+      setDeleteId(null);
+    } catch (error: any) {
+      toast.error("Gagal menghapus penawaran", {
+        description: error?.message || "Silakan coba lagi"
+      });
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === data.items.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(data.items.map((i: any) => i.id));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    if (selectedIds.includes(id)) {
+      setSelectedIds(selectedIds.filter(i => i !== id));
+    } else {
+      setSelectedIds([...selectedIds, id]);
+    }
+  };
+
+  // Export CSV
+  const handleExport = () => {
+    const headers = ["No. Penawaran", "Pelanggan", "Tanggal", "Status", "Total Amount", "Perusahaan"];
+    const csvData = data.items.map((item: any) => [
+      item.quotation_number,
+      item.profile.full_name,
+      new Date(item.date).toISOString().split('T')[0],
+      item.status,
+      item.total_amount,
+      item.profile.company_name || "Personal"
+    ]);
+    
+    const csv = [
+      headers.join(","),
+      ...csvData.map((row: string[]) => row.map(cell => `"${cell}"`).join(","))
+    ].join("\n");
+    
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `quotations-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    toast.success("Data berhasil diexport", {
+      description: "File CSV telah diunduh"
+    });
+  };
+
+  // Import CSV
+  const handleImport = async () => {
+    try {
+      const lines = importData.trim().split("\n");
+      
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(",").map(v => v.trim().replace(/"/g, ""));
+        // Simple import - create basic quotation
+        await createQuotation({
+          quotation_number: values[0],
+          user_id: clients[0]?.id, // Use first client
+          subtotal: parseFloat(values[4]) || 0,
+          tax_amount: 0,
+          total_amount: parseFloat(values[4]) || 0,
+          items: []
+        });
+      }
+      
+      toast.success("Import berhasil", {
+        description: `${lines.length - 1} penawaran berhasil diimport`
+      });
+      setIsImportDialogOpen(false);
+      setImportData("");
+      loadData();
+    } catch (error: any) {
+      toast.error("Gagal import data", {
+        description: error?.message || "Format CSV tidak valid"
+      });
+    }
+  };
+
+  // Filter & Sort
+  const getFilteredAndSortedData = () => {
+    let filtered = [...data.items];
+    
+    // Search
+    if (search) {
+      filtered = filtered.filter(item => 
+        item.quotation_number.toLowerCase().includes(search.toLowerCase()) ||
+        item.profile.full_name.toLowerCase().includes(search.toLowerCase()) ||
+        item.profile.company_name?.toLowerCase().includes(search.toLowerCase())
+      );
+    }
+    
+    // Filter by status
+    if (filterStatus !== "all") {
+      filtered = filtered.filter(item => item.status === filterStatus);
+    }
+    
+    // Sort
+    filtered.sort((a, b) => {
+      let comparison = 0;
+      if (sortBy === "date") {
+        comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
+      } else if (sortBy === "total") {
+        comparison = Number(a.total_amount) - Number(b.total_amount);
+      } else if (sortBy === "number") {
+        comparison = a.quotation_number.localeCompare(b.quotation_number);
+      }
+      return sortOrder === "asc" ? comparison : -comparison;
+    });
+    
+    return filtered;
+  };
+
+  const filteredItems = getFilteredAndSortedData();
+
+  // Stats
+  const stats = {
+    total: data.items.length,
+    draft: data.items.filter((i: any) => i.status === "draft").length,
+    sent: data.items.filter((i: any) => i.status === "sent").length,
+    accepted: data.items.filter((i: any) => i.status === "accepted").length,
+    rejected: data.items.filter((i: any) => i.status === "rejected").length,
+    paid: data.items.filter((i: any) => i.status === "paid").length
+  };
+
+  const getStatusColor = (status: string) => {
+    const option = statusOptions.find(opt => opt.value === status);
+    return option?.color || "bg-slate-100 text-slate-700 border-slate-200";
+  };
+
+  const getStatusIcon = (status: string) => {
+    const option = statusOptions.find(opt => opt.value === status);
+    const Icon = option?.icon || FileText;
+    return <Icon className="h-3 w-3 mr-1" />;
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'draft': return 'DRAFT';
+      case 'sent': return 'TERKIRIM';
+      case 'accepted': return 'DITERIMA';
+      case 'rejected': return 'DITOLAK';
+      case 'paid': return 'DIBAYAR';
+      default: return status.toUpperCase();
+    }
+  };
+
+  return (
+    <div className="p-4 md:p-10 pb-24 md:pb-10">
+      {/* Header dengan Actions */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold text-emerald-900 tracking-tight">Penawaran Harga</h1>
+          <p className="text-slate-500 text-sm">Kelola semua quotation untuk pelanggan laboratorium.</p>
+        </div>
+
+        <div className="flex gap-2 flex-wrap w-full md:w-auto">
+          {selectedIds.length > 0 && (
+            <Button variant="destructive" onClick={handleBulkDelete} className="animate-in fade-in zoom-in duration-200 cursor-pointer">
+              <Trash2 className="mr-2 h-4 w-4" /> Hapus ({selectedIds.length})
+            </Button>
+          )}
+          <Button variant="outline" onClick={handleExport} className="cursor-pointer">
+            <Download className="mr-2 h-4 w-4" /> Export
+          </Button>
+          <Button variant="outline" onClick={() => setIsImportDialogOpen(true)} className="cursor-pointer">
+            <Upload className="mr-2 h-4 w-4" /> Import
+          </Button>
+          <Button onClick={() => {
+            reset();
+            setIsDialogOpen(true);
+          }} className="bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100 cursor-pointer flex-1 md:flex-none">
+            <Plus className="mr-2 h-4 w-4" /> Buat Penawaran
+          </Button>
+        </div>
+      </div>
+
+      {/* Stats Bar */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <FileText className="h-4 w-4 text-slate-400" />
+            <span className="text-xs font-medium text-slate-500">Total</span>
+          </div>
+          <p className="text-2xl font-bold text-slate-800">{stats.total}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <FileText className="h-4 w-4 text-slate-400" />
+            <span className="text-xs font-medium text-slate-500">Draft</span>
+          </div>
+          <p className="text-2xl font-bold text-slate-700">{stats.draft}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-blue-200 p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Send className="h-4 w-4 text-blue-400" />
+            <span className="text-xs font-medium text-blue-500">Terkirim</span>
+          </div>
+          <p className="text-2xl font-bold text-blue-700">{stats.sent}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-emerald-200 p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <CheckCircle className="h-4 w-4 text-emerald-400" />
+            <span className="text-xs font-medium text-emerald-500">Diterima</span>
+          </div>
+          <p className="text-2xl font-bold text-emerald-700">{stats.accepted}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-red-200 p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <XCircle className="h-4 w-4 text-red-400" />
+            <span className="text-xs font-medium text-red-500">Ditolak</span>
+          </div>
+          <p className="text-2xl font-bold text-red-700">{stats.rejected}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-purple-200 p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <DollarSign className="h-4 w-4 text-purple-400" />
+            <span className="text-xs font-medium text-purple-500">Dibayar</span>
+          </div>
+          <p className="text-2xl font-bold text-purple-700">{stats.paid}</p>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6">
+        <div className="flex flex-wrap gap-4 items-center justify-between">
+          <div className="flex flex-wrap gap-2">
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-40 cursor-pointer">
+                <SelectValue placeholder="Filter Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Status</SelectItem>
+                {statusOptions.filter(opt => opt.value !== "all").map(opt => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="w-40 cursor-pointer">
+                <SelectValue placeholder="Sort By" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date">Tanggal</SelectItem>
+                <SelectItem value="total">Total Amount</SelectItem>
+                <SelectItem value="number">No. Penawaran</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+              className="cursor-pointer"
+            >
+              <svg className={`h-4 w-4 transition-transform ${sortOrder === "asc" ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </Button>
+          </div>
+
+          <div className="text-sm text-slate-500">
+            {filteredItems.length} dari {data.total} penawaran
+          </div>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-3xl shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
+        <div className="p-5 border-b bg-emerald-50/5 flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
+            <Input
+              placeholder="Cari nomor penawaran atau klien..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="pl-10 focus-visible:ring-emerald-500 rounded-xl"
+            />
+          </div>
+        </div>
+
+        {/* Desktop View */}
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-slate-50/80">
+                <TableHead className="w-12 px-6">
+                  <Checkbox
+                    checked={data.items.length > 0 && selectedIds.length === data.items.length}
+                    onCheckedChange={toggleSelectAll}
+                  />
+                </TableHead>
+                <TableHead className="w-[150px] font-bold text-emerald-900 px-4">No. Penawaran</TableHead>
+                <TableHead className="font-bold text-emerald-900 px-4">Klien</TableHead>
+                <TableHead className="font-bold text-emerald-900 px-4">Tanggal</TableHead>
+                <TableHead className="text-right font-bold text-emerald-900 px-4">Total Amount</TableHead>
+                <TableHead className="font-bold text-emerald-900 px-4">Status</TableHead>
+                <TableHead className="text-center font-bold text-emerald-900 px-6">Aksi</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="px-6"><div className="h-4 w-4 bg-slate-100 animate-pulse rounded" /></TableCell>
+                    <TableCell className="px-4"><div className="h-5 w-32 bg-slate-100 animate-pulse rounded-lg" /></TableCell>
+                    <TableCell className="px-4"><div className="h-5 w-48 bg-slate-100 animate-pulse rounded-lg mb-1" /><div className="h-3 w-24 bg-slate-50 animate-pulse rounded" /></TableCell>
+                    <TableCell className="px-4"><div className="h-5 w-24 bg-slate-100 animate-pulse rounded-lg" /></TableCell>
+                    <TableCell className="px-4"><div className="h-5 w-28 ml-auto bg-slate-100 animate-pulse rounded-lg" /></TableCell>
+                    <TableCell className="px-4"><div className="h-6 w-20 bg-slate-100 animate-pulse rounded-full" /></TableCell>
+                    <TableCell className="px-6"><div className="h-8 w-24 mx-auto bg-slate-50 animate-pulse rounded-lg" /></TableCell>
+                  </TableRow>
+                ))
+              ) : filteredItems.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-20">
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="h-20 w-20 rounded-full bg-emerald-50 flex items-center justify-center">
+                        <FileText className="h-10 w-10 text-emerald-300" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-lg font-semibold text-slate-700">Belum ada penawaran harga</p>
+                        <p className="text-sm text-slate-500 mt-1">Mulai dengan membuat penawaran pertama Anda</p>
+                      </div>
+                      <Button
+                        onClick={() => {
+                          reset();
+                          setIsDialogOpen(true);
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
+                      >
+                        <Plus className="mr-2 h-4 w-4" /> Buat Penawaran
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredItems.map((item: any) => (
+                  <TableRow key={item.id} className="hover:bg-emerald-50/10 transition-colors">
+                    <TableCell className="px-6">
+                      <Checkbox checked={selectedIds.includes(item.id)} onCheckedChange={() => toggleSelect(item.id)} />
+                    </TableCell>
+                    <TableCell className="font-bold text-emerald-900 px-4">{item.quotation_number}</TableCell>
+                    <TableCell className="px-4">
+                      <div className="flex flex-col">
+                        <span className="font-medium text-slate-800">{item.profile.full_name}</span>
+                        <span className="text-xs text-slate-400">{item.profile.company_name || "Personal"}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-slate-600 text-sm px-4">
+                      {new Date(item.date).toLocaleDateString("id-ID", {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric'
+                      })}
+                    </TableCell>
+                    <TableCell className="text-right font-bold text-emerald-700 px-4">
+                      Rp {Number(item.total_amount).toLocaleString("id-ID")}
+                    </TableCell>
+                    <TableCell className="px-4">
+                      <Badge variant="outline" className={cn("capitalize", getStatusColor(item.status))}>
+                        {getStatusIcon(item.status)}
+                        {getStatusLabel(item.status)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center px-6">
+                      <div className="flex justify-center gap-1">
+                        <Link href={`/admin/quotations/${item.id}`}>
+                          <Button variant="ghost" size="sm" className="text-emerald-600 hover:bg-emerald-50 cursor-pointer">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 cursor-pointer">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem onClick={() => handleClone(item.id)} className="cursor-pointer">
+                              <Copy className="mr-2 h-4 w-4" /> Duplikasi
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem disabled className="text-xs font-bold text-slate-400">UPDATE STATUS</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleStatusUpdate(item.id, 'draft')} className="cursor-pointer">
+                              <FileText className="mr-2 h-4 w-4 text-slate-400" /> Draft
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleStatusUpdate(item.id, 'sent')} className="cursor-pointer">
+                              <Send className="mr-2 h-4 w-4 text-blue-500" /> Tandai Terkirim
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleStatusUpdate(item.id, 'accepted')} className="cursor-pointer">
+                              <CheckCircle className="mr-2 h-4 w-4 text-emerald-500" /> Tandai Diterima
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleStatusUpdate(item.id, 'rejected')} className="cursor-pointer">
+                              <XCircle className="mr-2 h-4 w-4 text-red-500" /> Tandai Ditolak
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleDelete(item.id)} className="text-red-600 cursor-pointer">
+                              <Trash2 className="mr-2 h-4 w-4" /> Hapus
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Mobile View */}
+        <div className="md:hidden divide-y divide-slate-100">
+          {loading ? (
+            <div className="p-10 text-center">
+              <ChemicalLoader />
+            </div>
+          ) : filteredItems.length === 0 ? (
+            <div className="p-10 text-center flex flex-col items-center gap-4">
+              <div className="h-16 w-16 rounded-full bg-emerald-50 flex items-center justify-center">
+                <FileText className="h-8 w-8 text-emerald-300" />
+              </div>
+              <div>
+                <p className="text-base font-semibold text-slate-700">Belum ada penawaran</p>
+                <p className="text-xs text-slate-500 mt-1">Mulai dengan membuat penawaran</p>
+              </div>
+              <Button
+                onClick={() => {
+                  reset();
+                  setIsDialogOpen(true);
+                }}
+                className="bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
+              >
+                <Plus className="mr-2 h-4 w-4" /> Buat Penawaran
+              </Button>
+            </div>
+          ) : (
+            filteredItems.map((item: any) => (
+              <div key={item.id} className="p-4 space-y-3 bg-white active:bg-slate-50">
+                <div className="flex justify-between items-start">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-emerald-600" />
+                      <h4 className="font-bold text-slate-900">{item.quotation_number}</h4>
+                    </div>
+                    <p className="text-sm text-slate-700">{item.profile.full_name}</p>
+                    <p className="text-xs text-slate-400">{item.profile.company_name || "Personal"}</p>
+                  </div>
+                  <Badge variant="outline" className={cn("capitalize", getStatusColor(item.status))}>
+                    {getStatusIcon(item.status)}
+                    {getStatusLabel(item.status)}
+                  </Badge>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t">
+                  <span className="text-xs text-slate-400">
+                    {new Date(item.date).toLocaleDateString("id-ID", {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric'
+                    })}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Link href={`/admin/quotations/${item.id}`}>
+                      <Button variant="outline" size="sm" className="text-emerald-600 hover:bg-emerald-50 cursor-pointer">
+                        <Eye className="h-4 w-4 mr-1" />
+                        Detail
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Pagination */}
+        <div className="p-4 border-t flex flex-col md:flex-row items-center justify-between bg-slate-50/50 gap-4">
+          <div className="flex items-center gap-4">
+            <p className="text-xs text-slate-500 font-medium">
+              Total {data.total} penawaran
+            </p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 font-medium">Tampil:</span>
+              <Select value={limit.toString()} onValueChange={(val) => {
+                setLimit(parseInt(val));
+                setPage(1);
+              }}>
+                <SelectTrigger className="h-8 w-[70px] bg-white text-xs cursor-pointer">
+                  <SelectValue placeholder={limit.toString()} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10" className="cursor-pointer">10</SelectItem>
+                  <SelectItem value="30" className="cursor-pointer">30</SelectItem>
+                  <SelectItem value="50" className="cursor-pointer">50</SelectItem>
+                  <SelectItem value="100" className="cursor-pointer">100</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="h-8 rounded-lg cursor-pointer" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex items-center px-4 text-xs font-bold bg-white border border-slate-200 rounded-lg shadow-sm">
+              {page} / {data.pages}
+            </div>
+            <Button variant="outline" size="sm" className="h-8 rounded-lg cursor-pointer" disabled={page === data.pages} onClick={() => setPage(p => p + 1)}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Delete Confirmation AlertDialog */}
+      <AlertDialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <AlertDialogContent className="sm:max-w-[425px]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" />
+              Konfirmasi Hapus
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="pt-4 text-sm text-muted-foreground">
+                {deleteId === "bulk" ? (
+                  <>
+                    <p>Apakah Anda yakin ingin menghapus <strong className="text-slate-900">{selectedIds.length} penawaran</strong> terpilih?</p>
+                    <p className="mt-2 text-sm text-amber-600 font-medium">⚠️ Tindakan ini tidak dapat dibatalkan.</p>
+                  </>
+                ) : (
+                  <>
+                    <p>Apakah Anda yakin ingin menghapus penawaran ini?</p>
+                    <p className="mt-2 text-sm text-amber-600 font-medium">⚠️ Data akan dihapus permanen.</p>
+                  </>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel className="cursor-pointer">Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={deleteId === "bulk" ? confirmBulkDelete : confirmDelete}
+              className="bg-red-600 hover:bg-red-700 cursor-pointer"
+            >
+              <Trash2 className="mr-2 h-4 w-4" /> Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Import Dialog */}
+      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5" />
+              Import Data CSV
+            </DialogTitle>
+            <DialogDescription>
+              Paste data CSV dengan format: No. Penawaran, Pelanggan, Tanggal, Status, Total Amount, Perusahaan
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-slate-50 p-3 rounded-lg text-xs font-mono">
+              <p className="font-semibold mb-1">Format:</p>
+              <p>QT-001,John Doe,2025-02-19,draft,1000000,PT ABC</p>
+            </div>
+            <textarea
+              className="w-full h-40 p-3 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+              placeholder="Paste CSV data here..."
+              value={importData}
+              onChange={(e) => setImportData(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsImportDialogOpen(false)} className="cursor-pointer">
+              Batal
+            </Button>
+            <Button onClick={handleImport} className="bg-emerald-600 hover:bg-emerald-700 cursor-pointer">
+              <Upload className="mr-2 h-4 w-4" /> Import
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Quotation Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[95vh] p-0 overflow-hidden border-none shadow-2xl">
+          <div className="bg-emerald-700 p-6 text-white">
+            <DialogHeader>
+              <div className="flex items-center gap-3">
+                <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
+                  <FileText className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl font-bold text-white">Buat Penawaran Harga</DialogTitle>
+                  <DialogDescription className="text-emerald-100/80">
+                    Lengkapi detail penawaran laboratorium untuk pelanggan.
+                  </DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+          </div>
+
+          <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col h-full max-h-[calc(95vh-120px)]">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+              <div className="bg-slate-50 border-b px-6">
+                <TabsList className="bg-transparent h-14 gap-6 p-0">
+                  <TabsTrigger value="info" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 data-[state=active]:text-emerald-700 data-[state=active]:shadow-none rounded-none h-full px-2 font-bold transition-all relative group text-xs md:text-sm">
+                    1. Info & Klien
+                    <span className="absolute top-1 right-0 text-[8px] bg-slate-200 text-slate-500 px-1 rounded opacity-0 group-hover:opacity-100 hidden md:block">Alt+1</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="items" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 data-[state=active]:text-emerald-700 data-[state=active]:shadow-none rounded-none h-full px-2 font-bold transition-all relative group text-xs md:text-sm">
+                    2. Item
+                    <span className="absolute top-1 right-0 text-[8px] bg-slate-200 text-slate-500 px-1 rounded opacity-0 group-hover:opacity-100 hidden md:block">Alt+2</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="ops" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 data-[state=active]:text-emerald-700 data-[state=active]:shadow-none rounded-none h-full px-2 font-bold transition-all relative group text-xs md:text-sm">
+                    3. Operasional
+                    <span className="absolute top-1 right-0 text-[8px] bg-slate-200 text-slate-500 px-1 rounded opacity-0 group-hover:opacity-100 hidden md:block">Alt+3</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="summary" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 data-[state=active]:text-emerald-700 data-[state=active]:shadow-none rounded-none h-full px-2 font-bold transition-all relative group text-xs md:text-sm">
+                    4. Ringkasan
+                    <span className="absolute top-1 right-0 text-[8px] bg-slate-200 text-slate-500 px-1 rounded opacity-0 group-hover:opacity-100 hidden md:block">Alt+4</span>
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-slate-200">
+                <TabsContent value="info" className="mt-0 space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-slate-400" />
+                        Nomor Penawaran
+                      </label>
+                      <Input {...register("quotation_number")} readOnly className="bg-slate-100 border-slate-200 font-mono font-bold text-emerald-700 h-11" />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                          <Plus className="h-4 w-4 text-slate-400" />
+                          Pilih Pelanggan
+                        </label>
+                        <Button 
+                          type="button" 
+                          variant="link" 
+                          size="sm" 
+                          className="h-auto p-0 text-emerald-600 font-bold text-xs"
+                          onClick={() => setIsCustomerDialogOpen(true)}
+                        >
+                          + TAMBAH BARU
+                        </Button>
+                      </div>
+                      <Controller
+                        control={control}
+                        name="user_id"
+                        render={({ field }) => (
+                          <Select 
+                            value={field.value || ""} 
+                            onValueChange={(value) => {
+                              field.onChange(value);
+                            }}
+                            disabled={clients.length === 0}
+                          >
+                            <SelectTrigger className="h-11 border-slate-200 shadow-sm focus:ring-emerald-500">
+                              <SelectValue placeholder="Pilih atau cari pelanggan..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {clients.length > 0 ? (
+                                clients.map(client => (
+                                  <SelectItem key={client.id} value={client.id} className="py-3">
+                                    <div className="flex flex-col">
+                                      <span className="font-bold">{client.full_name}</span>
+                                      <span className="text-xs text-slate-500">{client.company_name || "Personal"}</span>
+                                    </div>
+                                  </SelectItem>
+                                ))
+                              ) : (
+                                <div className="p-4 text-center text-sm text-slate-500">
+                                  Memuat pelanggan...
+                                </div>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
+                      {errors.user_id && <p className="text-xs text-red-500 font-bold">{errors.user_id.message as string}</p>}
+                    </div>
+                  </div>
+                  <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex gap-3">
+                    <Clock className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
+                    <p className="text-xs text-blue-700 leading-relaxed">
+                      Pastikan data pelanggan sudah benar. Nomor penawaran di-generate otomatis oleh sistem berdasarkan urutan terbaru.
+                    </p>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="items" className="mt-0 space-y-4 animate-in fade-in slide-in-from-right-2 duration-300">
+                  <div className="flex items-center justify-between border-b border-dashed pb-3">
+                    <h4 className="font-bold text-slate-800 flex items-center gap-2">
+                      <Wrench className="h-5 w-5 text-emerald-600" />
+                      Layanan Laboratorium
+                    </h4>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => append({ service_id: "", equipment_id: "", qty: 1, price: 0 })}
+                      className="border-emerald-600 text-emerald-700 hover:bg-emerald-50 font-bold px-4 h-9 shadow-sm"
+                    >
+                      <Plus className="h-4 w-4 mr-1.5" /> Tambah Item
+                    </Button>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {fields.map((field, index) => (
+                      <div key={field.id} className="relative bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-emerald-200 transition-all group">
+                        <div className="absolute -left-2 -top-2 w-6 h-6 bg-emerald-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-lg">
+                          {index + 1}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-end">
+                          <div className="md:col-span-6 space-y-2">
+                            <label className="text-[10px] uppercase font-black text-slate-400 tracking-wider">Layanan / Parameter</label>
+                            <Controller
+                              control={control}
+                              name={`items.${index}.service_id`}
+                              render={({ field }) => (
+                                <Select
+                                  value={field.value || ""}
+                                  onValueChange={(val) => {
+                                    field.onChange(val);
+                                    handleServiceChange(index, val);
+                                  }}
+                                  disabled={services.length === 0}
+                                >
+                                  <SelectTrigger className="h-11 border-slate-200 shadow-none bg-slate-50/50">
+                                    <SelectValue placeholder="Pilih layanan..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {services.length > 0 ? (
+                                      services.map(service => (
+                                        <SelectItem key={service.id} value={service.id} className="py-2">{service.name}</SelectItem>
+                                      ))
+                                    ) : (
+                                      <div className="p-4 text-center text-sm text-slate-500">
+                                        Memuat layanan...
+                                      </div>
+                                    )}
+                                  </SelectContent>
+                                </Select>
+                              )}
+                            />
+                          </div>
+                          
+                          <div className="md:col-span-2 space-y-2">
+                            <label className="text-[10px] uppercase font-black text-slate-400 tracking-wider">Jumlah</label>
+                            <Input type="number" {...register(`items.${index}.qty`, { valueAsNumber: true })} className="h-11 text-center font-bold" />
+                          </div>
+                          
+                          <div className="md:col-span-3 space-y-2">
+                            <label className="text-[10px] uppercase font-black text-slate-400 tracking-wider">Harga (Rp)</label>
+                            <Input type="number" {...register(`items.${index}.price`, { valueAsNumber: true })} className="h-11 font-bold text-emerald-700 bg-emerald-50/30 border-emerald-100" />
+                          </div>
+                          
+                          <div className="md:col-span-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => remove(index)}
+                              className="w-full h-11 text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                            >
+                              <Trash2 className="h-5 w-5" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {errors.items && <p className="text-sm text-red-500 font-bold animate-bounce text-center py-2 bg-red-50 rounded-lg">Minimal 1 item layanan harus diisi!</p>}
+                </TabsContent>
+
+                <TabsContent value="ops" className="mt-0 space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Perdiem Section */}
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                      <div className="flex items-center justify-between border-b pb-3">
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <MapPin className="h-5 w-5 text-emerald-600" />
+                            <span className="text-sm font-black text-slate-800 tracking-tight uppercase">Perdiem</span>
+                          </div>
+                          {watchedPerdiemName && (
+                            <span className="text-[10px] text-emerald-600 font-bold mt-1 italic line-clamp-1 bg-emerald-50 px-2 py-0.5 rounded-full w-fit">
+                              {watchedPerdiemName}
+                            </span>
+                          )}
+                        </div>
+                        <Dialog open={isPerdiemDialogOpen} onOpenChange={setIsPerdiemDialogOpen}>
+                          <DialogTrigger asChild>
+                            <Button type="button" variant="outline" size="sm" className="h-8 border-emerald-200 text-emerald-700 text-[10px] font-black tracking-widest bg-emerald-50/50 hover:bg-emerald-100 transition-all px-3">
+                              KATALOG
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="sm:max-w-[500px]">
+                            <DialogHeader>
+                              <DialogTitle>Katalog Perdiem</DialogTitle>
+                            </DialogHeader>
+                            <div className="max-h-[300px] overflow-y-auto space-y-2 p-1">
+                              {operationalCatalogs.filter(c => c.category === 'perdiem').map(catalog => (
+                                <div key={catalog.id} className="p-4 border rounded-xl hover:bg-emerald-50 cursor-pointer transition-all flex justify-between items-center group"
+                                  onClick={() => { setValue("perdiem_name", catalog.name); setValue("perdiem_price", Number(catalog.price)); setValue("perdiem_qty", 1); setIsPerdiemDialogOpen(false); }}>
+                                  <div className="flex flex-col">
+                                    <span className="font-bold text-slate-800">{catalog.name}</span>
+                                    <span className="text-xs text-slate-500">{catalog.location}</span>
+                                  </div>
+                                  <span className="font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-lg group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-sm">
+                                    Rp {Number(catalog.price).toLocaleString("id-ID")}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] uppercase font-black text-slate-400">Harga Satuan</span>
+                          <Input type="number" {...register("perdiem_price", { valueAsNumber: true })} className="h-10 bg-slate-50/50 font-bold" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] uppercase font-black text-slate-400">Hari</span>
+                          <Input type="number" {...register("perdiem_qty", { valueAsNumber: true })} className="h-10 bg-slate-50/50 font-bold text-center" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Transport Section */}
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                      <div className="flex items-center justify-between border-b pb-3">
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <Car className="h-5 w-5 text-blue-600" />
+                            <span className="text-sm font-black text-slate-800 tracking-tight uppercase">Transport</span>
+                          </div>
+                          {watchedTransportName && (
+                            <span className="text-[10px] text-blue-600 font-bold mt-1 italic line-clamp-1 bg-blue-50 px-2 py-0.5 rounded-full w-fit">
+                              {watchedTransportName}
+                            </span>
+                          )}
+                        </div>
+                        <Dialog open={isTransportDialogOpen} onOpenChange={setIsTransportDialogOpen}>
+                          <DialogTrigger asChild>
+                            <Button type="button" variant="outline" size="sm" className="h-8 border-blue-200 text-blue-700 text-[10px] font-black tracking-widest bg-blue-50/50 hover:bg-blue-100 transition-all px-3">
+                              KATALOG
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="sm:max-w-[500px]">
+                            <DialogHeader>
+                              <DialogTitle>Katalog Transport</DialogTitle>
+                            </DialogHeader>
+                            <div className="max-h-[300px] overflow-y-auto space-y-2 p-1">
+                              {operationalCatalogs.filter(c => c.category === 'transport').map(catalog => (
+                                <div key={catalog.id} className="p-4 border rounded-xl hover:bg-blue-50 cursor-pointer transition-all flex justify-between items-center group"
+                                  onClick={() => { setValue("transport_name", catalog.name); setValue("transport_price", Number(catalog.price)); setValue("transport_qty", 1); setIsTransportDialogOpen(false); }}>
+                                  <div className="flex flex-col">
+                                    <span className="font-bold text-slate-800">{catalog.name}</span>
+                                    <span className="text-xs text-slate-500">{catalog.unit}</span>
+                                  </div>
+                                  <span className="font-bold text-blue-700 bg-blue-100 px-3 py-1 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm">
+                                    Rp {Number(catalog.price).toLocaleString("id-ID")}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] uppercase font-black text-slate-400">Harga Satuan</span>
+                          <Input type="number" {...register("transport_price", { valueAsNumber: true })} className="h-10 bg-slate-50/50 font-bold" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] uppercase font-black text-slate-400">Qty</span>
+                          <Input type="number" {...register("transport_qty", { valueAsNumber: true })} className="h-10 bg-slate-50/50 font-bold text-center" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Equipment */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between border-b pb-3">
+                      <div className="flex items-center gap-2">
+                        <Wrench className="h-5 w-5 text-amber-500" />
+                        <span className="text-sm font-black text-slate-800 tracking-tight uppercase">Sewa Alat Tambahan</span>
+                      </div>
+                      <Dialog open={isEquipmentDialogOpen} onOpenChange={setIsEquipmentDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button type="button" variant="outline" size="sm" className="h-8 border-amber-200 text-amber-700 text-[10px] font-black tracking-widest bg-amber-50/50 hover:bg-amber-100 transition-all px-3">
+                            KATALOG ALAT
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[600px]">
+                          <DialogHeader>
+                            <DialogTitle>Katalog Alat Laboratorium</DialogTitle>
+                          </DialogHeader>
+                          <div className="max-h-[400px] overflow-y-auto space-y-2 py-4 px-1">
+                            {equipment.map((eq) => {
+                              const isSelected = watchedItems.some((item: any) => item.equipment_id === eq.id);
+                              return (
+                                <div key={eq.id} className={cn("flex items-center justify-between p-4 border rounded-xl hover:bg-amber-50 cursor-pointer transition-all", isSelected ? "bg-amber-50 border-amber-300 ring-1 ring-amber-300" : "bg-white border-slate-200")}
+                                  onClick={() => {
+                                    if (isSelected) {
+                                      const itemIndex = watchedItems.findIndex((item: any) => item.equipment_id === eq.id);
+                                      if (itemIndex > -1) remove(itemIndex);
+                                    } else {
+                                      append({ service_id: "", equipment_id: eq.id, qty: 1, price: Number(eq.price), name: eq.name, specification: eq.specification, unit: eq.unit });
+                                    }
+                                    setIsEquipmentDialogOpen(false);
+                                  }}>
+                                  <div className="flex items-center gap-4">
+                                    <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", isSelected ? "bg-amber-200 text-amber-700" : "bg-slate-100 text-slate-400")}>
+                                      <Wrench className="h-6 w-6" />
+                                    </div>
+                                    <div>
+                                      <p className="font-bold text-slate-800">{eq.name}</p>
+                                      <p className="text-xs text-slate-500 font-medium">{eq.specification}</p>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="font-black text-amber-700">Rp {Number(eq.price).toLocaleString("id-ID")}</p>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">per {eq.unit}</p>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                    <div className="flex flex-wrap gap-2 min-h-[50px] p-4 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/50 items-center">
+                      {watchedItems.filter(item => item.equipment_id).length === 0 ? (
+                        <div className="flex items-center gap-2 text-slate-400 mx-auto opacity-50">
+                          <Wrench className="h-4 w-4" />
+                          <span className="text-xs font-bold uppercase tracking-wider">Belum ada alat sewa yang dipilih</span>
+                        </div>
+                      ) : (
+                        watchedItems.map((item, index) => {
+                          if (!item.equipment_id) return null;
+                          const eq = equipment.find(e => e.id === item.equipment_id);
+                          return (
+                            <Badge key={index} className="bg-amber-500 text-white hover:bg-amber-600 py-1.5 px-3 gap-2 h-auto text-[10px] font-black tracking-wide rounded-lg shadow-sm border-none transition-all scale-100 hover:scale-105 active:scale-95">
+                              <Wrench className="h-3 w-3" />
+                              {eq?.name} ({item.qty})
+                              <XCircle className="h-4 w-4 ml-1 cursor-pointer text-white/70 hover:text-white" onClick={(e) => { e.stopPropagation(); remove(index); }} />
+                            </Badge>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="summary" className="mt-0 space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-white p-6 rounded-3xl border-2 border-slate-100 shadow-sm space-y-5">
+                      <h4 className="font-black text-slate-800 uppercase text-xs tracking-[2px] flex items-center gap-2 border-b pb-3 mb-4">
+                        <DollarSign className="h-4 w-4 text-emerald-600" />
+                        Pengaturan Finansial
+                      </h4>
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <label className="text-[10px] uppercase font-black text-slate-400 tracking-wider flex justify-between">
+                            Diskon Manual (Potongan Harga)
+                            <span className="text-emerald-600">Rp</span>
+                          </label>
+                          <Input type="number" {...register("discount_amount", { valueAsNumber: true })} className="h-12 text-lg font-bold border-slate-200 focus:ring-emerald-500" placeholder="0" />
+                        </div>
+                        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200 hover:border-emerald-300 transition-all cursor-pointer select-none"
+                             onClick={handleTaxToggle}>
+                          <div className="flex items-center gap-3">
+                            <div className={cn("w-6 h-6 rounded-md flex items-center justify-center transition-all", watchedUseTax ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-400")}>
+                              {watchedUseTax && <CheckCircle className="h-4 w-4" />}
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-slate-700">Gunakan Pajak PPN</p>
+                              <p className="text-[10px] text-slate-500 font-medium">Otomatis hitung pajak 11% dari subtotal</p>
+                            </div>
+                          </div>
+                          <Checkbox checked={watchedUseTax} className="hidden" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-emerald-900 p-8 rounded-3xl shadow-xl shadow-emerald-900/20 text-white relative overflow-hidden flex flex-col justify-center">
+                      <div className="absolute top-0 right-0 -mt-8 -mr-8 w-40 h-40 bg-white/5 rounded-full blur-3xl"></div>
+                      <div className="absolute bottom-0 left-0 -mb-8 -ml-8 w-32 h-32 bg-emerald-400/10 rounded-full blur-2xl"></div>
+                      
+                      <div className="relative space-y-4">
+                        <p className="text-[10px] font-black tracking-[4px] text-emerald-300 uppercase">Ringkasan Total Akhir</p>
+                        <div className="space-y-2 opacity-80">
+                          <div className="flex justify-between text-sm">
+                            <span className="font-medium">Subtotal</span>
+                            <span className="font-mono">Rp {subtotalBeforeDiscount.toLocaleString("id-ID")}</span>
+                          </div>
+                          <div className="flex justify-between text-sm text-red-300">
+                            <span className="font-medium">Diskon</span>
+                            <span className="font-mono">- Rp {watchedDiscount.toLocaleString("id-ID")}</span>
+                          </div>
+                          {watchedUseTax && (
+                            <div className="flex justify-between text-sm text-emerald-300">
+                              <span className="font-medium">Pajak (11%)</span>
+                              <span className="font-mono">Rp {tax.toLocaleString("id-ID")}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="border-t border-white/10 pt-4 mt-2">
+                          <div className="flex justify-between items-end">
+                            <span className="text-sm font-bold text-emerald-200">GRAND TOTAL</span>
+                            <span className="text-3xl font-black font-mono tracking-tighter">
+                              Rp {total.toLocaleString("id-ID")}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+              </div>
+            </Tabs>
+
+            <div className="bg-slate-50 p-6 border-t flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Grand Total</span>
+                <span className="text-xl font-black text-emerald-800 font-mono">Rp {total.toLocaleString("id-ID")}</span>
+              </div>
+              <div className="flex gap-3">
+                <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)} className="px-8 font-bold text-slate-500 hover:text-slate-800">
+                  BATAL
+                </Button>
+                <Button type="submit" disabled={submitting} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-10 shadow-lg shadow-emerald-900/10 h-12 rounded-xl group transition-all">
+                  {submitting ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      <span>PROSES...</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Send className="h-5 w-5 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform duration-300" />
+                      <span>SIMPAN & KIRIM</span>
+                      <span className="ml-2 text-[10px] bg-white/20 px-1.5 py-0.5 rounded hidden md:inline">Ctrl+Enter</span>
+                    </div>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Submit Loading Modal */}
+      {showSubmitModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] flex items-center justify-center">
+          <div className="bg-white rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-200">
+            <div className="relative">
+              <div className="w-16 h-16 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin"></div>
+            </div>
+            <p className="text-lg font-semibold text-slate-800">Menyimpan Data...</p>
+            <p className="text-sm text-slate-500">Mohon tunggu sebentar</p>
+          </div>
+        </div>
+      )}
+
+      {/* Add Customer Dialog */}
+      <Dialog open={isCustomerDialogOpen} onOpenChange={setIsCustomerDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Tambah Customer Baru</DialogTitle>
+            <DialogDescription>
+              Masukkan data lengkap pelanggan baru.
+              <span className="block mt-2 text-xs font-bold text-amber-600 bg-amber-50 p-2 rounded border border-amber-100">
+                Catatan: Password akun customer otomatis diatur menjadi: 123456
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Nama Lengkap *</label>
+              <Input 
+                placeholder="Contoh: John Doe" 
+                value={customerData.full_name}
+                onChange={(e) => setCustomerData({...customerData, full_name: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Email *</label>
+              <Input 
+                type="email" 
+                placeholder="john@example.com" 
+                value={customerData.email}
+                onChange={(e) => setCustomerData({...customerData, email: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Nama Perusahaan</label>
+              <Input 
+                placeholder="PT. Maju Mundur" 
+                value={customerData.company_name}
+                onChange={(e) => setCustomerData({...customerData, company_name: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Alamat Lengkap</label>
+              <Input 
+                placeholder="Jl. Raya No. 123..." 
+                value={customerData.address}
+                onChange={(e) => setCustomerData({...customerData, address: e.target.value})}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCustomerDialogOpen(false)}>Batal</Button>
+            <Button onClick={handleCreateCustomer} disabled={submitting} className="bg-emerald-600 hover:bg-emerald-700">
+              {submitting ? "Menyimpan..." : "Simpan Customer"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

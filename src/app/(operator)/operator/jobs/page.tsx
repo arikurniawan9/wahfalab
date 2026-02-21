@@ -1,133 +1,127 @@
+// ============================================================================
+// OPERATOR JOB PROGRESS PAGE
+// Fitur:
+// 1. List semua job orders dengan progress
+// 2. Update progress pekerjaan (Sampling, Analisis, Reporting, Selesai)
+// 3. Upload sertifikat saat selesai
+// 4. Filter & Search
+// 5. Stats by status
+// ============================================================================
+
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Plus,
   Search,
   Eye,
-  FileText,
-  CreditCard,
-  CheckCircle2,
-  Clock,
+  FileCheck,
   TestTube,
   Truck,
-  FileCheck,
-  Trash2,
-  UserPlus,
+  FileText,
   FileDown,
   MessageSquare,
-  Banknote
+  CheckCircle,
+  Clock,
+  Calendar,
+  User,
+  MapPin,
+  Plus,
+  X,
+  Save,
+  Printer
 } from "lucide-react";
 import { ChemicalLoader } from "@/components/ui";
-import { getQuotations, createQuotation, processPayment, getNextInvoiceNumber } from "@/lib/actions/quotation";
-import { getJobOrders, updateJobStatus } from "@/lib/actions/jobs";
-import { getClients, createOrUpdateUser } from "@/lib/actions/users";
-import { getAllServices } from "@/lib/actions/services";
+import { getJobOrders, updateJobStatus, uploadCertificate } from "@/lib/actions/jobs";
+import { createSamplingAssignment } from "@/lib/actions/sampling";
+import { createTravelOrder } from "@/lib/actions/travel-order";
+import { getUsers } from "@/lib/actions/users";
+import { getProfile } from "@/lib/actions/auth";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogTrigger,
+import { useRouter } from "next/navigation";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
   DialogFooter,
   DialogDescription
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useForm, useFieldArray } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { LazyPDFButton, PDFButtonFallback } from "@/components/ui/lazy-pdf-button";
-import { Suspense } from "react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
 
-const quotationSchema = z.object({
-  quotation_number: z.string().min(1, "Wajib diisi"),
-  user_id: z.string().min(1, "Pilih pelanggan"),
-  items: z.array(z.object({
-    service_id: z.string().min(1),
-    qty: z.number().min(1),
-    price: z.number().min(0),
-  })).min(1, "Minimal 1 item"),
-});
+const statusOptions = [
+  { value: "all", label: "Semua Status", color: "bg-slate-100 text-slate-700" },
+  { value: "scheduled", label: "Dijadwalkan", color: "bg-slate-100 text-slate-600", icon: Clock },
+  { value: "sampling", label: "Sampling", color: "bg-blue-100 text-blue-700", icon: Truck },
+  { value: "analysis", label: "Analisis", color: "bg-amber-100 text-amber-700", icon: TestTube },
+  { value: "reporting", label: "Pelaporan", color: "bg-indigo-100 text-indigo-700", icon: FileText },
+  { value: "completed", label: "Selesai", color: "bg-emerald-100 text-emerald-700", icon: CheckCircle }
+];
 
 export default function OperatorJobsPage() {
-  const [activeTab, setActiveTab] = useState("registrasi");
-  const [quotations, setQuotations] = useState<any>({ items: [], total: 0 });
+  const router = useRouter();
   const [jobs, setJobs] = useState<any>({ items: [], total: 0 });
-  const [clients, setClients] = useState<any[]>([]);
-  const [services, setServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [search, setSearch] = useState("");
-  
-  // Modals
-  const [isRegDialogOpen, setIsRegDialogOpen] = useState(false);
-  const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
-  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+
+  // Modal states
   const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false);
-  
-  const [selectedQuotation, setSelectedQuotation] = useState<any>(null);
   const [selectedJob, setSelectedJob] = useState<any>(null);
   const [nextStatus, setNextStatus] = useState<string>("");
   const [statusNote, setStatusNote] = useState<string>("");
   const [certificateFile, setCertificateFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  
+  // Assign modal states
+  const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
+  const [fieldOfficers, setFieldOfficers] = useState<any[]>([]);
+  const [assignFormData, setAssignFormData] = useState({
+    job_order_id: "",
+    field_officer_id: "",
+    scheduled_date: "",
+    scheduled_time: "08:00",
+    location: "",
+    notes: ""
+  });
+  const [assignSubmitting, setAssignSubmitting] = useState(false);
 
   const supabase = createClient();
-
-  const { register, control, handleSubmit, watch, setValue, reset } = useForm({
-    resolver: zodResolver(quotationSchema),
-    defaultValues: {
-      quotation_number: `INV-${Date.now()}`,
-      user_id: "",
-      items: [{ service_id: "", qty: 1, price: 0 }]
-    }
-  });
-
-  const { fields, append, remove } = useFieldArray({ control, name: "items" });
-  const watchedItems = watch("items");
-  const total = watchedItems.reduce((acc, item) => acc + (item.qty * item.price), 0) * 1.11;
 
   const loadData = async (searchQuery: string = search) => {
     setLoading(true);
     try {
-      const [qResult, jResult, cResult, sResult] = await Promise.all([
-        getQuotations(1, 100, searchQuery),
-        getJobOrders(1, 100, searchQuery),
-        getClients(),
-        getAllServices()
-      ]);
-      setQuotations(qResult);
-      setJobs(jResult);
-      setClients(cResult);
-      setServices(sResult);
+      const result = await getJobOrders(page, 100, searchQuery);
+      setJobs(result);
     } catch (error) {
-      toast.error("Gagal memuat data");
+      toast.error("Gagal memuat data", {
+        description: "Silakan refresh halaman"
+      });
     } finally {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (isRegDialogOpen) {
-      getNextInvoiceNumber().then(num => setValue("quotation_number", num));
-    }
-  }, [isRegDialogOpen, setValue]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -136,32 +130,107 @@ export default function OperatorJobsPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const onRegisterSubmit = async (formData: any) => {
-    setSubmitting(true);
+  const loadFieldOfficers = async () => {
     try {
-      await createQuotation({ ...formData, subtotal: total/1.11, tax_amount: total*0.11, total_amount: total });
-      toast.success("Draft pendaftaran disimpan");
-      setIsRegDialogOpen(false);
-      reset();
-      loadData();
-    } catch (error) {
-      toast.error("Gagal menyimpan");
-    } finally {
-      setSubmitting(false);
+      const usersData = await getUsers(1, 100, "");
+      const officers = usersData.users.filter((u: any) => u.role === 'field_officer');
+      setFieldOfficers(officers);
+    } catch (error: any) {
+      toast.error("Gagal memuat petugas lapangan", {
+        description: error?.message
+      });
     }
   };
 
-  const handlePayment = async (method: string) => {
-    setSubmitting(true);
+  const openAssignDialog = async (job: any) => {
+    setSelectedJob(job);
+    setAssignFormData({
+      job_order_id: job.id,
+      field_officer_id: "",
+      scheduled_date: new Date().toISOString().split('T')[0],
+      scheduled_time: "08:00",
+      location: job.quotation?.profile?.address || "",
+      notes: ""
+    });
+    await loadFieldOfficers();
+    setIsAssignDialogOpen(true);
+  };
+
+  const handleAssignSubmit = async () => {
+    if (!selectedJob) return;
+    if (!assignFormData.field_officer_id) {
+      toast.error("Petugas lapangan wajib dipilih");
+      return;
+    }
+    if (!assignFormData.scheduled_date) {
+      toast.error("Tanggal jadwal wajib diisi");
+      return;
+    }
+    if (!assignFormData.location) {
+      toast.error("Lokasi sampling wajib diisi");
+      return;
+    }
+
+    setAssignSubmitting(true);
     try {
-      await processPayment(selectedQuotation.id, method);
-      toast.success(`Pembayaran ${method} Berhasil!`);
-      setIsPaymentDialogOpen(false);
+      // 1. Create sampling assignment
+      const assignmentResult = await createSamplingAssignment({
+        ...assignFormData,
+        scheduled_date: `${assignFormData.scheduled_date}T${assignFormData.scheduled_time}:00`
+      });
+      
+      if (assignmentResult.error) {
+        toast.error(assignmentResult.error);
+        setAssignSubmitting(false);
+        return;
+      }
+
+      const assignmentId = assignmentResult.assignment?.id;
+
+      if (!assignmentId) {
+        toast.error("Gagal mendapatkan ID assignment");
+        setAssignSubmitting(false);
+        return;
+      }
+
+      // 2. Auto-create travel order with minimal data
+      const travelOrderData = {
+        assignment_id: assignmentId,
+        departure_date: `${assignFormData.scheduled_date}T${assignFormData.scheduled_time}:00`,
+        return_date: `${assignFormData.scheduled_date}T17:00:00`,
+        destination: assignFormData.location,
+        purpose: assignFormData.notes || `Sampling untuk ${selectedJob.tracking_code}`,
+        transportation_type: undefined,
+        accommodation_type: undefined,
+        daily_allowance: undefined,
+        total_budget: undefined,
+        notes: undefined
+      };
+
+      await createTravelOrder(travelOrderData);
+
+      toast.success("✅ Penugasan berhasil dibuat & surat tugas diterbitkan!");
+      
+      // Reset & close
+      setAssignFormData({
+        job_order_id: "",
+        field_officer_id: "",
+        scheduled_date: "",
+        scheduled_time: "08:00",
+        location: "",
+        notes: ""
+      });
+      setIsAssignDialogOpen(false);
+      
+      // Reload data
       loadData();
-    } catch (error) {
-      toast.error("Gagal memproses pembayaran");
+    } catch (error: any) {
+      console.error("Assign error:", error);
+      toast.error("Gagal membuat penugasan", {
+        description: error?.message
+      });
     } finally {
-      setSubmitting(false);
+      setAssignSubmitting(false);
     }
   };
 
@@ -169,22 +238,25 @@ export default function OperatorJobsPage() {
     setSelectedJob(job);
     setNextStatus(status);
     setStatusNote("");
+    setCertificateFile(null);
     setIsStatusDialogOpen(true);
   };
 
   const confirmStatusUpdate = async () => {
+    if (!selectedJob) return;
+
     setSubmitting(true);
     try {
       let certificateUrl = null;
 
-      // Jika status diset Selesai, unggah file sertifikat
+      // Upload sertifikat jika status Selesai dan ada file
       if (nextStatus === 'completed' && certificateFile) {
         const fileExt = certificateFile.name.split('.').pop();
         const fileName = `${selectedJob.tracking_code}-${Date.now()}.${fileExt}`;
         const filePath = `certificates/${fileName}`;
 
         const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('lab-documents') // Nama bucket di Supabase
+          .from('lab-documents')
           .upload(filePath, certificateFile);
 
         if (uploadError) throw uploadError;
@@ -192,176 +264,431 @@ export default function OperatorJobsPage() {
         const { data: { publicUrl } } = supabase.storage
           .from('lab-documents')
           .getPublicUrl(filePath);
-        
+
         certificateUrl = publicUrl;
       }
 
       await updateJobStatus(selectedJob.id, nextStatus, statusNote);
-      
-      // Jika ada URL sertifikat, simpan ke database (buat action baru jika perlu, tapi kita bisa update JobOrder)
+
+      // Upload certificate URL ke database
       if (certificateUrl) {
-        const { uploadCertificate } = await import("@/lib/actions/jobs");
         await uploadCertificate(selectedJob.id, certificateUrl);
       }
 
-      toast.success(`Status ${selectedJob.tracking_code} berhasil diperbarui`);
+      toast.success(`Progress ${selectedJob.tracking_code} berhasil diperbarui`, {
+        description: `Status: ${nextStatus.toUpperCase()}`
+      });
+
       setIsStatusDialogOpen(false);
       setCertificateFile(null);
       loadData();
     } catch (error: any) {
-      toast.error(error.message || "Gagal memperbarui status");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Handler Customer Baru
-  const onUserSubmit = async (formData: any) => {
-    setSubmitting(true);
-    try {
-      await createOrUpdateUser({ ...formData, role: 'client' });
-      toast.success("Customer baru didaftarkan");
-      setIsUserDialogOpen(false);
-      loadData();
-    } catch (error: any) {
-      toast.error(error.message || "Gagal");
+      toast.error(error.message || "Gagal memperbarui progress");
     } finally {
       setSubmitting(false);
     }
   };
 
   const getJobStatusBadge = (status: string) => {
-    switch (status) {
-      case "scheduled": return <Badge className="bg-slate-100 text-slate-600 border-none">DIJADWALKAN</Badge>;
-      case "sampling": return <Badge className="bg-blue-100 text-blue-700 border-none">SAMPLING</Badge>;
-      case "analysis": return <Badge className="bg-amber-100 text-amber-700 border-none">ANALISIS</Badge>;
-      case "reporting": return <Badge className="bg-indigo-100 text-indigo-700 border-none">PELAPORAN</Badge>;
-      case "completed": return <Badge className="bg-emerald-100 text-emerald-700 border-none">SELESAI</Badge>;
-      default: return <Badge>{status}</Badge>;
+    const option = statusOptions.find(opt => opt.value === status);
+    const Icon = option?.icon;
+    
+    return (
+      <Badge className={cn("border-none gap-1", option?.color)}>
+        {Icon && <Icon className="h-3 w-3" />}
+        {option?.label || status.toUpperCase()}
+      </Badge>
+    );
+  };
+
+  // Filter jobs by status
+  const getFilteredJobs = () => {
+    let filtered = [...jobs.items];
+
+    // Search filter
+    if (search) {
+      filtered = filtered.filter(job =>
+        job.tracking_code.toLowerCase().includes(search.toLowerCase()) ||
+        job.quotation?.profile?.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+        job.quotation?.items?.[0]?.service?.name?.toLowerCase().includes(search.toLowerCase())
+      );
     }
+
+    // Status filter
+    if (filterStatus !== "all") {
+      filtered = filtered.filter(job => job.status === filterStatus);
+    }
+
+    return filtered;
+  };
+
+  const filteredJobs = getFilteredJobs();
+
+  // Stats
+  const stats = {
+    total: jobs.items.length,
+    scheduled: jobs.items.filter((j: any) => j.status === "scheduled").length,
+    sampling: jobs.items.filter((j: any) => j.status === "sampling").length,
+    analysis: jobs.items.filter((j: any) => j.status === "analysis").length,
+    reporting: jobs.items.filter((j: any) => j.status === "reporting").length,
+    completed: jobs.items.filter((j: any) => j.status === "completed").length
   };
 
   return (
     <div className="p-4 md:p-10 pb-24 md:pb-10">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-emerald-900 tracking-tight font-[family-name:var(--font-montserrat)]">Pekerjaan Lab</h1>
-        <p className="text-slate-500 text-sm">Kelola pendaftaran dan pantau progres uji laboratorium.</p>
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold text-emerald-900 tracking-tight">Progress Pekerjaan</h1>
+          <p className="text-slate-500 text-sm">Pantau dan update progress pekerjaan laboratorium.</p>
+        </div>
       </div>
 
-      <Tabs defaultValue="registrasi" className="space-y-6">
-        <TabsList className="bg-white p-1 rounded-2xl shadow-sm border border-slate-200">
-          <TabsTrigger value="registrasi" className="rounded-xl px-6 py-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">Pendaftaran & Kasir</TabsTrigger>
-          <TabsTrigger value="tracking" className="rounded-xl px-6 py-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">Progres Pekerjaan</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="registrasi">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-slate-800">Daftar Faktur</h2>
-            <Button onClick={() => setIsRegDialogOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"><Plus className="mr-2 h-4 w-4" /> Pendaftaran Baru</Button>
+      {/* Stats Bar */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Clock className="h-4 w-4 text-slate-400" />
+            <span className="text-xs font-medium text-slate-500">Total</span>
           </div>
-          <div className="bg-white rounded-3xl shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
-            <Table>
-              <TableHeader><TableRow className="bg-slate-50/50">
-                <TableHead className="px-6 font-bold text-emerald-900">No. Faktur</TableHead>
-                <TableHead className="px-4 font-bold text-emerald-900">Customer</TableHead>
-                <TableHead className="px-4 font-bold text-emerald-900">Status</TableHead>
-                <TableHead className="px-6 text-center font-bold text-emerald-900">Aksi</TableHead>
-              </TableRow></TableHeader>
-              <TableBody>
-                {loading ? <TableRow><TableCell colSpan={4} className="text-center py-10"><ChemicalLoader /></TableCell></TableRow>
-                : quotations.items.map((item: any) => (
-                  <TableRow key={item.id} className="hover:bg-slate-50/50">
-                    <TableCell className="px-6 font-bold text-emerald-900">{item.quotation_number}</TableCell>
-                    <TableCell className="px-4">
-                      <p className="font-medium">{item.profile.full_name}</p>
-                      <p className="text-[10px] text-slate-400 uppercase">{item.profile.company_name || "Personal"}</p>
+          <p className="text-2xl font-bold text-slate-800">{stats.total}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Clock className="h-4 w-4 text-slate-400" />
+            <span className="text-xs font-medium text-slate-500">Dijadwalkan</span>
+          </div>
+          <p className="text-2xl font-bold text-slate-700">{stats.scheduled}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-blue-200 p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Truck className="h-4 w-4 text-blue-400" />
+            <span className="text-xs font-medium text-blue-500">Sampling</span>
+          </div>
+          <p className="text-2xl font-bold text-blue-700">{stats.sampling}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-amber-200 p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <TestTube className="h-4 w-4 text-amber-400" />
+            <span className="text-xs font-medium text-amber-500">Analisis</span>
+          </div>
+          <p className="text-2xl font-bold text-amber-700">{stats.analysis}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-indigo-200 p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <FileText className="h-4 w-4 text-indigo-400" />
+            <span className="text-xs font-medium text-indigo-500">Pelaporan</span>
+          </div>
+          <p className="text-2xl font-bold text-indigo-700">{stats.reporting}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-emerald-200 p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <CheckCircle className="h-4 w-4 text-emerald-400" />
+            <span className="text-xs font-medium text-emerald-500">Selesai</span>
+          </div>
+          <p className="text-2xl font-bold text-emerald-700">{stats.completed}</p>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6">
+        <div className="flex flex-wrap gap-4 items-center justify-between">
+          <div className="flex flex-wrap gap-2">
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-40 cursor-pointer">
+                <SelectValue placeholder="Filter Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Status</SelectItem>
+                {statusOptions.filter(opt => opt.value !== "all").map(opt => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="text-sm text-slate-500">
+            {filteredJobs.length} dari {jobs.total} pekerjaan
+          </div>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-3xl shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
+        <div className="p-5 border-b bg-emerald-50/5">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
+            <Input
+              placeholder="Cari kode tracking, customer, atau layanan..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10 focus-visible:ring-emerald-500 rounded-xl"
+            />
+          </div>
+        </div>
+
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-slate-50/80">
+                <TableHead className="w-[180px] font-bold text-emerald-900 px-6">Kode Tracking</TableHead>
+                <TableHead className="font-bold text-emerald-900 px-4">Pekerjaan</TableHead>
+                <TableHead className="font-bold text-emerald-900 px-4">Customer</TableHead>
+                <TableHead className="font-bold text-emerald-900 px-4">Tanggal</TableHead>
+                <TableHead className="text-center font-bold text-emerald-900 px-4">Progress</TableHead>
+                <TableHead className="text-center font-bold text-emerald-900 px-6">Petugas Lapangan</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-20">
+                    <div className="flex justify-center">
+                      <ChemicalLoader />
+                    </div>
+                    <p className="mt-4 text-sm text-slate-500">Memuat data...</p>
+                  </TableCell>
+                </TableRow>
+              ) : filteredJobs.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-20">
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="h-20 w-20 rounded-full bg-emerald-50 flex items-center justify-center">
+                        <Clock className="h-10 w-10 text-emerald-300" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-lg font-semibold text-slate-700">Belum ada pekerjaan</p>
+                        <p className="text-sm text-slate-500 mt-1">Pekerjaan akan muncul setelah ada pesanan</p>
+                      </div>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredJobs.map((job: any) => (
+                  <TableRow key={job.id} className="hover:bg-emerald-50/10 transition-colors">
+                    <TableCell className="px-6 font-mono font-bold text-emerald-700">
+                      {job.tracking_code}
                     </TableCell>
-                    <TableCell className="px-4">{item.status === 'paid' ? <Badge className="bg-emerald-500 text-white border-none">LUNAS</Badge> : <Badge variant="outline">DRAFT</Badge>}</TableCell>
-                    <TableCell className="px-6 text-center">
-                      <div className="flex justify-center gap-2">
-                        {item.status === 'draft' && <Button size="sm" className="bg-amber-500 hover:bg-amber-600 h-8" onClick={() => { setSelectedQuotation(item); setIsPaymentDialogOpen(true); }}><CreditCard className="h-3 w-3 mr-1" /> Bayar</Button>}
-                        {item.items && (
-                          <Suspense fallback={<PDFButtonFallback />}>
-                            <LazyPDFButton data={item} fileName={`${item.quotation_number}.pdf`} />
-                          </Suspense>
-                        )}
+                    <TableCell className="px-4">
+                      <div className="flex flex-col">
+                        <span className="font-bold text-slate-800">
+                          {job.quotation?.items?.[0]?.service?.name || 'Uji Lab'}
+                        </span>
+                        <span className="text-xs text-slate-400">
+                          {job.quotation?.items?.[0]?.service?.category || 'Layanan'}
+                        </span>
                       </div>
                     </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="tracking">
-          <div className="bg-white rounded-3xl shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
-            <Table>
-              <TableHeader><TableRow className="bg-slate-50/50">
-                <TableHead className="px-6 font-bold text-emerald-900">Kode Tracking</TableHead>
-                <TableHead className="px-4 font-bold text-emerald-900">Pekerjaan</TableHead>
-                <TableHead className="px-4 font-bold text-emerald-900 text-center">Progres</TableHead>
-                <TableHead className="px-6 text-center font-bold text-emerald-900">Update Progres</TableHead>
-              </TableRow></TableHeader>
-              <TableBody>
-                {loading ? <TableRow><TableCell colSpan={4} className="text-center py-10"><ChemicalLoader /></TableCell></TableRow>
-                : jobs.items.map((job: any) => (
-                  <TableRow key={job.id} className="hover:bg-slate-50/50">
-                    <TableCell className="px-6 font-mono font-bold text-emerald-700">{job.tracking_code}</TableCell>
                     <TableCell className="px-4">
-                      <p className="font-bold text-slate-800">{job.quotation.items[0]?.service?.name || 'Uji Lab'}</p>
-                      <p className="text-[10px] text-slate-400 uppercase">Customer: {job.quotation.profile.full_name}</p>
-                    </TableCell>
-                    <TableCell className="px-4 text-center">{getJobStatusBadge(job.status)}</TableCell>
-                    <TableCell className="px-6 text-center">
-                      <div className="flex justify-center gap-1">
-                        <Button variant="ghost" size="icon" title="Sampling" className={job.status === 'sampling' ? 'text-blue-600 bg-blue-50' : 'text-slate-300'} onClick={() => openStatusDialog(job, 'sampling')}><Truck className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" title="Analisis" className={job.status === 'analysis' ? 'text-amber-600 bg-amber-50' : 'text-slate-300'} onClick={() => openStatusDialog(job, 'analysis')}><TestTube className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" title="Reporting" className={job.status === 'reporting' ? 'text-indigo-600 bg-indigo-50' : 'text-slate-300'} onClick={() => openStatusDialog(job, 'reporting')}><FileText className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" title="Selesai" className={job.status === 'completed' ? 'text-emerald-600 bg-emerald-50' : 'text-slate-300'} onClick={() => openStatusDialog(job, 'completed')}><FileCheck className="h-4 w-4" /></Button>
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-slate-400" />
+                        <div className="flex flex-col">
+                          <span className="font-medium text-slate-700">
+                            {job.quotation?.profile?.full_name || job.quotation?.profile?.company_name || '-'}
+                          </span>
+                          {job.quotation?.profile?.company_name && job.quotation?.profile?.full_name && (
+                            <span className="text-xs text-slate-500">
+                              {job.quotation?.profile?.company_name}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </TableCell>
+                    <TableCell className="px-4">
+                      <div className="flex items-center gap-2 text-sm text-slate-600">
+                        <Calendar className="h-4 w-4 text-slate-400" />
+                        {new Date(job.created_at).toLocaleDateString("id-ID", {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        })}
+                      </div>
+                    </TableCell>
+                    <TableCell className="px-4 text-center">
+                      {getJobStatusBadge(job.status)}
+                    </TableCell>
+                    <TableCell className="px-6 text-center">
+                      {/* Tombol Tugaskan Petugas - untuk job yang belum punya assignment */}
+                      {!job.sampling_assignment ? (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                          onClick={() => openAssignDialog(job)}
+                        >
+                          <MapPin className="h-4 w-4 mr-2" />
+                          Tugaskan Petugas
+                        </Button>
+                      ) : (
+                        <div className="flex items-center justify-center gap-2">
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                            <User className="h-3 w-3 mr-1" />
+                            {job.sampling_assignment.field_officer?.full_name || 'Assigned'}
+                          </Badge>
+                          {/* Download PDF Button */}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+                            title="Unduh Surat Tugas"
+                            onClick={() => {
+                              // Navigate to travel order preview (operator version)
+                              const travelOrderId = job.sampling_assignment?.travel_order?.id;
+                              if (travelOrderId) {
+                                window.open(`/operator/travel-orders/${travelOrderId}/preview`, '_blank');
+                              } else {
+                                toast.error("Surat tugas belum tersedia");
+                              }
+                            }}
+                          >
+                            <Printer className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </TabsContent>
-      </Tabs>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Mobile View */}
+        <div className="md:hidden divide-y divide-slate-100">
+          {loading ? (
+            <div className="p-10 text-center">
+              <ChemicalLoader />
+            </div>
+          ) : filteredJobs.length === 0 ? (
+            <div className="p-10 text-center flex flex-col items-center gap-4">
+              <div className="h-16 w-16 rounded-full bg-emerald-50 flex items-center justify-center">
+                <Clock className="h-8 w-8 text-emerald-300" />
+              </div>
+              <div>
+                <p className="text-base font-semibold text-slate-700">Belum ada pekerjaan</p>
+                <p className="text-xs text-slate-500 mt-1">Pekerjaan akan muncul setelah ada pesanan</p>
+              </div>
+            </div>
+          ) : (
+            filteredJobs.map((job: any) => (
+              <div key={job.id} className="p-4 space-y-3 bg-white active:bg-slate-50">
+                <div className="flex justify-between items-start">
+                  <div className="space-y-1 flex-1">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-emerald-600" />
+                      <h4 className="font-mono font-bold text-slate-900">{job.tracking_code}</h4>
+                    </div>
+                    <p className="text-sm font-bold text-slate-800">
+                      {job.quotation?.items?.[0]?.service?.name || 'Uji Lab'}
+                    </p>
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <User className="h-3 w-3" />
+                      {job.quotation?.profile?.full_name || '-'}
+                    </div>
+                  </div>
+                  <div className="ml-2">
+                    {getJobStatusBadge(job.status)}
+                  </div>
+                </div>
+                <div className="flex justify-between items-center pt-3 border-t">
+                  <span className="text-xs text-slate-400">
+                    {new Date(job.created_at).toLocaleDateString("id-ID", {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric'
+                    })}
+                  </span>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={job.status === 'sampling' ? 'text-blue-600 bg-blue-50' : 'text-slate-300'}
+                      onClick={() => openStatusDialog(job, 'sampling')}
+                    >
+                      <Truck className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={job.status === 'analysis' ? 'text-amber-600 bg-amber-50' : 'text-slate-300'}
+                      onClick={() => openStatusDialog(job, 'analysis')}
+                    >
+                      <TestTube className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={job.status === 'reporting' ? 'text-indigo-600 bg-indigo-50' : 'text-slate-300'}
+                      onClick={() => openStatusDialog(job, 'reporting')}
+                    >
+                      <FileText className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={job.status === 'completed' ? 'text-emerald-600 bg-emerald-50' : 'text-slate-300'}
+                      onClick={() => openStatusDialog(job, 'completed')}
+                    >
+                      <FileCheck className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
 
       {/* Modal Update Status dengan Catatan */}
       <Dialog open={isStatusDialogOpen} onOpenChange={setIsStatusDialogOpen}>
         <DialogContent className="sm:max-w-[450px] rounded-3xl">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-emerald-900">Update Progres Kerja</DialogTitle>
-            <DialogDescription>Masukkan catatan pengerjaan untuk status <span className="font-bold uppercase text-emerald-600">{nextStatus}</span></DialogDescription>
+            <DialogTitle className="text-xl font-bold text-emerald-900">Update Progress Pekerjaan</DialogTitle>
+            <DialogDescription>
+              Masukkan catatan untuk status <span className="font-bold uppercase text-emerald-600">{nextStatus}</span>
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
+            {/* Job Info */}
+            {selectedJob && (
+              <div className="bg-slate-50 p-3 rounded-lg space-y-1">
+                <p className="text-xs font-mono font-bold text-emerald-700">{selectedJob.tracking_code}</p>
+                <p className="text-sm font-bold text-slate-800">
+                  {selectedJob.quotation?.items?.[0]?.service?.name || 'Uji Lab'}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {selectedJob.quotation?.profile?.full_name}
+                </p>
+              </div>
+            )}
+
+            {/* Status Note */}
             <div className="space-y-2">
               <label className="text-sm font-semibold flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-slate-400" />
-                Catatan / Bukti Pengerjaan
+                Catatan Pengerjaan
               </label>
-              <Textarea 
-                placeholder="Misal: Sampel telah diambil di titik koordinat A..." 
+              <Textarea
+                placeholder="Contoh: Sampel telah diambil di lokasi A dengan kondisi baik..."
                 value={statusNote}
                 onChange={(e) => setStatusNote(e.target.value)}
                 className="min-h-[120px] rounded-2xl focus-visible:ring-emerald-500 border-slate-200"
               />
             </div>
 
+            {/* Certificate Upload for Completed Status */}
             {nextStatus === 'completed' && (
               <div className="space-y-2 animate-in fade-in slide-in-from-top-4 duration-300">
                 <label className="text-sm font-semibold flex items-center gap-2">
                   <FileDown className="h-4 w-4 text-emerald-600" />
-                  Unggah Sertifikat PDF
+                  Unggah Sertifikat (PDF)
                 </label>
                 <div className="border-2 border-dashed border-emerald-100 rounded-2xl p-6 text-center hover:bg-emerald-50 transition-colors">
-                  <input 
-                    type="file" 
-                    accept=".pdf" 
+                  <input
+                    type="file"
+                    accept=".pdf"
                     onChange={(e) => setCertificateFile(e.target.files?.[0] || null)}
-                    className="hidden" 
+                    className="hidden"
                     id="cert-upload"
                   />
                   <label htmlFor="cert-upload" className="cursor-pointer">
@@ -382,76 +709,201 @@ export default function OperatorJobsPage() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsStatusDialogOpen(false)} className="rounded-xl">Batal</Button>
-            <Button onClick={confirmStatusUpdate} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl px-8" disabled={submitting}>
-              {submitting ? <ChemicalLoader size="sm" /> : "Simpan Progres"}
+            <Button
+              variant="outline"
+              onClick={() => setIsStatusDialogOpen(false)}
+              className="rounded-xl cursor-pointer"
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={confirmStatusUpdate}
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl px-8 cursor-pointer"
+              disabled={submitting}
+            >
+              {submitting ? <ChemicalLoader size="sm" /> : "Simpan Progress"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal Pendaftaran Baru & Pembayaran (Sama seperti sebelumnya) */}
-      <Dialog open={isRegDialogOpen} onOpenChange={setIsRegDialogOpen}>
-        <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto rounded-3xl">
+      {/* ASSIGN FIELD OFFICER MODAL */}
+      <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-emerald-900 flex items-center gap-2"><FileText className="h-5 w-5" /> Pendaftaran Baru</DialogTitle>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-emerald-600/20 flex items-center justify-center text-emerald-600 border border-emerald-600/30">
+                <MapPin className="h-6 w-6" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg font-bold text-emerald-900">Tugaskan Petugas Lapangan</DialogTitle>
+                <DialogDescription className="text-xs">
+                  Buat penugasan sampling & terbitkan surat tugas otomatis
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
-          <form onSubmit={handleSubmit(onRegisterSubmit)} className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-400 uppercase">No. Faktur</label>
-                <Input {...register("quotation_number")} placeholder="Otomatis..." readOnly className="bg-slate-50 font-mono font-bold text-emerald-700" />
+
+          <div className="space-y-4 mt-4">
+            {/* Job Info */}
+            <div className="bg-emerald-50/50 rounded-xl p-4 border border-emerald-200">
+              <div className="flex items-center gap-2 mb-2">
+                <FileText className="h-4 w-4 text-emerald-600" />
+                <span className="text-xs font-bold text-emerald-700 uppercase">Informasi Job Order</span>
               </div>
-              <div className="space-y-1">
-                <div className="flex items-center justify-between"><label className="text-xs font-bold text-slate-400 uppercase">Customer</label><button type="button" onClick={() => setIsUserDialogOpen(true)} className="text-[10px] text-emerald-600 font-bold hover:underline">Customer Baru</button></div>
-                <Select onValueChange={(val) => setValue("user_id", val)} key={clients.length}>
-                  <SelectTrigger className="cursor-pointer"><SelectValue placeholder="Pilih Customer" /></SelectTrigger>
-                  <SelectContent>{clients.map(c => <SelectItem key={c.id} value={c.id}>{c.full_name}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center border-b pb-2"><h3 className="text-sm font-bold text-emerald-800">Daftar Layanan</h3><Button type="button" variant="outline" size="sm" onClick={() => append({ service_id: "", qty: 1, price: 0 })}>+ Item</Button></div>
-              {fields.map((f, i) => (
-                <div key={f.id} className="flex gap-2 items-end bg-slate-50 p-2 rounded-xl border border-slate-100">
-                  <div className="flex-1">
-                    <Select onValueChange={(v) => { const s = services.find(x => x.id === v); setValue(`items.${i}.service_id`, v); setValue(`items.${i}.price`, Number(s.price)); }}>
-                      <SelectTrigger className="bg-white"><SelectValue placeholder="Pilih Layanan" /></SelectTrigger>
-                      <SelectContent>{services.map(s => <SelectItem key={s.id} value={s.id}>[{s.category_ref?.name || s.category}] {s.name}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                  <Input type="number" {...register(`items.${i}.qty`, { valueAsNumber: true })} className="w-20 bg-white" />
-                  <Button type="button" variant="ghost" className="text-red-400" onClick={() => remove(i)}><Trash2 className="h-4 w-4" /></Button>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <span className="text-slate-500 text-xs">Tracking Code:</span>
+                  <p className="font-semibold text-slate-800">{selectedJob?.tracking_code || '-'}</p>
                 </div>
-              ))}
+                <div>
+                  <span className="text-slate-500 text-xs">Customer:</span>
+                  <p className="font-semibold text-slate-800">{selectedJob?.quotation?.profile?.full_name || '-'}</p>
+                </div>
+              </div>
             </div>
-            <DialogFooter className="pt-4"><Button type="submit" className="bg-emerald-600 w-full h-12 rounded-xl shadow-lg shadow-emerald-100" disabled={submitting}>Simpan Draft Pendaftaran</Button></DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
 
-      <Dialog open={isUserDialogOpen} onOpenChange={setIsUserDialogOpen}>
-        <DialogContent className="sm:max-w-[450px] rounded-3xl">
-          <DialogHeader><DialogTitle className="text-emerald-900 flex items-center gap-2"><UserPlus className="h-5 w-5" /> Customer Baru</DialogTitle></DialogHeader>
-          <form onSubmit={(e) => { e.preventDefault(); onUserSubmit(Object.fromEntries(new FormData(e.currentTarget))); }} className="space-y-4 py-4">
-            <Input name="full_name" placeholder="Nama Lengkap" required />
-            <Input name="email" type="email" placeholder="Email" required />
-            <Input name="company_name" placeholder="Nama Perusahaan" />
-            <Input name="password" type="password" defaultValue="user123456" />
-            <DialogFooter className="pt-4"><Button type="submit" className="w-full bg-emerald-600 rounded-xl h-11" disabled={submitting}>Daftarkan Customer</Button></DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+            {/* Field Officer Selection */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                <User className="h-4 w-4 text-emerald-600" />
+                Petugas Lapangan <span className="text-red-500">*</span>
+              </Label>
+              <Select 
+                value={assignFormData.field_officer_id} 
+                onValueChange={(val) => setAssignFormData({ ...assignFormData, field_officer_id: val })}
+              >
+                <SelectTrigger className="h-10 border-slate-300">
+                  <SelectValue placeholder="Pilih petugas lapangan..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {fieldOfficers.length === 0 ? (
+                    <div className="p-4 text-center text-sm text-slate-500">
+                      Tidak ada petugas lapangan tersedia.
+                    </div>
+                  ) : (
+                    fieldOfficers.map((officer) => (
+                      <SelectItem key={officer.id} value={officer.id} className="text-xs">
+                        {officer.full_name} - {officer.email}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
 
-      <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
-        <DialogContent className="sm:max-w-[400px] rounded-3xl">
-          <DialogHeader><DialogTitle className="text-xl font-bold text-emerald-900">Konfirmasi Pembayaran</DialogTitle></DialogHeader>
-          <div className="grid grid-cols-2 gap-4 py-6">
-            <Button variant="outline" className="h-24 flex flex-col gap-2 rounded-2xl hover:border-emerald-500 hover:bg-emerald-50" onClick={() => handlePayment('Tunai')}><Banknote className="h-8 w-8 text-emerald-600" /><span>Tunai</span></Button>
-            <Button variant="outline" className="h-24 flex flex-col gap-2 rounded-2xl hover:border-blue-500 hover:bg-blue-50" onClick={() => handlePayment('Transfer')}><CreditCard className="h-8 w-8 text-blue-600" /><span>Transfer</span></Button>
+            {/* Scheduled Date & Time */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-emerald-600" />
+                  Tanggal <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  type="date"
+                  value={assignFormData.scheduled_date}
+                  onChange={(e) => setAssignFormData({ ...assignFormData, scheduled_date: e.target.value })}
+                  className="h-10 border-slate-300"
+                  min={new Date().toISOString().split('T')[0]}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-emerald-600" />
+                  Jam <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  type="time"
+                  value={assignFormData.scheduled_time}
+                  onChange={(e) => setAssignFormData({ ...assignFormData, scheduled_time: e.target.value })}
+                  className="h-10 border-slate-300"
+                />
+              </div>
+            </div>
+
+            {/* Location */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-emerald-600" />
+                Lokasi Sampling <span className="text-red-500">*</span>
+              </Label>
+              <Textarea
+                value={assignFormData.location}
+                onChange={(e) => setAssignFormData({ ...assignFormData, location: e.target.value })}
+                placeholder="Alamat lengkap lokasi sampling"
+                className="min-h-[80px] border-slate-300"
+                rows={3}
+              />
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-emerald-600" />
+                Catatan Tambahan
+              </Label>
+              <Textarea
+                value={assignFormData.notes}
+                onChange={(e) => setAssignFormData({ ...assignFormData, notes: e.target.value })}
+                placeholder="Instruksi khusus atau catatan tambahan (opsional)"
+                className="min-h-[60px] border-slate-300"
+                rows={2}
+              />
+            </div>
+
+            {/* Info Box */}
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <CheckCircle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-blue-800">
+                  <p className="font-bold mb-1">Surat Tugas Akan Diterbitkan Otomatis</p>
+                  <p className="text-blue-600">Setelah penugasan dibuat, surat tugas perjalanan akan otomatis diterbitkan dan dapat diunduh untuk petugas lapangan.</p>
+                </div>
+              </div>
+            </div>
           </div>
+
+          <DialogFooter className="sticky bottom-0 bg-white/80 backdrop-blur-md border-t -mx-6 px-6 py-4 mt-6">
+            <div className="flex gap-3 w-full">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setIsAssignDialogOpen(false)}
+                className="font-bold text-slate-400 text-xs uppercase px-6 h-10 rounded-xl"
+              >
+                Batal
+              </Button>
+              <Button
+                onClick={handleAssignSubmit}
+                disabled={assignSubmitting}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-8 h-12 rounded-xl shadow-lg shadow-emerald-900/20 text-xs tracking-wide uppercase transition-all active:scale-95 flex-1"
+              >
+                {assignSubmitting ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>MEMPROSES...</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center leading-none gap-1">
+                    <span className="flex items-center gap-2">
+                      BUAT PENUGASAN & SURAT TUGAS
+                      <Save className="h-4 w-4" />
+                    </span>
+                    <span className="text-[7px] opacity-60 font-bold tracking-[0.1em]">
+                      [ Auto-generate travel order ]
+                    </span>
+                  </div>
+                )}
+              </Button>
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
   );
+}
+
+// Helper for className
+function cn(...classes: (string | undefined | null | false)[]) {
+  return classes.filter(Boolean).join(' ');
 }

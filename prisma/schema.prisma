@@ -43,6 +43,17 @@ enum OperationalCategory {
   transport
 }
 
+enum ApprovalRequestType {
+  edit
+  delete
+}
+
+enum ApprovalRequestStatus {
+  pending
+  approved
+  rejected
+}
+
 model OperationalCatalog {
   id          String              @id @default(uuid())
   category    OperationalCategory
@@ -83,6 +94,7 @@ model Profile {
   created_at           DateTime            @default(now())
   quotations           Quotation[]
   sampling_assignments SamplingAssignment[]
+  approval_requests    ApprovalRequest[]
 
   @@map("profiles")
 }
@@ -124,8 +136,10 @@ model Quotation {
   tax_amount       Decimal         @default(0) @db.Decimal
   
   // Additional Costs
+  perdiem_name     String?
   perdiem_price    Decimal         @default(0) @db.Decimal
   perdiem_qty      Int             @default(0)
+  transport_name   String?
   transport_price  Decimal         @default(0) @db.Decimal
   transport_qty    Int             @default(0)
   
@@ -142,8 +156,10 @@ model QuotationItem {
   id                 String    @id @default(uuid())
   quotation_id       String
   quotation          Quotation @relation(fields: [quotation_id], references: [id], onDelete: Cascade)
-  service_id         String
-  service            Service   @relation(fields: [service_id], references: [id])
+  service_id         String?
+  service            Service?  @relation(fields: [service_id], references: [id])
+  equipment_id       String?
+  equipment          Equipment? @relation(fields: [equipment_id], references: [id])
   qty                Int       @default(1)
   price_snapshot     Decimal   @db.Decimal
   parameter_snapshot String?
@@ -235,6 +251,30 @@ model Equipment {
   image_url         String?
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt
+  quotation_items   QuotationItem[]
 
   @@map("equipment")
+}
+
+model ApprovalRequest {
+  id              String                @id @default(uuid())
+  request_type    ApprovalRequestType
+  status          ApprovalRequestStatus @default(pending)
+  entity_type     String                // "quotation", "job_order", etc.
+  entity_id       String
+  requester_id    String
+  requester       Profile               @relation(fields: [requester_id], references: [id])
+  reason          String
+  old_data        Json?                 // Snapshot data lama untuk edit
+  new_data        Json?                 // Snapshot data baru untuk edit
+  reviewed_by     String?
+  reviewed_at     DateTime?
+  rejection_reason String?
+  created_at      DateTime              @default(now())
+  updated_at      DateTime              @default(now())
+
+  @@map("approval_requests")
+  @@index([entity_type, entity_id])
+  @@index([requester_id])
+  @@index([status])
 }

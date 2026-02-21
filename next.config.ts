@@ -2,7 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Enable React strict mode for better development experience
-  reactStrictMode: true,
+  // Disabled temporarily to debug multiple POST requests issue
+  reactStrictMode: false,
 
   // Remove console.log in production
   compiler: {

@@ -1,11 +1,31 @@
 import { Sidebar } from "@/components/layout/Sidebar";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import prisma from "@/lib/prisma";
 
-export default function OperatorLayout({
+export default async function OperatorLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  // Double Check Role di level Server Component (Double Lock Security)
+  const profile = await prisma.profile.findUnique({
+    where: { id: user.id },
+    select: { role: true }
+  });
+
+  if (profile?.role !== "operator") {
+    redirect("/access-denied");
+  }
+
   return (
     <div className="flex min-h-screen bg-slate-50">
       <Sidebar />

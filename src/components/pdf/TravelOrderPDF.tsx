@@ -5,7 +5,8 @@ import {
   Text,
   View,
   StyleSheet,
-  Font
+  Font,
+  Image
 } from '@react-pdf/renderer';
 
 // Register Montserrat font (optional, using default fonts for now)
@@ -34,6 +35,7 @@ interface TravelOrderData {
       tracking_code: string;
       quotation: {
         quotation_number: string;
+        total_amount?: number | null;
         profile: {
           full_name?: string | null;
           company_name?: string | null;
@@ -77,20 +79,30 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center'
   },
-  logo: {
-    fontSize: 20,
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10
+  },
+  logoImage: {
+    width: 50,
+    height: 50,
+    objectFit: 'contain'
+  },
+  logoText: {
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#059669'
   },
   companyName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginTop: 5
-  },
-  companyInfo: {
-    fontSize: 9,
+    fontSize: 10,
     color: '#666',
     marginTop: 2
+  },
+  companyInfo: {
+    fontSize: 8,
+    color: '#666',
+    marginTop: 1
   },
   title: {
     textAlign: 'center',
@@ -234,31 +246,41 @@ export const TravelOrderPDF: React.FC<TravelOrderPDFProps> = ({
         <View style={styles.header}>
           <View style={styles.headerRow}>
             <View>
-              <Text style={styles.logo}>🧪 {company.company_name}</Text>
-              <Text style={styles.companyName}>{company.tagline}</Text>
-              {company.address && (
-                <Text style={styles.companyInfo}>{company.address}</Text>
-              )}
-              {company.phone && (
-                <Text style={styles.companyInfo}>Telp: {company.phone}</Text>
-              )}
-              {company.email && (
-                <Text style={styles.companyInfo}>Email: {company.email}</Text>
-              )}
-            </View>
-            <View style={{ textAlign: 'right' }}>
-              <Text style={{ fontSize: 10, color: '#666' }}>
-                Nomor: {data.document_number}
-              </Text>
-              <Text style={{ fontSize: 10, color: '#666' }}>
-                Tanggal: {formatDate(data.created_at)}
-              </Text>
+              <View style={styles.logoContainer}>
+                <Image
+                  source={{ uri: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/logo-wahfalab.png` }}
+                  style={styles.logoImage}
+                />
+                <View>
+                  <Text style={styles.logoText}>{company.company_name}</Text>
+                  {company.address && (
+                    <Text style={styles.companyInfo}>{company.address}</Text>
+                  )}
+                  {(company.phone || company.email) && (
+                    <Text style={styles.companyInfo}>
+                      {company.phone && `Telp: ${company.phone}`}
+                      {company.phone && company.email && ' | '}
+                      {company.email && `Email: ${company.email}`}
+                    </Text>
+                  )}
+                </View>
+              </View>
             </View>
           </View>
         </View>
 
+        {/* Date - Right aligned below header */}
+        <View style={{ textAlign: 'right', marginBottom: 10 }}>
+          <Text style={{ fontSize: 10, color: '#666' }}>
+            {formatDate(data.created_at)}
+          </Text>
+        </View>
+
         {/* Title */}
         <Text style={styles.title}>SURAT TUGAS PERJALANAN DINAS</Text>
+        <Text style={{ textAlign: 'center', fontSize: 10, color: '#666', marginTop: -10, marginBottom: 15 }}>
+          Nomor: {data.document_number}
+        </Text>
 
         {/* Assignment Info */}
         <View style={styles.section}>

@@ -156,126 +156,157 @@ const styles = StyleSheet.create({
   }
 });
 
-export const QuotationDocument = ({ data }: any) => (
-  <Document>
-    <Page size="A4" style={styles.page}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Image src="/logo-wahfalab.png" style={styles.logo} />
-        <View style={styles.headerText}>
-          <Text style={styles.companyName}>WahfaLab</Text>
-          <Text style={styles.companySub}>Laboratorium Pengujian Lingkungan & Kalibrasi Terakreditasi</Text>
-          <Text style={styles.companySub}>Jl. Contoh No. 123, Jakarta Selatan | (021) 12345678 | info@wahfalab.com</Text>
-        </View>
-      </View>
+export const QuotationDocument = ({ data }: any) => {
+  const itemsSubtotal = data.items.reduce((acc: any, item: any) => acc + (item.qty * Number(item.price_snapshot)), 0);
+  const perdiemSubtotal = Number(data.perdiem_price) * data.perdiem_qty;
+  const transportSubtotal = Number(data.transport_price) * data.transport_qty;
+  const subtotalBeforeDiscount = itemsSubtotal + perdiemSubtotal + transportSubtotal;
 
-      <Text style={styles.title}>Penawaran Harga / Faktur Uji</Text>
-
-      <View style={styles.infoSection}>
-        <View style={styles.infoCol}>
-          <Text style={styles.label}>PELANGGAN:</Text>
-          <Text style={{ fontSize: 11, fontWeight: "bold", marginTop: 2 }}>{data.profile?.full_name}</Text>
-          <Text>{data.profile?.company_name || "Personal"}</Text>
-        </View>
-        <View style={styles.infoCol}>
-          <Text style={{ textAlign: "right" }}><Text style={styles.label}>No. Faktur: </Text>{data.quotation_number}</Text>
-          <Text style={{ textAlign: "right" }}><Text style={styles.label}>Tanggal: </Text>{new Date(data.date).toLocaleDateString("id-ID", { day: 'numeric', month: 'long', year: 'numeric' })}</Text>
-          <Text style={{ textAlign: "right" }}><Text style={styles.label}>Status: </Text>{data.status.toUpperCase()}</Text>
-        </View>
-      </View>
-
-      {/* Table Content */}
-      <View style={styles.table}>
-        <View style={styles.tableHeader}>
-          <Text style={styles.colNo}>No</Text>
-          <Text style={styles.colDesc}>Deskripsi Layanan & Parameter</Text>
-          <Text style={styles.colQty}>Qty</Text>
-          <Text style={styles.colPrice}>Harga (Rp)</Text>
-          <Text style={styles.colTotal}>Total (Rp)</Text>
+  return (
+    <Document>
+      <Page size="A4" style={styles.page}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Image src="/logo-wahfalab.png" style={styles.logo} />
+          <View style={styles.headerText}>
+            <Text style={styles.companyName}>WahfaLab</Text>
+            <Text style={styles.companySub}>Laboratorium Pengujian Lingkungan & Kalibrasi Terakreditasi</Text>
+            <Text style={styles.companySub}>Jl. Contoh No. 123, Jakarta Selatan | (021) 12345678 | info@wahfalab.com</Text>
+          </View>
         </View>
 
-        {data?.items?.map((item: any, index: number) => (
-          <View key={index} style={styles.tableRow} wrap={false}>
-            <Text style={styles.colNo}>{index + 1}</Text>
-            <View style={styles.colDesc}>
-              <Text style={styles.categoryText}>
-                {item.service?.category_ref?.name || item.service?.category || "Layanan Lab"}
-              </Text>
-              <Text style={styles.serviceName}>{item.service?.name}</Text>
-              
-              {item.service?.parameters && (
-                <Text style={styles.parameters}>
-                  Parameter: {typeof item.service.parameters === 'string' ? item.service.parameters : JSON.stringify(item.service.parameters)}
-                </Text>
-              )}
-              
-              {item.service?.regulation && (
-                <Text style={styles.regulation}>Acuan: {item.service.regulation}</Text>
-              )}
+        <Text style={styles.title}>Penawaran Harga / Faktur Uji</Text>
+
+        <View style={styles.infoSection}>
+          <View style={styles.infoCol}>
+            <Text style={styles.label}>PELANGGAN:</Text>
+            <Text style={{ fontSize: 11, fontWeight: "bold", marginTop: 2 }}>{data.profile?.full_name}</Text>
+            <Text>{data.profile?.company_name || "Personal"}</Text>
+          </View>
+          <View style={styles.infoCol}>
+            <Text style={{ textAlign: "right" }}><Text style={styles.label}>No. Faktur: </Text>{data.quotation_number}</Text>
+            <Text style={{ textAlign: "right" }}><Text style={styles.label}>Tanggal: </Text>{new Date(data.date).toLocaleDateString("id-ID", { day: 'numeric', month: 'long', year: 'numeric' })}</Text>
+            <Text style={{ textAlign: "right" }}><Text style={styles.label}>Status: </Text>{data.status.toUpperCase()}</Text>
+          </View>
+        </View>
+
+        {/* Table Content */}
+        <View style={styles.table}>
+          <View style={styles.tableHeader}>
+            <Text style={styles.colNo}>No</Text>
+            <Text style={styles.colDesc}>Deskripsi Layanan & Parameter</Text>
+            <Text style={styles.colQty}>Qty</Text>
+            <Text style={styles.colPrice}>Harga (Rp)</Text>
+            <Text style={styles.colTotal}>Total (Rp)</Text>
+          </View>
+
+          {/* Render Original Items */}
+          {data?.items?.map((item: any, index: number) => {
+            const itemName = item.name || item.service?.name || item.equipment?.name || "Item Layanan/Alat";
+            const categoryName = item.service?.category_ref?.name || item.service?.category || (item.equipment ? "ALAT LAB" : "Layanan Lab");
+            
+            let parameterList = "";
+            if (item.service?.parameters) {
+              try {
+                const params = typeof item.service.parameters === 'string' ? JSON.parse(item.service.parameters) : item.service.parameters;
+                parameterList = Array.isArray(params) ? params.map((p: any) => p.name).join(", ") : "";
+              } catch (e) {
+                parameterList = String(item.service.parameters);
+              }
+            }
+
+            return (
+              <View key={`item-${index}`} style={styles.tableRow} wrap={false}>
+                <Text style={styles.colNo}>{index + 1}</Text>
+                <View style={styles.colDesc}>
+                  <Text style={styles.categoryText}>{categoryName}</Text>
+                  <Text style={styles.serviceName}>{itemName}</Text>
+                  {parameterList && <Text style={styles.parameters}>Parameter: {parameterList}</Text>}
+                  {item.service?.regulation && <Text style={styles.regulation}>Acuan: {item.service.regulation}</Text>}
+                </View>
+                <Text style={styles.colQty}>{item.qty}</Text>
+                <Text style={styles.colPrice}>{Number(item.price_snapshot).toLocaleString("id-ID")}</Text>
+                <Text style={styles.colTotal}>{(Number(item.qty) * Number(item.price_snapshot)).toLocaleString("id-ID")}</Text>
+              </View>
+            );
+          })}
+
+          {/* Baris Tambahan: Perdiem */}
+          {Number(data.perdiem_price) > 0 && (
+            <View style={styles.tableRow} wrap={false}>
+              <Text style={styles.colNo}>{data.items.length + 1}</Text>
+              <View style={styles.colDesc}>
+                <Text style={styles.categoryText}>BIAYA OPERASIONAL</Text>
+                <Text style={styles.serviceName}>{data.perdiem_name || 'Biaya Perdiem / Engineer'}</Text>
+              </View>
+              <Text style={styles.colQty}>{data.perdiem_qty}</Text>
+              <Text style={styles.colPrice}>{Number(data.perdiem_price).toLocaleString("id-ID")}</Text>
+              <Text style={styles.colTotal}>{(Number(data.perdiem_qty) * Number(data.perdiem_price)).toLocaleString("id-ID")}</Text>
             </View>
-            <Text style={styles.colQty}>{item.qty}</Text>
-            <Text style={styles.colPrice}>{Number(item.price_snapshot).toLocaleString("id-ID")}</Text>
-            <Text style={styles.colTotal}>{(Number(item.qty) * Number(item.price_snapshot)).toLocaleString("id-ID")}</Text>
-          </View>
-        ))}
-      </View>
+          )}
 
-      {/* Summary */}
-      <View style={styles.summarySection}>
-        <View style={styles.summaryRow}>
-          <Text>Subtotal Item</Text>
-          <Text>Rp {Number(data.items.reduce((acc: any, item: any) => acc + (item.qty * Number(item.price_snapshot)), 0)).toLocaleString("id-ID")}</Text>
+          {/* Baris Tambahan: Transport */}
+          {Number(data.transport_price) > 0 && (
+            <View style={styles.tableRow} wrap={false}>
+              <Text style={styles.colNo}>{data.items.length + (Number(data.perdiem_price) > 0 ? 2 : 1)}</Text>
+              <View style={styles.colDesc}>
+                <Text style={styles.categoryText}>BIAYA OPERASIONAL</Text>
+                <Text style={styles.serviceName}>{data.transport_name || 'Transportasi & Akomodasi'}</Text>
+              </View>
+              <Text style={styles.colQty}>{data.transport_qty}</Text>
+              <Text style={styles.colPrice}>{Number(data.transport_price).toLocaleString("id-ID")}</Text>
+              <Text style={styles.colTotal}>{(Number(data.transport_qty) * Number(data.transport_price)).toLocaleString("id-ID")}</Text>
+            </View>
+          )}
         </View>
 
-        {(Number(data.perdiem_price) > 0) && (
+        {/* Summary */}
+        <View style={styles.summarySection}>
           <View style={styles.summaryRow}>
-            <Text>Biaya Perdiem ({data.perdiem_qty} Hari)</Text>
-            <Text>Rp {(Number(data.perdiem_price) * data.perdiem_qty).toLocaleString("id-ID")}</Text>
+            <Text>Subtotal</Text>
+            <Text>Rp {Number(
+              data.items.reduce((acc: any, item: any) => acc + (item.qty * Number(item.price_snapshot)), 0) +
+              (Number(data.perdiem_price) * data.perdiem_qty) +
+              (Number(data.transport_price) * data.transport_qty)
+            ).toLocaleString("id-ID")}</Text>
           </View>
-        )}
 
-        {(Number(data.transport_price) > 0) && (
-          <View style={styles.summaryRow}>
-            <Text>Transportasi ({data.transport_qty} Vol)</Text>
-            <Text>Rp {(Number(data.transport_price) * data.transport_qty).toLocaleString("id-ID")}</Text>
+          {Number(data.discount_amount) > 0 && (
+            <View style={[styles.summaryRow, { color: "#dc2626" }]}>
+              <Text>Diskon</Text>
+              <Text>- Rp {Number(data.discount_amount).toLocaleString("id-ID")}</Text>
+            </View>
+          )}
+
+          {data.use_tax && (
+            <View style={styles.summaryRow}>
+              <Text>PPN (11%)</Text>
+              <Text>Rp {Number(data.tax_amount).toLocaleString("id-ID")}</Text>
+            </View>
+          )}
+
+          <View style={[styles.summaryRow, styles.totalRow]}>
+            <Text>TOTAL AKHIR</Text>
+            <Text>Rp {Number(data.total_amount).toLocaleString("id-ID")}</Text>
           </View>
-        )}
-
-        {Number(data.discount_amount) > 0 && (
-          <View style={[styles.summaryRow, { color: "#dc2626" }]}>
-            <Text>Diskon</Text>
-            <Text>- Rp {Number(data.discount_amount).toLocaleString("id-ID")}</Text>
-          </View>
-        )}
-
-        {data.use_tax && (
-          <View style={styles.summaryRow}>
-            <Text>PPN (11%)</Text>
-            <Text>Rp {Number(data.tax_amount).toLocaleString("id-ID")}</Text>
-          </View>
-        )}
-
-        <View style={[styles.summaryRow, styles.totalRow]}>
-          <Text>TOTAL AKHIR</Text>
-          <Text>Rp {Number(data.total_amount).toLocaleString("id-ID")}</Text>
         </View>
-      </View>
 
-      <Text style={styles.note}>* Dokumen ini sah dan diterbitkan secara elektronik oleh sistem WahfaLab.</Text>
+        <Text style={styles.note}>* Dokumen ini sah dan diterbitkan secara elektronik oleh sistem WahfaLab.</Text>
 
-      {/* Signatures */}
-      <View style={styles.footer} wrap={false}>
-        <View style={styles.signBox}>
-          <Text>Dicetak Oleh,</Text>
-          <View style={styles.signSpace} />
-          <Text style={{ fontWeight: "bold" }}>( WahfaLab Administration )</Text>
+        {/* Signatures */}
+        <View style={styles.footer} wrap={false}>
+          <View style={styles.signBox}>
+            <Text>Dicetak Oleh,</Text>
+            <View style={styles.signSpace} />
+            <Text style={{ fontWeight: "bold" }}>( WahfaLab Administration )</Text>
+          </View>
+          <View style={styles.signBox}>
+            <Text>Penerima / Pelanggan,</Text>
+            <View style={styles.signSpace} />
+            <Text style={{ fontWeight: "bold" }}>( ____________________ )</Text>
+          </View>
         </View>
-        <View style={styles.signBox}>
-          <Text>Penerima / Pelanggan,</Text>
-          <View style={styles.signSpace} />
-          <Text style={{ fontWeight: "bold" }}>( ____________________ )</Text>
-        </View>
-      </View>
-    </Page>
-  </Document>
-);
+      </Page>
+    </Document>
+  );
+};

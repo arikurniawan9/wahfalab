@@ -1,7 +1,7 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function updateSession(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -13,39 +13,33 @@ export async function updateSession(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
+        getAll() { return request.cookies.getAll() },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
-          response = NextResponse.next({
-            request,
-          })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          )
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+          response = NextResponse.next({ request })
+          cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options))
         },
       },
     }
   )
 
   const { data: { user } } = await supabase.auth.getUser()
+  const path = request.nextUrl.pathname;
 
-  // Sederhana: Lindungi /admin, /operator, /dashboard, /field
-  if (!user && (
-    request.nextUrl.pathname.startsWith('/admin') ||
-    request.nextUrl.pathname.startsWith('/operator') ||
-    request.nextUrl.pathname.startsWith('/dashboard') ||
-    request.nextUrl.pathname.startsWith('/field')
-  )) {
+  // Tentukan apakah route terproteksi
+  const isProtectedRoute = 
+    path.startsWith('/admin') || 
+    path.startsWith('/operator') || 
+    path.startsWith('/field') || 
+    path.startsWith('/dashboard');
+
+  // Jika tidak login dan mencoba akses area proteksi -> Ke Login
+  if (!user && isProtectedRoute) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
+  // Jika sudah login dan mencoba ke login/home, biarkan Server Component yang me-redirect (lebih akurat)
   return response
-}
-
-export async function middleware(request: NextRequest) {
-  return await updateSession(request)
 }
 
 export const config = {

@@ -19,10 +19,24 @@ export async function login(formData: FormData) {
   }
 
   // Ambil role dari database menggunakan Prisma
-  const profile = await prisma.profile.findUnique({
+  let profile = await prisma.profile.findUnique({
     where: { id: data.user?.id },
     select: { role: true }
   })
+
+  // SELF-HEALING: Jika user ada di Auth tapi profil hilang di DB (misal habis reset)
+  if (!profile && data.user) {
+    console.log("Self-healing: Creating missing profile for user", data.user.id);
+    profile = await prisma.profile.create({
+      data: {
+        id: data.user.id,
+        email: data.user.email,
+        full_name: data.user.user_metadata?.full_name || 'User',
+        role: 'client' // Default untuk user yang mendaftar sendiri
+      },
+      select: { role: true }
+    });
+  }
 
   // Redirect berdasarkan role
   if (profile?.role === 'admin') {
@@ -63,8 +77,9 @@ export async function signup(formData: FormData) {
     try {
       await prisma.profile.upsert({
         where: { id: data.user.id },
-        update: { 
-          full_name, 
+        update: {
+          full_name,
+          email,
           role: 'client', // Always set to client for self-registration
           company_name: company_name || undefined,
           address,
@@ -72,6 +87,7 @@ export async function signup(formData: FormData) {
         create: {
           id: data.user.id,
           full_name,
+          email,
           role: 'client', // Always set to client for self-registration
           company_name: company_name || undefined,
           address,

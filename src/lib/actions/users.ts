@@ -38,11 +38,11 @@ export async function getUsers(page = 1, limit = 10, search = "") {
 }
 
 export async function createOrUpdateUser(formData: any, id?: string) {
-  const { email, password, full_name, role = 'operator' } = formData
+  const { email, password, full_name, role = 'operator', company_name, address } = formData
 
   if (id) {
     // Update
-    const updateData: any = { full_name, role }
+    const updateData: any = { full_name, role, company_name, address }
     
     if (email || password) {
       const authUpdate: any = {}
@@ -89,12 +89,14 @@ export async function createOrUpdateUser(formData: any, id?: string) {
     // Upsert Profile
     await (prisma.profile as any).upsert({
       where: { id: authUserId },
-      update: { full_name, role, email },
+      update: { full_name, role, email, company_name, address },
       create: {
         id: authUserId,
         full_name,
         role,
-        email
+        email,
+        company_name,
+        address
       }
     })
   }
@@ -104,31 +106,57 @@ export async function createOrUpdateUser(formData: any, id?: string) {
 }
 
 export async function deleteUser(id: string) {
-  const { error } = await supabaseAdmin.auth.admin.deleteUser(id)
-  if (error) throw error
-  
-  await prisma.profile.delete({ where: { id } })
-  revalidatePath('/admin/users')
-  return { success: true }
+  try {
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(id)
+    // Jika error bukan 'user_not_found', tetap lempar error
+    if (error && !error.message.toLowerCase().includes('not found')) {
+      throw error
+    }
+    
+    await prisma.profile.delete({ where: { id } })
+    revalidatePath('/admin/users')
+    return { success: true }
+  } catch (err: any) {
+    console.error("Delete Single User Error:", err)
+    // Tetap coba hapus dari Prisma jika error di Auth
+    try {
+      await prisma.profile.delete({ where: { id } })
+      revalidatePath('/admin/users')
+      return { success: true }
+    } catch (prismaErr) {
+      throw err
+    }
+  }
 }
 
 export async function deleteManyUsers(ids: string[]) {
-  // Delete from Auth first
+  // Delete from Auth first with error handling
   for (const id of ids) {
-    await supabaseAdmin.auth.admin.deleteUser(id)
+    try {
+      const { error } = await supabaseAdmin.auth.admin.deleteUser(id)
+      if (error && !error.message.toLowerCase().includes('not found')) {
+        console.warn(`Warning: Could not delete user ${id} from auth:`, error.message)
+      }
+    } catch (e) {
+      console.error(`Error deleting user ${id} from auth:`, e)
+    }
   }
   
-  await prisma.profile.deleteMany({
-    where: { id: { in: ids } }
-  })
-  revalidatePath('/admin/users')
-  return { success: true }
+  try {
+    await prisma.profile.deleteMany({
+      where: { id: { in: ids } }
+    })
+    revalidatePath('/admin/users')
+    return { success: true }
+  } catch (err) {
+    throw err
+  }
 }
 
 export async function getClients() {
   return await prisma.profile.findMany({
     where: { role: 'client' },
-    select: { id: true, full_name: true, company_name: true },
+    select: { id: true, full_name: true, company_name: true, email: true },
     orderBy: { full_name: 'asc' }
   })
 }
