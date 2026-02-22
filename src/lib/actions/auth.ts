@@ -45,6 +45,8 @@ export async function login(formData: FormData) {
     redirect('/operator')
   } else if (profile?.role === 'field_officer') {
     redirect('/field')
+  } else if (profile?.role === 'finance') {
+    redirect('/finance')
   } else {
     redirect('/dashboard')
   }

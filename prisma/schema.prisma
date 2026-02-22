@@ -13,6 +13,7 @@ enum UserRole {
   operator
   client
   field_officer
+  finance
 }
 
 enum JobStatus {
@@ -21,6 +22,8 @@ enum JobStatus {
   analysis
   reporting
   completed
+  pending_payment
+  paid
 }
 
 enum QuotationStatus {
@@ -187,6 +190,7 @@ model JobOrder {
   certificate_url     String?
   created_at          DateTime            @default(now())
   sampling_assignment SamplingAssignment?
+  payment             Payment?
 
   @@map("job_orders")
   @@index([quotation_id])
@@ -324,4 +328,34 @@ model AuditLog {
   @@index([entity_type, entity_id])
   @@index([action])
   @@index([created_at])
+}
+
+enum PaymentMethod {
+  cash
+  transfer
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  cancelled
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  job_order_id      String        @unique
+  job_order         JobOrder      @relation(fields: [job_order_id], references: [id])
+  invoice_number    String        @unique
+  amount            Decimal       @db.Decimal(10, 2)
+  payment_method    PaymentMethod?
+  payment_status    PaymentStatus @default(pending)
+  transfer_reference String?      // Nomor referensi transfer
+  paid_at           DateTime?
+  created_at        DateTime      @default(now())
+  updated_at        DateTime      @default(now())
+
+  @@map("payments")
+  @@index([job_order_id])
+  @@index([invoice_number])
+  @@index([payment_status])
 }

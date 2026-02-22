@@ -16,7 +16,10 @@ import {
   MapPin,
   Truck,
   Wrench,
-  Bell
+  Bell,
+  UserCheck,
+  CreditCard,
+  Banknote
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -59,6 +62,7 @@ const adminMenuItems = (pendingApprovals: number = 0) => [
     group: "Administrasi",
     items: [
       { icon: Users, label: "Data Pengguna", href: "/admin/users" },
+      { icon: UserCheck, label: "Data Customer", href: "/admin/customers" },
       {
         icon: Bell,
         label: "Persetujuan",
@@ -112,6 +116,22 @@ const fieldOfficerMenuItems = [
     items: [
       { icon: LayoutDashboard, label: "Beranda", href: "/field" },
       { icon: FileText, label: "Penugasan Sampling", href: "/field/assignments" },
+    ]
+  },
+];
+
+const financeMenuItems = [
+  {
+    group: "Utama",
+    items: [
+      { icon: LayoutDashboard, label: "Beranda", href: "/finance" },
+    ]
+  },
+  {
+    group: "Manajemen Keuangan",
+    items: [
+      { icon: CreditCard, label: "Pembayaran", href: "/finance/payments" },
+      { icon: Banknote, label: "Riwayat Transaksi", href: "/finance/transactions" },
     ]
   },
 ];
@@ -173,9 +193,11 @@ export function Sidebar({ className }: { className?: string }) {
       ? operatorMenuItems
       : role === 'field_officer'
         ? fieldOfficerMenuItems
-        : role === 'client'
-          ? clientMenuItems
-          : []; // Don't show any menu if role is null/unknown
+        : role === 'finance'
+          ? financeMenuItems
+          : role === 'client'
+            ? clientMenuItems
+            : []; // Don't show any menu if role is null/unknown
 
   const NavContent = () => (
     <div className="flex flex-col h-full py-4">

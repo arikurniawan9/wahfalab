@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
 import { createClient } from '@/lib/supabase/server'
+import { generateInvoice } from '@/lib/actions/payment'
 
 export async function getSamplingAssignments(fieldOfficerId: string) {
   const assignments = await prisma.samplingAssignment.findMany({
@@ -120,10 +121,13 @@ export async function updateSamplingStatus(assignmentId: string, status: any, no
     await prisma.jobOrder.update({
       where: { id: assignment.job_order_id },
       data: {
-        status: 'analysis',
+        status: 'completed',
         notes: `Sampling completed by ${user.email || 'field officer'} - ${notes || ''}`
       }
     })
+    
+    // Auto-generate invoice when sampling is completed
+    await generateInvoice(assignment.job_order_id)
   } else if (status === 'in_progress') {
     await prisma.jobOrder.update({
       where: { id: assignment.job_order_id },

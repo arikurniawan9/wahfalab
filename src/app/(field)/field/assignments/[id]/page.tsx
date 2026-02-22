@@ -207,7 +207,17 @@ export default function AssignmentDetailPage() {
       if (result.error) {
         toast.error(result.error);
       } else {
-        toast.success(`Status berhasil diubah ke ${status}`);
+        // User-friendly notification messages
+        const statusMessages: Record<string, string> = {
+          in_progress: "🚀 Sampling dimulai! Petugas sedang melaksanakan tugas.",
+          completed: "✅ Sampling selesai! Job order akan dilanjutkan ke tahap analisis.",
+          pending: "⏸️ Sampling ditunda. Status dikembalikan ke menunggu.",
+          cancelled: "❌ Sampling dibatalkan."
+        };
+        
+        toast.success(
+          statusMessages[status] || `Status berhasil diubah ke ${status}`
+        );
         router.push("/field");
         router.refresh();
       }

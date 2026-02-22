@@ -36,7 +36,8 @@ import {
   Upload,
   User,
   Shield,
-  Users as UsersIcon
+  Users as UsersIcon,
+  DollarSign
 } from "lucide-react";
 import { ChemicalLoader } from "@/components/ui";
 import { getUsers, createOrUpdateUser, deleteUser, deleteManyUsers } from "@/lib/actions/users";
@@ -75,7 +76,7 @@ const roleOptions = [
   { value: "admin", label: "Administrator", color: "bg-red-100 text-red-700 border-red-200", icon: Shield },
   { value: "operator", label: "Petugas / Operator", color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: UsersIcon },
   { value: "field_officer", label: "Petugas Lapangan", color: "bg-blue-100 text-blue-700 border-blue-200", icon: User },
-  { value: "client", label: "Pelanggan", color: "bg-slate-100 text-slate-700 border-slate-200", icon: User }
+  { value: "finance", label: "Bagian Keuangan", color: "bg-purple-100 text-purple-700 border-purple-200", icon: DollarSign }
 ];
 
 export default function UserManagementPage() {
@@ -115,7 +116,14 @@ export default function UserManagementPage() {
         getUsers(page, limit, search),
         supabase.auth.getUser()
       ]);
-      setData(result);
+      
+      // Filter out client role - only show staff users
+      const filteredResult = {
+        ...result,
+        users: result.users.filter((u: any) => u.role !== 'client')
+      };
+      
+      setData(filteredResult);
       setCurrentUser(user);
       setSelectedIds([]);
     } catch (error: any) {
@@ -729,7 +737,7 @@ export default function UserManagementPage() {
                   <SelectItem value="admin" className="cursor-pointer">Administrator</SelectItem>
                   <SelectItem value="operator" className="cursor-pointer">Petugas / Operator</SelectItem>
                   <SelectItem value="field_officer" className="cursor-pointer">Petugas Lapangan</SelectItem>
-                  <SelectItem value="client" className="cursor-pointer">Pelanggan</SelectItem>
+                  <SelectItem value="finance" className="cursor-pointer">Bagian Keuangan</SelectItem>
                 </SelectContent>
               </Select>
             </div>
