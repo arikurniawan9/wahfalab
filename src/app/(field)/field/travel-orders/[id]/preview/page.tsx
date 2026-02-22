@@ -10,8 +10,9 @@ import { getTravelOrderById } from "@/lib/actions/travel-order";
 import { pdf, PDFViewer } from "@react-pdf/renderer";
 import { TravelOrderPDF } from "@/components/pdf/TravelOrderPDF";
 import { TravelOrderAttachment } from "@/components/pdf/TravelOrderAttachment";
+import { Skeleton } from "@/components/ui/skeleton";
 
-export default function OperatorTravelOrderPreviewPage() {
+export default function FieldTravelOrderPreviewPage() {
   const params = useParams();
   const [loading, setLoading] = useState(true);
   const [travelOrder, setTravelOrder] = useState<any>(null);
@@ -25,17 +26,15 @@ export default function OperatorTravelOrderPreviewPage() {
   async function loadData() {
     try {
       const data = await getTravelOrderById(params.id as string);
-      console.log('📄 Travel Order Data:', data);
-      console.log('📦 Items:', data?.assignment?.job_order?.quotation?.items);
       setTravelOrder(data);
 
-      // Load company profile - use simpler approach
+      // Load company profile - use logo from public folder
       const defaultCompany = {
         company_name: 'WahfaLab',
         address: null,
         phone: null,
         email: null,
-        logo_url: '/logo-wahfalab.png', // Use logo from public folder
+        logo_url: '/logo-wahfalab.png',
         tagline: null,
         npwp: null
       };
@@ -44,9 +43,7 @@ export default function OperatorTravelOrderPreviewPage() {
         const companyResponse = await fetch('/api/company-profile');
         if (companyResponse.ok) {
           const companyData = await companyResponse.json();
-          console.log('🏢 Company Profile:', companyData);
           
-          // Use logo from public folder if no logo_url from API
           let logoUrl = '/logo-wahfalab.png';
           if (companyData.logo_url && companyData.logo_url.startsWith('http')) {
             logoUrl = companyData.logo_url;
@@ -163,11 +160,11 @@ export default function OperatorTravelOrderPreviewPage() {
         />
       );
 
-      // Merge both PDFs
+      // Download both PDFs
       const mainBlob = await pdf(mainPdfDoc).toBlob();
       const attachmentBlob = await pdf(attachmentPdfDoc).toBlob();
-      
-      // Create combined PDF (for now, download separately)
+
+      // Download main PDF
       const url = URL.createObjectURL(mainBlob);
       const link = document.createElement('a');
       link.href = url;
@@ -177,7 +174,7 @@ export default function OperatorTravelOrderPreviewPage() {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      // Also download attachment
+      // Download attachment
       const attachmentUrl = URL.createObjectURL(attachmentBlob);
       const attachmentLink = document.createElement('a');
       attachmentLink.href = attachmentUrl;
@@ -189,6 +186,7 @@ export default function OperatorTravelOrderPreviewPage() {
 
       toast.success("✅ Surat tugas & lampiran berhasil diunduh");
     } catch (error) {
+      console.error('PDF generation error:', error);
       toast.error("Gagal membuat PDF");
     } finally {
       setGeneratingPdf(false);
@@ -197,11 +195,12 @@ export default function OperatorTravelOrderPreviewPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-          <p className="text-slate-600 font-medium">Memuat surat tugas...</p>
+      <div className="p-4 md:p-10 max-w-7xl mx-auto">
+        <div className="mb-6 space-y-2">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-8 w-64" />
         </div>
+        <Skeleton className="h-[600px] rounded-lg" />
       </div>
     );
   }
@@ -211,7 +210,7 @@ export default function OperatorTravelOrderPreviewPage() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-slate-600">Surat tugas tidak ditemukan</h2>
-          <Link href="/operator/jobs">
+          <Link href="/field">
             <Button className="mt-4">Kembali</Button>
           </Link>
         </div>
@@ -220,10 +219,10 @@ export default function OperatorTravelOrderPreviewPage() {
   }
 
   return (
-    <div className="p-4 md:p-10">
+    <div className="p-4 md:p-10 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <Link href="/operator/jobs">
+        <Link href="/field/assignments">
           <Button variant="outline" size="icon">
             <ArrowLeft className="h-4 w-4" />
           </Button>

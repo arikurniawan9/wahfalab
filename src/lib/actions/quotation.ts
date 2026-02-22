@@ -4,6 +4,9 @@ import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
 import { generateInvoiceNumber } from '@/lib/utils/generateNumber'
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { headers } from 'next/headers'
+import { audit } from '@/lib/audit-log'
 
 export async function getNextInvoiceNumber() {
   return await generateInvoiceNumber("INV")
@@ -137,10 +140,28 @@ export async function getQuotations(
 
 export async function updateQuotationStatus(id: string, status: any) {
   try {
+    const headersList = await headers()
+    const userId = headersList.get('x-user-id') || 'anonymous'
+    
+    // Enforce rate limiting
+    enforceRateLimit(userId, 'update_job_status', RATE_LIMITS.UPDATE_JOB_STATUS.limit, RATE_LIMITS.UPDATE_JOB_STATUS.windowMs)
+    
+    // Get old data for audit
+    const oldQuotation = await prisma.quotation.findUnique({
+      where: { id },
+      select: { status: true }
+    })
+    
     const quotation = await prisma.quotation.update({
       where: { id },
       data: { status }
     })
+
+    // Audit log
+    await audit.updateQuotation(
+      { id, status: oldQuotation?.status },
+      { id, status }
+    )
 
     // WORKFLOW: Jika diterima (accepted), otomatis buat Job Order
     if (status === 'accepted') {
@@ -149,13 +170,16 @@ export async function updateQuotationStatus(id: string, status: any) {
       })
 
       if (!existingJob) {
-        await prisma.jobOrder.create({
+        const jobOrder = await prisma.jobOrder.create({
           data: {
             quotation_id: id,
             tracking_code: `JOB-${Date.now()}`,
             status: 'scheduled'
           }
         })
+        
+        // Audit log job order creation
+        await audit.createJobOrder(jobOrder)
       }
     }
 
@@ -171,19 +195,24 @@ export async function updateQuotationStatus(id: string, status: any) {
 
 export async function deleteQuotation(id: string, requesterId?: string, requesterRole?: string) {
   try {
+    // Get quotation data for audit
+    const quotation = await prisma.quotation.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        quotation_number: true,
+        total_amount: true,
+        status: true
+      }
+    })
+
+    if (!quotation) {
+      throw new Error('Penawaran tidak ditemukan')
+    }
+
     // Check if requester is operator - requires approval
     if (requesterId && requesterRole === 'operator') {
       // Create approval request instead of deleting
-      const quotation = await prisma.quotation.findUnique({
-        where: { id },
-        select: {
-          id: true,
-          quotation_number: true,
-          total_amount: true,
-          status: true
-        }
-      })
-
       await prisma.approvalRequest.create({
         data: {
           request_type: 'delete',
@@ -196,9 +225,19 @@ export async function deleteQuotation(id: string, requesterId?: string, requeste
         }
       })
 
+      // Audit log
+      await audit.logAudit({
+        action: 'delete_requested',
+        entity_type: 'quotation',
+        entity_id: id,
+        user_id: requesterId,
+        old_data: quotation,
+        metadata: { reason: 'Operator request' }
+      })
+
       revalidatePath('/operator/quotations')
-      return { 
-        success: true, 
+      return {
+        success: true,
         message: 'Permintaan penghapusan berhasil dibuat. Menunggu persetujuan admin.'
       }
     }
@@ -217,6 +256,9 @@ export async function deleteQuotation(id: string, requesterId?: string, requeste
     // 3. Hapus item penawaran & penawarannya
     await prisma.quotationItem.deleteMany({ where: { quotation_id: id } });
     await prisma.quotation.delete({ where: { id } });
+
+    // Audit log
+    await audit.deleteQuotation(quotation)
 
     revalidatePath('/admin/quotations');
     return { success: true };
@@ -298,6 +340,12 @@ export async function cloneQuotation(id: string) {
 
 export async function createQuotation(formData: any) {
   try {
+    const headersList = await headers()
+    const userId = headersList.get('x-user-id') || 'anonymous'
+    
+    // Enforce rate limiting
+    enforceRateLimit(userId, 'create_quotation', RATE_LIMITS.CREATE_QUOTATION.limit, RATE_LIMITS.CREATE_QUOTATION.windowMs)
+    
     const quotation = await prisma.quotation.create({
       data: {
         quotation_number: formData.quotation_number,
@@ -306,14 +354,14 @@ export async function createQuotation(formData: any) {
         discount_amount: formData.discount_amount || 0,
         use_tax: formData.use_tax,
         tax_amount: formData.tax_amount,
-        
+
         perdiem_name: formData.perdiem_name || null,
         perdiem_price: formData.perdiem_price || 0,
         perdiem_qty: formData.perdiem_qty || 0,
         transport_name: formData.transport_name || null,
         transport_price: formData.transport_price || 0,
         transport_qty: formData.transport_qty || 0,
-        
+
         total_amount: formData.total_amount,
         status: 'draft', // Status default baru: draft
         items: {
@@ -327,11 +375,78 @@ export async function createQuotation(formData: any) {
       },
     })
 
+    // Audit log
+    await audit.createQuotation(quotation)
+
     revalidatePath('/admin/quotations')
     return { success: true, id: quotation.id }
   } catch (error) {
     console.error('Prisma Error:', error)
     throw new Error('Gagal membuat penawaran')
+  }
+}
+
+export async function updateQuotation(id: string, formData: any) {
+  try {
+    const headersList = await headers()
+    const userId = headersList.get('x-user-id') || 'anonymous'
+    
+    // Enforce rate limiting
+    enforceRateLimit(userId, 'update_quotation', RATE_LIMITS.UPDATE_QUOTATION.limit, RATE_LIMITS.UPDATE_QUOTATION.windowMs)
+    
+    // Get existing quotation to compare items
+    const existingQuotation = await prisma.quotation.findUnique({
+      where: { id },
+      include: { items: true }
+    })
+    
+    if (!existingQuotation) {
+      throw new Error('Penawaran tidak ditemukan')
+    }
+    
+    // Update quotation with transaction to handle items
+    const quotation = await prisma.$transaction(async (tx) => {
+      // Delete existing items
+      await tx.quotationItem.deleteMany({
+        where: { quotation_id: id }
+      })
+      
+      // Update main quotation data
+      return tx.quotation.update({
+        where: { id },
+        data: {
+          quotation_number: formData.quotation_number,
+          subtotal: formData.subtotal,
+          discount_amount: formData.discount_amount || 0,
+          use_tax: formData.use_tax,
+          tax_amount: formData.tax_amount,
+  
+          perdiem_name: formData.perdiem_name || null,
+          perdiem_price: formData.perdiem_price || 0,
+          perdiem_qty: formData.perdiem_qty || 0,
+          transport_name: formData.transport_name || null,
+          transport_price: formData.transport_price || 0,
+          transport_qty: formData.transport_qty || 0,
+  
+          total_amount: formData.total_amount,
+          items: {
+            create: formData.items.map((item: any) => ({
+              service_id: item.service_id || null,
+              equipment_id: item.equipment_id || null,
+              qty: item.qty,
+              price_snapshot: item.price,
+            })),
+          },
+        },
+      })
+    })
+    
+    revalidatePath('/admin/quotations')
+    revalidatePath(`/admin/quotations/${id}`)
+    return { success: true, id: quotation.id }
+  } catch (error) {
+    console.error('Update Quotation Error:', error)
+    throw new Error('Gagal memperbarui penawaran')
   }
 }
 

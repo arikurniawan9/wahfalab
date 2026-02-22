@@ -139,13 +139,15 @@ const styles = StyleSheet.create({
   },
   table: {
     marginTop: 10,
-    border: 1,
-    borderColor: '#ddd'
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderStyle: 'solid'
   },
   tableRow: {
     flexDirection: 'row',
     borderBottomWidth: 1,
-    borderBottomColor: '#ddd'
+    borderBottomColor: '#ddd',
+    borderBottomStyle: 'solid'
   },
   tableHeader: {
     backgroundColor: '#f0fdf4',
@@ -157,7 +159,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     fontSize: 10,
     borderRightWidth: 1,
-    borderRightColor: '#ddd'
+    borderRightColor: '#ddd',
+    borderRightStyle: 'solid'
   },
   tableCellLast: {
     borderRightWidth: 0
@@ -189,6 +192,7 @@ const styles = StyleSheet.create({
     right: 30,
     borderTopWidth: 1,
     borderTopColor: '#ddd',
+    borderTopStyle: 'solid',
     paddingTop: 10,
     fontSize: 8,
     color: '#999',
@@ -247,10 +251,20 @@ export const TravelOrderPDF: React.FC<TravelOrderPDFProps> = ({
           <View style={styles.headerRow}>
             <View>
               <View style={styles.logoContainer}>
-                <Image
-                  source={{ uri: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/logo-wahfalab.png` }}
-                  style={styles.logoImage}
-                />
+                {company.logo_url ? (
+                  <Image
+                    source={{ 
+                      uri: company.logo_url.startsWith('/') 
+                        ? `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}${company.logo_url}`
+                        : company.logo_url 
+                    }}
+                    style={styles.logoImage}
+                  />
+                ) : (
+                  <View style={{ width: 50, height: 50, backgroundColor: '#f0f0f0', borderRadius: 5, alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontSize: 24, color: '#059669' }}>🧪</Text>
+                  </View>
+                )}
                 <View>
                   <Text style={styles.logoText}>{company.company_name}</Text>
                   {company.address && (

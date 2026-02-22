@@ -28,12 +28,12 @@ interface TravelOrderData {
       tracking_code: string;
       quotation: {
         quotation_number: string;
-        total_amount: number;
+        total_amount?: number | null;
         profile: {
           full_name?: string | null;
           company_name?: string | null;
         };
-        items: Array<{
+        items?: Array<{
           service?: {
             name?: string | null;
           } | null;
@@ -42,7 +42,7 @@ interface TravelOrderData {
           } | null;
           qty: number;
           price_snapshot: number;
-        }>;
+        }> | null;
       };
     };
   };
@@ -130,13 +130,15 @@ const styles = StyleSheet.create({
   },
   table: {
     marginTop: 10,
-    border: 1,
-    borderColor: '#ddd'
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderStyle: 'solid'
   },
   tableRow: {
     flexDirection: 'row',
     borderBottomWidth: 1,
-    borderBottomColor: '#ddd'
+    borderBottomColor: '#ddd',
+    borderBottomStyle: 'solid'
   },
   tableHeader: {
     backgroundColor: '#f0fdf4',
@@ -148,7 +150,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     fontSize: 9,
     borderRightWidth: 1,
-    borderRightColor: '#ddd'
+    borderRightColor: '#ddd',
+    borderRightStyle: 'solid'
   },
   footer: {
     position: 'absolute',
@@ -157,6 +160,7 @@ const styles = StyleSheet.create({
     right: 30,
     borderTopWidth: 1,
     borderTopColor: '#ddd',
+    borderTopStyle: 'solid',
     paddingTop: 10,
     fontSize: 8,
     color: '#999',
@@ -180,6 +184,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     borderLeftWidth: 3,
     borderLeftColor: '#059669',
+    borderLeftStyle: 'solid',
     marginBottom: 15
   }
 });
@@ -194,15 +199,6 @@ const formatDate = (dateString: string) => {
   return date.toLocaleDateString('id-ID', options);
 };
 
-const formatCurrency = (amount: number | null | undefined) => {
-  if (!amount) return 'Rp 0';
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0
-  }).format(amount);
-};
-
 export const TravelOrderAttachment: React.FC<TravelOrderAttachmentProps> = ({ data, company }) => {
   return (
     <Document>
@@ -210,10 +206,20 @@ export const TravelOrderAttachment: React.FC<TravelOrderAttachmentProps> = ({ da
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.logoContainer}>
-            <Image
-              source={{ uri: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/logo-wahfalab.png` }}
-              style={styles.logoImage}
-            />
+            {company.logo_url ? (
+              <Image
+                source={{ 
+                  uri: company.logo_url.startsWith('/') 
+                    ? `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}${company.logo_url}`
+                    : company.logo_url 
+                }}
+                style={styles.logoImage}
+              />
+            ) : (
+              <View style={{ width: 50, height: 50, backgroundColor: '#f0f0f0', borderRadius: 5, alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ fontSize: 24, color: '#059669' }}>🧪</Text>
+              </View>
+            )}
             <View>
               <Text style={styles.logoText}>{company.company_name}</Text>
               {company.address && (
@@ -266,36 +272,32 @@ export const TravelOrderAttachment: React.FC<TravelOrderAttachmentProps> = ({ da
           <View style={styles.table}>
             <View style={[styles.tableRow, styles.tableHeader]}>
               <Text style={[styles.tableCell, { flex: 0.5, textAlign: 'center' }]}>No</Text>
-              <Text style={[styles.tableCell, { flex: 2 }]}>Layanan / Pengujian</Text>
-              <Text style={[styles.tableCell, { flex: 0.8, textAlign: 'center' }]}>Qty</Text>
-              <Text style={[styles.tableCell, { flex: 1, textAlign: 'right' }]}>Harga</Text>
-              <Text style={[styles.tableCell, { flex: 1, textAlign: 'right' }]}>Subtotal</Text>
+              <Text style={[styles.tableCell, { flex: 3 }]}>Layanan / Pengujian</Text>
+              <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }]}>Qty</Text>
             </View>
             {data.assignment.job_order.quotation.items && data.assignment.job_order.quotation.items.length > 0 ? (
-              data.assignment.job_order.quotation.items.map((item: any, index: number) => (
+              data.assignment.job_order.quotation.items.map((item, index) => (
                 <View key={index} style={styles.tableRow}>
                   <Text style={[styles.tableCell, { flex: 0.5, textAlign: 'center' }]}>{index + 1}</Text>
-                  <Text style={[styles.tableCell, { flex: 2 }]}>{item.service?.name || item.equipment?.name || 'Item'}</Text>
-                  <Text style={[styles.tableCell, { flex: 0.8, textAlign: 'center' }]}>{item.qty}</Text>
-                  <Text style={[styles.tableCell, { flex: 1, textAlign: 'right' }]}>{formatCurrency(item.price_snapshot)}</Text>
-                  <Text style={[styles.tableCell, { flex: 1, textAlign: 'right' }]}>{formatCurrency(item.price_snapshot * item.qty)}</Text>
+                  <Text style={[styles.tableCell, { flex: 3 }]}>
+                    {item.service?.name || item.equipment?.name || 'Item'}
+                  </Text>
+                  <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }]}>{item.qty || 1}</Text>
                 </View>
               ))
             ) : (
               <View style={styles.tableRow}>
-                <Text style={[styles.tableCell, { textAlign: 'center', padding: 10 }]}>Tidak ada item pengujian</Text>
+                <Text style={[styles.tableCell, { textAlign: 'center', padding: 10, flex: 4.5 }]}>Tidak ada item pengujian</Text>
               </View>
             )}
           </View>
         </View>
 
-        {/* Total Summary */}
-        <View style={{ marginTop: 20, ...styles.infoBox }}>
-          <View style={styles.row}>
-            <Text style={[styles.label, { flex: 3, textAlign: 'right', fontWeight: 'bold' }]}>TOTAL BIAYA PENGUJIAN</Text>
-            <Text style={styles.separator}>:</Text>
-            <Text style={{ ...styles.value, fontWeight: 'bold', color: '#059669', fontSize: 12 }}>
-              {formatCurrency(data.assignment.job_order.quotation.total_amount)}
+        {/* Footer - No Total Summary */}
+        <View style={{ marginTop: 20 }}>
+          <View style={styles.infoBox}>
+            <Text style={{ fontSize: 9, color: '#666', fontStyle: 'italic' }}>
+              Daftar ini merupakan lampiran dari Surat Tugas Perjalanan Dinas Nomor: {data.document_number}
             </Text>
           </View>
         </View>

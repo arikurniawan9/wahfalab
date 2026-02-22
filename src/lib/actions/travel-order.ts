@@ -52,7 +52,8 @@ export async function createTravelOrder(data: {
                           include: {
                             category_ref: true
                           }
-                        }
+                        },
+                        equipment: true
                       }
                     }
                   }
@@ -94,7 +95,8 @@ export async function getTravelOrderById(id: string) {
                           include: {
                             category_ref: true
                           }
-                        }
+                        },
+                        equipment: true
                       }
                     }
                   }
@@ -132,7 +134,8 @@ export async function getTravelOrderByAssignmentId(assignmentId: string) {
                           include: {
                             category_ref: true
                           }
-                        }
+                        },
+                        equipment: true
                       }
                     }
                   }

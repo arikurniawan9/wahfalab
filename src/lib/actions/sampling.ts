@@ -176,6 +176,39 @@ export async function updateSamplingPhotos(assignmentId: string, photoUrls: stri
   return { success: true }
 }
 
+export async function saveSamplingPhotosWithNames(assignmentId: string, photos: { url: string; name: string }[]) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { error: 'Unauthorized' }
+  }
+
+  // Verifikasi ownership
+  const assignment = await prisma.samplingAssignment.findUnique({
+    where: { id: assignmentId },
+    select: { field_officer_id: true }
+  })
+
+  if (!assignment || assignment.field_officer_id !== user.id) {
+    return { error: 'Forbidden' }
+  }
+
+  // Save photos dengan struktur { url, name }
+  await prisma.samplingAssignment.update({
+    where: { id: assignmentId },
+    data: {
+      photos: photos,
+      updated_at: new Date()
+    }
+  })
+
+  revalidatePath('/field')
+  revalidatePath('/field/assignments')
+
+  return { success: true }
+}
+
 export async function getAssignmentById(assignmentId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

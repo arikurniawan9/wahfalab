@@ -3,6 +3,8 @@
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { headers } from 'next/headers'
 
 export async function getJobOrders(page = 1, limit = 10, search = "") {
   const skip = (page - 1) * limit
@@ -79,16 +81,27 @@ export async function getJobOrders(page = 1, limit = 10, search = "") {
 }
 
 export async function updateJobStatus(id: string, status: any, notes?: string) {
-  await prisma.jobOrder.update({
-    where: { id },
-    data: { 
-      status,
-      notes: notes || null
-    }
-  })
-  revalidatePath('/operator/jobs')
-  revalidatePath('/dashboard') 
-  return { success: true }
+  try {
+    const headersList = await headers()
+    const userId = headersList.get('x-user-id') || 'anonymous'
+    
+    // Enforce rate limiting
+    enforceRateLimit(userId, 'update_job_status', RATE_LIMITS.UPDATE_JOB_STATUS.limit, RATE_LIMITS.UPDATE_JOB_STATUS.windowMs)
+    
+    await prisma.jobOrder.update({
+      where: { id },
+      data: {
+        status,
+        notes: notes || null
+      }
+    })
+    revalidatePath('/operator/jobs')
+    revalidatePath('/dashboard')
+    return { success: true }
+  } catch (error) {
+    console.error('Update Job Status Error:', error)
+    throw new Error('Gagal memperbarui status job')
+  }
 }
 
 export async function uploadCertificate(id: string, url: string) {

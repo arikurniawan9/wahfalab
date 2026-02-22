@@ -97,6 +97,9 @@ model Profile {
   approval_requests    ApprovalRequest[]
 
   @@map("profiles")
+  @@index([email])
+  @@index([role])
+  @@index([created_at])
 }
 
 model ServiceCategory {
@@ -122,6 +125,9 @@ model Service {
   items       QuotationItem[]
 
   @@map("services")
+  @@index([category_id])
+  @@index([name])
+  @@index([created_at])
 }
 
 model Quotation {
@@ -134,7 +140,7 @@ model Quotation {
   discount_amount  Decimal         @default(0) @db.Decimal
   use_tax          Boolean         @default(true)
   tax_amount       Decimal         @default(0) @db.Decimal
-  
+
   // Additional Costs
   perdiem_name     String?
   perdiem_price    Decimal         @default(0) @db.Decimal
@@ -142,7 +148,7 @@ model Quotation {
   transport_name   String?
   transport_price  Decimal         @default(0) @db.Decimal
   transport_qty    Int             @default(0)
-  
+
   total_amount     Decimal         @default(0) @db.Decimal
   status           QuotationStatus @default(draft)
   created_at       DateTime        @default(now())
@@ -150,6 +156,10 @@ model Quotation {
   job_orders       JobOrder[]
 
   @@map("quotations")
+  @@index([user_id])
+  @@index([status])
+  @@index([created_at])
+  @@index([quotation_number])
 }
 
 model QuotationItem {
@@ -179,6 +189,10 @@ model JobOrder {
   sampling_assignment SamplingAssignment?
 
   @@map("job_orders")
+  @@index([quotation_id])
+  @@index([status])
+  @@index([tracking_code])
+  @@index([created_at])
 }
 
 model SamplingAssignment {
@@ -198,6 +212,10 @@ model SamplingAssignment {
   travel_order     TravelOrder?
 
   @@map("sampling_assignments")
+  @@index([field_officer_id])
+  @@index([status])
+  @@index([job_order_id])
+  @@index([scheduled_date])
 }
 
 model TravelOrder {
@@ -219,6 +237,9 @@ model TravelOrder {
   updated_at          DateTime         @default(now())
 
   @@map("travel_orders")
+  @@index([assignment_id])
+  @@index([document_number])
+  @@index([created_at])
 }
 
 model CompanyProfile {
@@ -254,6 +275,9 @@ model Equipment {
   quotation_items   QuotationItem[]
 
   @@map("equipment")
+  @@index([name])
+  @@index([category])
+  @@index([availability_status])
 }
 
 model ApprovalRequest {
@@ -277,4 +301,27 @@ model ApprovalRequest {
   @@index([entity_type, entity_id])
   @@index([requester_id])
   @@index([status])
+  @@index([created_at])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  action      String   // create, update, delete, login, logout, etc.
+  entity_type String   // "quotation", "job_order", "user", etc.
+  entity_id   String?
+  user_id     String?
+  user_email  String?
+  user_role   String?
+  ip_address  String?
+  user_agent  String?
+  old_data    Json?    // Snapshot sebelum perubahan
+  new_data    Json?    // Snapshot setelah perubahan
+  metadata    Json?    // Additional context
+  created_at  DateTime @default(now())
+
+  @@map("audit_logs")
+  @@index([user_id])
+  @@index([entity_type, entity_id])
+  @@index([action])
+  @@index([created_at])
 }
