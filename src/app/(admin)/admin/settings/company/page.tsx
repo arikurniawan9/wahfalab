@@ -7,10 +7,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Upload, Trash2, Building2, MapPin, Phone, Mail, Globe, FileText } from "lucide-react";
+import { Upload, Trash2, Building2, MapPin, Phone, Mail, Globe, FileText, CheckCircle } from "lucide-react";
 import { getCompanyProfile, updateCompanyProfile, uploadCompanyLogo, deleteCompanyLogo } from "@/lib/actions/company";
 import Image from "next/image";
-import { ChemicalLoader } from "@/components/ui";
+import { LoadingOverlay, LoadingButton } from "@/components/ui";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export default function CompanySettingsPage() {
   const [loading, setLoading] = useState(false);
@@ -61,11 +67,15 @@ export default function CompanySettingsPage() {
       if (result.error) {
         toast.error(result.error);
       } else {
-        toast.success("Profil perusahaan berhasil diperbarui");
+        toast.success("Profil perusahaan berhasil diperbarui", {
+          description: "Data telah disimpan ke sistem"
+        });
         loadProfile();
       }
     } catch (error: any) {
-      toast.error(error.message || "Gagal menyimpan data");
+      toast.error(error.message || "Gagal menyimpan data", {
+        description: "Silakan coba lagi"
+      });
     } finally {
       setLoading(false);
     }
@@ -170,10 +180,24 @@ export default function CompanySettingsPage() {
                   </div>
                 </>
               ) : (
-                <div className="text-center p-4">
-                  <Building2 className="h-12 w-12 text-slate-300 mx-auto mb-2" />
-                  <p className="text-xs text-slate-500">Belum ada logo</p>
-                </div>
+                <>
+                  <Image
+                    src="/logo-wahfalab.png"
+                    alt="Default Company Logo"
+                    fill
+                    className="object-contain p-4"
+                  />
+                  <div className="absolute inset-0 bg-black/50 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="bg-white"
+                      onClick={handleDeleteLogo}
+                    >
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                    </Button>
+                  </div>
+                </>
               )}
             </div>
 
@@ -186,18 +210,16 @@ export default function CompanySettingsPage() {
                 id="logo-upload"
               />
               <label htmlFor="logo-upload">
-                <Button
+                <LoadingButton
                   type="button"
+                  className="w-full cursor-pointer border-2 border-dashed"
+                  loading={uploadingLogo}
+                  loadingText="Uploading..."
                   variant="outline"
-                  className="w-full cursor-pointer"
-                  disabled={uploadingLogo}
-                  asChild
                 >
-                  <span>
-                    <Upload className="h-4 w-4 mr-2" />
-                    {uploadingLogo ? "Uploading..." : "Upload Logo"}
-                  </span>
-                </Button>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Logo
+                </LoadingButton>
               </label>
               <p className="text-xs text-slate-500 text-center">
                 Format: PNG, JPG, SVG (Max 5MB)
@@ -324,19 +346,14 @@ export default function CompanySettingsPage() {
               </div>
 
               <div className="flex gap-3 pt-4 border-t">
-                <Button
+                <LoadingButton
                   type="submit"
                   className="bg-emerald-600 hover:bg-emerald-700 flex-1"
-                  disabled={loading}
+                  loading={loading}
+                  loadingText="Menyimpan..."
                 >
-                  {loading ? (
-                    <span className="flex items-center justify-center">
-                      <ChemicalLoader size="sm" />
-                    </span>
-                  ) : (
-                    "Simpan Perubahan"
-                  )}
-                </Button>
+                  Simpan Perubahan
+                </LoadingButton>
                 <Button
                   type="button"
                   variant="outline"
@@ -372,19 +389,13 @@ export default function CompanySettingsPage() {
         <CardContent>
           <div className="border rounded-lg p-6 bg-slate-50">
             <div className="flex items-start gap-4 mb-4">
-              {profile?.logo_url ? (
-                <Image
-                  src={profile.logo_url}
-                  alt="Logo Preview"
-                  width={80}
-                  height={80}
-                  className="object-contain"
-                />
-              ) : (
-                <div className="w-20 h-20 bg-slate-200 rounded flex items-center justify-center">
-                  <Building2 className="h-8 w-8 text-slate-400" />
-                </div>
-              )}
+              <Image
+                src={profile?.logo_url || "/logo-wahfalab.png"}
+                alt="Logo Preview"
+                width={80}
+                height={80}
+                className="object-contain"
+              />
               <div className="flex-1">
                 <h3 className="text-lg font-bold text-emerald-900">
                   {formData.company_name || "Nama Perusahaan"}
@@ -423,6 +434,14 @@ export default function CompanySettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Loading Overlay */}
+      <LoadingOverlay
+        isOpen={loading}
+        title="Menyimpan Data..."
+        description="Profil perusahaan sedang disimpan"
+        variant="default"
+      />
     </div>
   );
 }

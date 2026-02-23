@@ -27,11 +27,13 @@ export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
   // Tentukan apakah route terproteksi
-  const isProtectedRoute = 
-    path.startsWith('/admin') || 
-    path.startsWith('/operator') || 
-    path.startsWith('/field') || 
-    path.startsWith('/dashboard');
+  const isProtectedRoute =
+    path.startsWith('/admin') ||
+    path.startsWith('/operator') ||
+    path.startsWith('/field') ||
+    path.startsWith('/dashboard') ||
+    path.startsWith('/analyst') ||
+    path.startsWith('/reporting');
 
   // Jika tidak login dan mencoba akses area proteksi -> Ke Login
   if (!user && isProtectedRoute) {

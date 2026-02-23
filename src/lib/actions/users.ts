@@ -38,11 +38,15 @@ export async function getUsers(page = 1, limit = 10, search = "") {
 }
 
 export async function createOrUpdateUser(formData: any, id?: string) {
-  const { email, password, full_name, role = 'operator', company_name, address } = formData
+  if (!formData) {
+    throw new Error('Form data tidak valid')
+  }
+
+  const { email, password, full_name, role = 'operator', company_name, address, phone } = formData
 
   if (id) {
     // Update
-    const updateData: any = { full_name, role, company_name, address }
+    const updateData: any = { full_name, role, company_name, address, phone }
     
     if (email || password) {
       const authUpdate: any = {}
@@ -89,14 +93,15 @@ export async function createOrUpdateUser(formData: any, id?: string) {
     // Upsert Profile
     await (prisma.profile as any).upsert({
       where: { id: authUserId },
-      update: { full_name, role, email, company_name, address },
+      update: { full_name, role, email, company_name, address, phone },
       create: {
         id: authUserId,
         full_name,
         role,
         email,
         company_name,
-        address
+        address,
+        phone
       }
     })
   }

@@ -42,6 +42,7 @@ import {
 } from "lucide-react";
 import { ChemicalLoader } from "@/components/ui";
 import { getEquipment, createOrUpdateEquipment, deleteEquipment, deleteManyEquipment } from "@/lib/actions/equipment";
+import { getCategories, createOrUpdateCategory } from "@/lib/actions/categories";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import {
@@ -98,14 +99,23 @@ export default function EquipmentPage() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [categories, setCategories] = useState<any[]>([]);
+  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [creatingCategory, setCreatingCategory] = useState(false);
+  const [showCategorySubmitModal, setShowCategorySubmitModal] = useState(false);
 
   const { register, handleSubmit, reset, setValue, watch } = useForm();
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const result = await getEquipment(page, limit, search);
-      setData(result);
+      const [equipmentResult, categoriesResult] = await Promise.all([
+        getEquipment(page, limit, search),
+        getCategories()
+      ]);
+      setData(equipmentResult);
+      setCategories(categoriesResult.items || []);
       setSelectedIds([]);
     } catch (error: any) {
       toast.error("Gagal memuat data alat", {
@@ -151,12 +161,53 @@ export default function EquipmentPage() {
     setValue("category", item.category);
     setValue("specification", item.specification);
     setValue("price", Number(item.price));
-    setValue("unit", item.unit);
     setValue("availability_status", item.availability_status);
     setValue("quantity", item.quantity);
     setValue("description", item.description);
     setValue("image_url", item.image_url);
     setIsDialogOpen(true);
+  };
+
+  const handleCreateCategory = async () => {
+    if (!newCategoryName.trim()) {
+      toast.error("Nama kategori tidak boleh kosong");
+      return;
+    }
+
+    const trimmedName = newCategoryName.trim();
+    
+    // Cek apakah kategori sudah ada
+    const existingCategory = categories.find(
+      (cat: any) => cat.name.toLowerCase() === trimmedName.toLowerCase()
+    );
+
+    if (existingCategory) {
+      toast.error("Kategori sudah ada", {
+        description: `"${trimmedName}" sudah terdaftar dalam katalog`
+      });
+      return;
+    }
+
+    setShowCategorySubmitModal(true);
+    setCreatingCategory(true);
+    try {
+      await createOrUpdateCategory({ name: trimmedName });
+      toast.success("Kategori berhasil dibuat", {
+        description: `"${trimmedName}" telah ditambahkan`
+      });
+      setNewCategoryName("");
+      setIsCategoryDialogOpen(false);
+      // Reload categories
+      const categoriesResult = await getCategories();
+      setCategories(categoriesResult.items || []);
+      // Set the new category as selected
+      setValue("category", trimmedName);
+    } catch (error: any) {
+      toast.error(error.message || "Gagal membuat kategori");
+    } finally {
+      setCreatingCategory(false);
+      setShowCategorySubmitModal(false);
+    }
   };
 
   const handleDelete = (id: string) => {
@@ -237,13 +288,12 @@ export default function EquipmentPage() {
 
   // Export CSV
   const handleExport = () => {
-    const headers = ["Nama Alat", "Kategori", "Spesifikasi", "Harga", "Unit", "Status", "Jumlah", "Deskripsi"];
+    const headers = ["Nama Alat", "Kategori", "Spesifikasi", "Harga", "Status", "Jumlah", "Deskripsi"];
     const csvData = data.items.map((item: any) => [
       item.name,
       item.category,
       item.specification,
       item.price,
-      item.unit,
       item.availability_status,
       item.quantity,
       item.description || ""
@@ -279,10 +329,9 @@ export default function EquipmentPage() {
           category: values[1],
           specification: values[2],
           price: parseFloat(values[3]),
-          unit: values[4] || "unit",
-          availability_status: values[5] || "available",
-          quantity: parseInt(values[6]) || 1,
-          description: values[7] || ""
+          availability_status: values[4] || "available",
+          quantity: parseInt(values[5]) || 1,
+          description: values[6] || ""
         });
       }
       
@@ -347,32 +396,75 @@ export default function EquipmentPage() {
 
   return (
     <div className="p-4 md:p-10 pb-24 md:pb-10">
-      {/* Header dengan Actions */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-bold text-emerald-900 tracking-tight">Sewa Alat</h1>
-          <p className="text-slate-500 text-sm">Kelola katalog alat dan peralatan laboratorium yang tersedia untuk disewa.</p>
+      {/* Header */}
+      <div className="mb-10">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-6">
+          <div className="space-y-1">
+            <h1 className="text-3xl font-bold text-emerald-900 tracking-tight">Sewa Alat</h1>
+            <p className="text-slate-500 text-sm">Kelola katalog alat dan peralatan laboratorium yang tersedia untuk disewa.</p>
+          </div>
         </div>
 
-        <div className="flex gap-2 flex-wrap w-full md:w-auto">
-          {selectedIds.length > 0 && (
-            <Button variant="destructive" onClick={handleBulkDelete} className="animate-in fade-in zoom-in duration-200 cursor-pointer">
-              <Trash2 className="mr-2 h-4 w-4" /> Hapus ({selectedIds.length})
-            </Button>
-          )}
-          <Button variant="outline" onClick={handleExport} className="cursor-pointer">
-            <Download className="mr-2 h-4 w-4" /> Export
-          </Button>
-          <Button variant="outline" onClick={() => setIsImportDialogOpen(true)} className="cursor-pointer">
-            <Upload className="mr-2 h-4 w-4" /> Import
-          </Button>
-          <Button onClick={() => {
-            reset();
-            setEditingItem(null);
-            setIsDialogOpen(true);
-          }} className="bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100 cursor-pointer flex-1 md:flex-none">
-            <Plus className="mr-2 h-4 w-4" /> Tambah Alat
-          </Button>
+        {/* Search & Actions Bar */}
+        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+            <div className="relative flex-1 w-full md:max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-500" />
+              <Input
+                placeholder="Cari nama alat, kategori, atau deskripsi..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                className="pl-10 h-11 focus-visible:ring-emerald-500 rounded-lg"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+              {selectedIds.length > 0 && (
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  onClick={handleBulkDelete}
+                  className="h-11 w-11 rounded-lg animate-in fade-in zoom-in duration-200 cursor-pointer shadow-sm"
+                  title={`Hapus ${selectedIds.length} alat terpilih`}
+                >
+                  <Trash2 className="h-5 w-5" />
+                  <span className="sr-only">Hapus ({selectedIds.length})</span>
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleExport}
+                className="h-11 w-11 rounded-lg cursor-pointer shadow-sm hover:bg-emerald-50 hover:border-emerald-200"
+                title="Export CSV"
+              >
+                <Download className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setIsImportDialogOpen(true)}
+                className="h-11 w-11 rounded-lg cursor-pointer shadow-sm hover:bg-emerald-50 hover:border-emerald-200"
+                title="Import CSV"
+              >
+                <Upload className="h-5 w-5" />
+              </Button>
+              <Button
+                onClick={() => {
+                  reset();
+                  setEditingItem(null);
+                  setIsDialogOpen(true);
+                }}
+                className="h-11 w-11 rounded-lg cursor-pointer shadow-lg shadow-emerald-100 bg-emerald-600 hover:bg-emerald-700"
+                title="Tambah Alat"
+              >
+                <Plus className="h-5 w-5" />
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -423,21 +515,6 @@ export default function EquipmentPage() {
 
       {/* Table */}
       <div className="bg-white rounded-3xl shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
-        <div className="p-5 border-b bg-emerald-50/10 flex items-center justify-between gap-4">
-          <div className="relative max-w-sm flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
-            <Input
-              placeholder="Cari nama alat, kategori, atau deskripsi..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="pl-10 focus-visible:ring-emerald-500 rounded-xl"
-            />
-          </div>
-        </div>
-
         {/* Desktop View */}
         <div className="hidden md:block">
           <Table>
@@ -638,7 +715,6 @@ export default function EquipmentPage() {
                       <p className="text-sm font-bold text-emerald-700">
                         Rp {Number(item.price).toLocaleString("id-ID")}
                       </p>
-                      <p className="text-[10px] text-slate-400">/{item.unit || "unit"}</p>
                     </div>
                   </div>
                   <div className="flex justify-end gap-1 pt-2" onClick={(e) => e.stopPropagation()}>
@@ -717,21 +793,40 @@ export default function EquipmentPage() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-semibold">Kategori</label>
-                <Input {...register("category")} placeholder="Contoh: Instrumentasi" className="focus-visible:ring-emerald-500" />
+                <div className="flex gap-2">
+                  <Select onValueChange={(val) => setValue("category", val)} defaultValue={watch("category")}>
+                    <SelectTrigger className="flex-1 cursor-pointer focus:ring-emerald-500">
+                      <SelectValue placeholder="Pilih Kategori" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((cat: any) => (
+                        <SelectItem key={cat.id} value={cat.name} className="cursor-pointer">
+                          {cat.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setIsCategoryDialogOpen(true)}
+                    className="h-10 w-10 cursor-pointer hover:bg-emerald-50 hover:border-emerald-200"
+                    title="Buat Kategori Baru"
+                  >
+                    <Plus className="h-5 w-5" />
+                  </Button>
+                </div>
               </div>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold">Spesifikasi</label>
               <Input {...register("specification")} placeholder="Contoh: GC-2010 Plus, Shimadzu" className="focus-visible:ring-emerald-500" />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-semibold">Harga Sewa (Rp)</label>
                 <Input {...register("price", { valueAsNumber: true })} type="number" placeholder="0" required className="focus-visible:ring-emerald-500" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold">Satuan</label>
-                <Input {...register("unit")} placeholder="Contoh: hari" className="focus-visible:ring-emerald-500" />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-semibold">Jumlah</label>
@@ -815,14 +910,14 @@ export default function EquipmentPage() {
               Import Data CSV
             </DialogTitle>
             <DialogDescription>
-              Paste data CSV dengan format: Nama, Kategori, Spesifikasi, Harga, Unit, Status, Jumlah, Deskripsi
+              Paste data CSV dengan format: Nama, Kategori, Spesifikasi, Harga, Status, Jumlah, Deskripsi
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="bg-slate-50 p-3 rounded-lg text-xs font-mono">
               <p className="font-semibold mb-1">Format:</p>
-              <p>Nama,Kategori,Spesifikasi,Harga,Unit,Status,Jumlah,Deskripsi</p>
-              <p className="text-slate-500">Gas Chromatograph,Instrumentasi,GC-2010 Plus,500000,hari,available,1,Alat untuk...</p>
+              <p>Nama,Kategori,Spesifikasi,Harga,Status,Jumlah,Deskripsi</p>
+              <p className="text-slate-500">Gas Chromatograph,Instrumentasi,GC-2010 Plus,500000,available,1,Alat untuk...</p>
             </div>
             <textarea
               className="w-full h-40 p-3 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
@@ -850,17 +945,90 @@ export default function EquipmentPage() {
       </Dialog>
 
       {/* Submit Loading Modal */}
-      {showSubmitModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] flex items-center justify-center">
-          <div className="bg-white rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-200">
-            <div className="relative">
-              <div className="w-16 h-16 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin"></div>
+      <Dialog open={showSubmitModal} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-center">
+              <div className="flex flex-col items-center gap-4 py-4">
+                <ChemicalLoader size="lg" />
+                <div className="text-center">
+                  <p className="text-lg font-semibold text-emerald-900">Menyimpan Data</p>
+                  <p className="text-sm text-slate-500 mt-1">Mohon tunggu sebentar</p>
+                </div>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Add Category Dialog */}
+      <Dialog open={isCategoryDialogOpen} onOpenChange={(open) => {
+        setIsCategoryDialogOpen(open);
+        if (!open) {
+          setNewCategoryName("");
+        }
+      }}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-emerald-900 flex items-center gap-2">
+              <Tag className="h-5 w-5" />
+              Buat Kategori Baru
+            </DialogTitle>
+            <DialogDescription>
+              Tambahkan kategori baru untuk alat dan peralatan laboratorium.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-semibold">Nama Kategori</label>
+              <Input
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder="Contoh: Instrumentasi, Spektrofotometri, dll"
+                className="focus-visible:ring-emerald-500"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleCreateCategory();
+                  }
+                }}
+              />
             </div>
-            <p className="text-lg font-semibold text-slate-800">Menyimpan Data...</p>
-            <p className="text-sm text-slate-500">Mohon tunggu sebentar</p>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setIsCategoryDialogOpen(false)}
+                className="flex-1 cursor-pointer"
+              >
+                Batal
+              </Button>
+              <Button
+                onClick={handleCreateCategory}
+                disabled={creatingCategory || !newCategoryName.trim()}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
+              >
+                <Plus className="mr-2 h-4 w-4" /> Buat Kategori
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Loading Modal for Category */}
+      <Dialog open={showCategorySubmitModal} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-center">
+              <div className="flex flex-col items-center gap-4 py-4">
+                <ChemicalLoader size="lg" />
+                <div className="text-center">
+                  <p className="text-lg font-semibold text-emerald-900">Menyimpan Kategori</p>
+                  <p className="text-sm text-slate-500 mt-1">Kategori baru sedang dibuat...</p>
+                </div>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -2,20 +2,22 @@ import React from "react";
 
 export interface ChemicalLoaderProps {
   className?: string;
-  size?: "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg";
 }
 
-export function ChemicalLoader({ className = "", size = "md" }: ChemicalLoaderProps) {
+export function ChemicalLoader({ className = "", size = "sm" }: ChemicalLoaderProps) {
   const sizeClasses = {
-    sm: "h-4 w-4",
-    md: "h-6 w-6",
-    lg: "h-8 w-8",
+    xs: "h-2 w-2",
+    sm: "h-3 w-3",
+    md: "h-5 w-5",
+    lg: "h-7 w-7",
   };
 
   const containerSizeClasses = {
-    sm: "h-16",
-    md: "h-24",
-    lg: "h-32",
+    xs: "h-10",
+    sm: "h-12",
+    md: "h-16",
+    lg: "h-20",
   };
 
   return (

@@ -46,6 +46,8 @@ import { createSamplingAssignment } from "@/lib/actions/sampling";
 import { createTravelOrder } from "@/lib/actions/travel-order";
 import { getUsers } from "@/lib/actions/users";
 import { getProfile } from "@/lib/actions/auth";
+import { assignAnalystToJob } from "@/lib/actions/analyst";
+import { assignReportingToJob } from "@/lib/actions/reporting";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
@@ -72,8 +74,9 @@ const statusOptions = [
   { value: "all", label: "Semua Status", color: "bg-slate-100 text-slate-700" },
   { value: "scheduled", label: "Dijadwalkan", color: "bg-slate-100 text-slate-600", icon: Clock },
   { value: "sampling", label: "Sampling", color: "bg-blue-100 text-blue-700", icon: Truck },
-  { value: "analysis", label: "Analisis", color: "bg-amber-100 text-amber-700", icon: TestTube },
-  { value: "reporting", label: "Pelaporan", color: "bg-indigo-100 text-indigo-700", icon: FileText },
+  { value: "analysis", label: "Analisis", color: "bg-violet-100 text-violet-700", icon: TestTube },
+  { value: "analysis_done", label: "Selesai Analisis", color: "bg-emerald-100 text-emerald-700", icon: CheckCircle },
+  { value: "reporting", label: "Pelaporan", color: "bg-amber-100 text-amber-700", icon: FileText },
   { value: "completed", label: "Selesai", color: "bg-emerald-100 text-emerald-700", icon: CheckCircle }
 ];
 

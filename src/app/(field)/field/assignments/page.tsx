@@ -30,23 +30,28 @@ export default function AssignmentsPage() {
   const [search, setSearch] = useState("");
   const [pagination, setPagination] = useState({ page: 1, total: 0, pages: 0 });
 
+  const loadAssignments = async () => {
+    setLoading(true);
+    try {
+      const data = await getMySamplingAssignments(pagination.page, 10, statusFilter);
+      if (data.items) {
+        setAssignments(data.items);
+        setPagination({
+          page: pagination.page,
+          total: data.total || 0,
+          pages: data.pages || 0
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load assignments:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadAssignments();
   }, [statusFilter, pagination.page]);
-
-  async function loadAssignments() {
-    setLoading(true);
-    const data = await getMySamplingAssignments(pagination.page, 10, statusFilter);
-    if (data.items) {
-      setAssignments(data.items);
-      setPagination({
-        page: pagination.page,
-        total: data.total || 0,
-        pages: data.pages || 0
-      });
-    }
-    setLoading(false);
-  }
 
   const filteredAssignments = assignments.filter((a: any) => {
     if (!search) return true;

@@ -14,13 +14,16 @@ enum UserRole {
   client
   field_officer
   finance
+  analyst      // Laboratorium analis - melakukan analisis sampel
+  reporting    // Staff reporting - menerbitkan laporan hasil uji
 }
 
 enum JobStatus {
   scheduled
   sampling
-  analysis
-  reporting
+  analysis        // Sedang dianalisis oleh analis
+  analysis_done   // Analisis selesai, menunggu reporting
+  reporting       // Sedang dibuat laporan oleh staff reporting
   completed
   pending_payment
   paid
@@ -94,10 +97,16 @@ model Profile {
   role                 UserRole            @default(client)
   company_name         String?
   address              String?
+  phone                String?
   created_at           DateTime            @default(now())
   quotations           Quotation[]
   sampling_assignments SamplingAssignment[]
   approval_requests    ApprovalRequest[]
+  
+  // Analyst & Reporting Relations
+  analyst_jobs         JobOrder[]          @relation("AnalystJobs")
+  reporting_jobs       JobOrder[]          @relation("ReportingJobs")
+  lab_analyses         LabAnalysis[]
 
   @@map("profiles")
   @@index([email])
@@ -123,6 +132,8 @@ model Service {
   price       Decimal         @db.Decimal
   parameters  Json?
   regulation  String?
+  regulation_id String?         // Relasi ke Regulation
+  regulation_ref Regulation?    @relation(fields: [regulation_id], references: [id])
   unit        String?
   created_at  DateTime        @default(now())
   items       QuotationItem[]
@@ -131,6 +142,7 @@ model Service {
   @@index([category_id])
   @@index([name])
   @@index([created_at])
+  @@index([regulation_id])
 }
 
 model Quotation {
@@ -188,8 +200,19 @@ model JobOrder {
   status              JobStatus           @default(scheduled)
   notes               String?             // Added for progress remarks
   certificate_url     String?
+  
+  // Analyst & Reporting Tracking
+  analyst_id          String?             // Analis yang menangani
+  analyst             Profile?            @relation("AnalystJobs", fields: [analyst_id], references: [id])
+  reporting_id        String?             // Staff reporting yang menangani
+  reporting           Profile?            @relation("ReportingJobs", fields: [reporting_id], references: [id])
+  analysis_started_at DateTime?           // Waktu analisis dimulai
+  analysis_done_at    DateTime?           // Waktu analisis selesai
+  reporting_done_at   DateTime?           // Waktu laporan selesai
+  
   created_at          DateTime            @default(now())
   sampling_assignment SamplingAssignment?
+  lab_analysis        LabAnalysis?        // Hasil analisis laboratorium
   payment             Payment?
 
   @@map("job_orders")
@@ -197,6 +220,8 @@ model JobOrder {
   @@index([status])
   @@index([tracking_code])
   @@index([created_at])
+  @@index([analyst_id])
+  @@index([reporting_id])
 }
 
 model SamplingAssignment {
@@ -261,6 +286,78 @@ model CompanyProfile {
   updated_at      DateTime @default(now())
 
   @@map("company_profiles")
+}
+
+// Hasil Analisis Laboratorium
+model LabAnalysis {
+  id                  String   @id @default(uuid())
+  job_order_id        String   @unique
+  job_order           JobOrder @relation(fields: [job_order_id], references: [id], onDelete: Cascade)
+  analyst_id          String
+  analyst             Profile  @relation(fields: [analyst_id], references: [id])
+  
+  // Hasil Analisis
+  test_results        Json?    // Hasil uji per parameter: [{parameter, result, unit, method, limit}]
+  analysis_notes      String?  // Catatan analis
+  equipment_used      Json?    // Peralatan yang digunakan
+  sample_condition    String?  // Kondisi sampel saat diterima
+  
+  // Dokumen PDF
+  result_pdf_url      String?  // URL PDF hasil analisis
+  raw_data_url        String?  // URL data mentah (foto, dll)
+  
+  // Timeline
+  analysis_started_at DateTime?
+  analysis_completed_at DateTime?
+  
+  created_at          DateTime @default(now())
+  updated_at          DateTime @default(now())
+
+  @@map("lab_analyses")
+  @@index([job_order_id])
+  @@index([analyst_id])
+}
+
+// Regulasi dan Standar Layanan
+model Regulation {
+  id                  String   @id @default(uuid())
+  name                String   @unique  // Nama regulasi (SNI, ISO, dll)
+  code                String?  // Kode regulasi
+  description         String?  // Deskripsi regulasi
+  published_date      DateTime?  // Tanggal publikasi
+  effective_date      DateTime?  // Tanggal efektif
+  status              String   @default("active")  // active, inactive, draft
+  parameters          RegulationParameter[]
+  services            Service[]
+  created_at          DateTime @default(now())
+  updated_at          DateTime @default(now())
+
+  @@map("regulations")
+  @@index([name])
+  @@index([status])
+}
+
+// Parameter dalam Regulasi
+model RegulationParameter {
+  id                  String   @id @default(uuid())
+  regulation_id       String
+  regulation          Regulation @relation(fields: [regulation_id], references: [id], onDelete: Cascade)
+  parameter_name      String   // Nama parameter uji
+  method              String?  // Metode uji
+  unit                String?  // Satuan
+  limit_min           String?  // Batas minimum
+  limit_max           String?  // Batas maksimum
+  limit_value         String?  // Nilai batas (untuk single value)
+  requirements        String?  // Persyaratan
+  sequence            Int      @default(0)  // Urutan parameter
+  is_mandatory        Boolean  @default(true)  // Wajib atau tidak
+  notes               String?  // Catatan
+  created_at          DateTime @default(now())
+  updated_at          DateTime @default(now())
+
+  @@map("regulation_parameters")
+  @@index([regulation_id])
+  @@index([parameter_name])
 }
 
 model Equipment {

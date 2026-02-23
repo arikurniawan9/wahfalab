@@ -112,10 +112,79 @@ export async function logout() {
 export async function getProfile() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) return null
 
   return await prisma.profile.findUnique({
     where: { id: user.id }
   })
+}
+
+export async function updateProfile(formData: { full_name: string; email: string }) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { error: "Unauthorized" }
+  }
+
+  try {
+    // Update profile in Prisma
+    await prisma.profile.update({
+      where: { id: user.id },
+      data: {
+        full_name: formData.full_name,
+        email: formData.email,
+      }
+    })
+
+    // Update user metadata in Supabase Auth
+    await supabase.auth.updateUser({
+      email: formData.email,
+      data: {
+        full_name: formData.full_name,
+      }
+    })
+
+    return { success: true }
+  } catch (error: any) {
+    return { error: error.message || "Gagal update profil" }
+  }
+}
+
+export async function updatePassword(formData: { 
+  current_password: string; 
+  new_password: string; 
+}) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { error: "Unauthorized" }
+  }
+
+  try {
+    // Sign in with current password to verify
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: user.email!,
+      password: formData.current_password,
+    })
+
+    if (signInError) {
+      return { error: "Password saat ini salah" }
+    }
+
+    // Update password
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: formData.new_password,
+    })
+
+    if (updateError) {
+      return { error: updateError.message }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    return { error: error.message || "Gagal mengubah password" }
+  }
 }

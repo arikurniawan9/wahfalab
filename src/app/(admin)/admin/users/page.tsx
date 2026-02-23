@@ -35,11 +35,15 @@ import {
   Download,
   Upload,
   User,
-  Shield,
   Users as UsersIcon,
-  DollarSign
+  DollarSign,
+  FlaskConical,
+  FileText,
+  Users,
+  Shield
 } from "lucide-react";
 import { ChemicalLoader } from "@/components/ui";
+import { LoadingOverlay, LoadingButton, TableSkeleton, EmptyState } from "@/components/ui";
 import { getUsers, createOrUpdateUser, deleteUser, deleteManyUsers } from "@/lib/actions/users";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -75,7 +79,10 @@ import { cn } from "@/lib/utils";
 const roleOptions = [
   { value: "admin", label: "Administrator", color: "bg-red-100 text-red-700 border-red-200", icon: Shield },
   { value: "operator", label: "Petugas / Operator", color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: UsersIcon },
+  { value: "client", label: "Customer / Client", color: "bg-slate-100 text-slate-700 border-slate-200", icon: User },
   { value: "field_officer", label: "Petugas Lapangan", color: "bg-blue-100 text-blue-700 border-blue-200", icon: User },
+  { value: "analyst", label: "Analis Laboratorium", color: "bg-violet-100 text-violet-700 border-violet-200", icon: FlaskConical },
+  { value: "reporting", label: "Staff Reporting", color: "bg-amber-100 text-amber-700 border-amber-200", icon: FileText },
   { value: "finance", label: "Bagian Keuangan", color: "bg-purple-100 text-purple-700 border-purple-200", icon: DollarSign }
 ];
 
@@ -89,7 +96,6 @@ export default function UserManagementPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
@@ -116,13 +122,15 @@ export default function UserManagementPage() {
         getUsers(page, limit, search),
         supabase.auth.getUser()
       ]);
-      
+
       // Filter out client role - only show staff users
+      const filteredUsers = result.users.filter((u: any) => u.role !== 'client');
       const filteredResult = {
         ...result,
-        users: result.users.filter((u: any) => u.role !== 'client')
+        users: filteredUsers,
+        total: filteredUsers.length // Update total to exclude customers
       };
-      
+
       setData(filteredResult);
       setCurrentUser(user);
       setSelectedIds([]);
@@ -143,7 +151,6 @@ export default function UserManagementPage() {
   }, [page, limit, search]);
 
   const onSubmit = async (formData: any) => {
-    setShowSubmitModal(true);
     setSubmitting(true);
     try {
       await createOrUpdateUser(formData, editingUser?.id);
@@ -160,7 +167,6 @@ export default function UserManagementPage() {
       });
     } finally {
       setSubmitting(false);
-      setShowSubmitModal(false);
     }
   };
 
@@ -333,91 +339,31 @@ export default function UserManagementPage() {
     return <Icon className="h-3 w-3 mr-1" />;
   };
 
+  const getRoleLabel = (role: string) => {
+    const option = roleOptions.find(opt => opt.value === role);
+    return option?.label || role;
+  };
+
   return (
     <div className="p-4 md:p-10 pb-24 md:pb-10">
-      {/* Header dengan Actions */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-bold text-emerald-900 tracking-tight">Manajemen Pengguna</h1>
-          <p className="text-slate-500 text-sm">Kelola data admin, petugas, dan pelanggan laboratorium.</p>
-        </div>
-
-        <div className="flex gap-2 flex-wrap w-full md:w-auto">
-          {selectedIds.length > 0 && (
-            <Button
-              variant="destructive"
-              onClick={handleBulkDelete}
-              className="animate-in fade-in zoom-in duration-200 cursor-pointer"
-            >
-              <Trash2 className="mr-2 h-4 w-4" /> Hapus ({selectedIds.length})
-            </Button>
-          )}
-          <Button variant="outline" onClick={handleExport} className="cursor-pointer">
-            <Download className="mr-2 h-4 w-4" /> Export
-          </Button>
-          <Button variant="outline" onClick={() => setIsImportDialogOpen(true)} className="cursor-pointer">
-            <Upload className="mr-2 h-4 w-4" /> Import
-          </Button>
-          <Button onClick={() => {
-            reset();
-            setEditingUser(null);
-            setIsDialogOpen(true);
-          }} className="bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100 cursor-pointer flex-1 md:flex-none">
-            <Plus className="mr-2 h-4 w-4" /> Tambah User
-          </Button>
+      {/* Header */}
+      <div className="mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-emerald-900 font-[family-name:var(--font-montserrat)] uppercase flex items-center gap-3">
+            <Users className="h-6 w-6 text-emerald-600" />
+            Manajemen Pengguna
+          </h1>
+          <p className="text-slate-500 text-sm mt-1">
+            Kelola data admin, petugas, dan pelanggan laboratorium
+          </p>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6">
-        <div className="flex flex-wrap gap-4 items-center justify-between">
-          <div className="flex flex-wrap gap-2">
-            <Select value={filterRole} onValueChange={setFilterRole}>
-              <SelectTrigger className="w-40 cursor-pointer">
-                <SelectValue placeholder="Filter Role" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Role</SelectItem>
-                {roleOptions.map(opt => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-40 cursor-pointer">
-                <SelectValue placeholder="Sort By" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="name">Nama</SelectItem>
-                <SelectItem value="email">Email</SelectItem>
-                <SelectItem value="created_at">Tanggal</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-              className="cursor-pointer"
-            >
-              <svg className={`h-4 w-4 transition-transform ${sortOrder === "asc" ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </Button>
-          </div>
-
-          <div className="text-sm text-slate-500">
-            {filteredUsers.length} dari {data.total} pengguna
-          </div>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="bg-white rounded-3xl shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
-        <div className="p-5 border-b bg-emerald-50/10 flex items-center justify-between gap-4">
-          <div className="relative max-w-sm flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
+      {/* Filters & Actions Bar */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm mb-6">
+        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+          <div className="relative flex-1 w-full md:max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-500" />
             <Input
               placeholder="Cari nama atau email..."
               value={search}
@@ -425,10 +371,59 @@ export default function UserManagementPage() {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="pl-10 focus-visible:ring-emerald-500 rounded-xl"
+              className="pl-10 h-11 focus-visible:ring-emerald-500 rounded-lg"
             />
           </div>
+
+          <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+            <Button
+              onClick={() => {
+                reset();
+                setEditingUser(null);
+                setIsDialogOpen(true);
+              }}
+              size="icon"
+              className="bg-emerald-600 hover:bg-emerald-700 h-11 w-11 cursor-pointer shadow-md hover:shadow-lg hover:scale-105 transition-all duration-200"
+              title="Tambah User"
+            >
+              <Plus className="h-5 w-5" />
+            </Button>
+            {selectedIds.length > 0 && (
+              <Button
+                variant="destructive"
+                size="icon"
+                onClick={handleBulkDelete}
+                className="h-11 w-11 rounded-lg cursor-pointer shadow-sm hover:shadow-md hover:scale-105 transition-all duration-200 animate-in fade-in zoom-in duration-200"
+                title={`Hapus ${selectedIds.length} user terpilih`}
+              >
+                <Trash2 className="h-5 w-5" />
+                <span className="sr-only">Hapus ({selectedIds.length})</span>
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleExport}
+              className="h-11 w-11 rounded-lg cursor-pointer shadow-sm hover:bg-emerald-50 hover:border-emerald-200 hover:scale-105 transition-all duration-200"
+              title="Export CSV"
+            >
+              <Download className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setIsImportDialogOpen(true)}
+              className="h-11 w-11 rounded-lg cursor-pointer shadow-sm hover:bg-emerald-50 hover:border-emerald-200 hover:scale-105 transition-all duration-200"
+              title="Import CSV"
+            >
+              <Upload className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-3xl shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
 
         {/* Desktop View */}
         <div className="hidden md:block">
@@ -452,30 +447,24 @@ export default function UserManagementPage() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-20">
-                    <div className="flex justify-center">
-                      <ChemicalLoader />
-                    </div>
-                    <p className="mt-4 text-sm text-slate-500">Memuat data...</p>
+                    <TableSkeleton rows={5} />
                   </TableCell>
                 </TableRow>
               ) : filteredUsers.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-20">
-                    <div className="flex flex-col items-center gap-4">
-                      <div className="h-20 w-20 rounded-full bg-emerald-50 flex items-center justify-center">
-                        <User className="h-10 w-10 text-emerald-300" />
-                      </div>
-                      <div className="text-center">
-                        <p className="text-lg font-semibold text-slate-700">Tidak ada data user</p>
-                        <p className="text-sm text-slate-500 mt-1">Mulai dengan menambahkan user pertama Anda</p>
-                      </div>
-                      <Button
-                        onClick={() => setIsDialogOpen(true)}
-                        className="bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
-                      >
-                        <Plus className="mr-2 h-4 w-4" /> Tambah User
-                      </Button>
-                    </div>
+                    <EmptyState
+                      title="Tidak ada data user"
+                      description="Mulai dengan menambahkan user pertama Anda"
+                      action={
+                        <Button
+                          onClick={() => setIsDialogOpen(true)}
+                          className="bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
+                        >
+                          <Plus className="mr-2 h-4 w-4" /> Tambah User
+                        </Button>
+                      }
+                    />
                   </TableCell>
                 </TableRow>
               ) : (
@@ -509,7 +498,7 @@ export default function UserManagementPage() {
                       <TableCell className="px-4">
                         <Badge variant="outline" className={cn("capitalize", getRoleBadgeColor(user.role))}>
                           {getRoleIcon(user.role)}
-                          {user.role === 'field_officer' ? 'Petugas Lapangan' : user.role}
+                          {getRoleLabel(user.role)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-slate-500 text-sm px-4">
@@ -607,7 +596,7 @@ export default function UserManagementPage() {
                     </div>
                     <Badge variant="outline" className={cn("capitalize", getRoleBadgeColor(user.role))}>
                       {getRoleIcon(user.role)}
-                      {user.role === 'field_officer' ? 'Petugas Lapangan' : user.role}
+                      {getRoleLabel(user.role)}
                     </Badge>
                   </div>
                   <div className="flex justify-between items-center pt-2">
@@ -734,17 +723,23 @@ export default function UserManagementPage() {
                   <SelectValue placeholder="Pilih Role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin" className="cursor-pointer">Administrator</SelectItem>
-                  <SelectItem value="operator" className="cursor-pointer">Petugas / Operator</SelectItem>
-                  <SelectItem value="field_officer" className="cursor-pointer">Petugas Lapangan</SelectItem>
-                  <SelectItem value="finance" className="cursor-pointer">Bagian Keuangan</SelectItem>
+                  {roleOptions.filter(opt => opt.value !== 'client').map((option) => (
+                    <SelectItem key={option.value} value={option.value} className="cursor-pointer">
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <DialogFooter className="pt-4">
-              <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 cursor-pointer" disabled={submitting}>
+              <LoadingButton
+                type="submit"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
+                loading={submitting}
+                loadingText="Menyimpan..."
+              >
                 {editingUser ? "Simpan Perubahan" : "Buat User"}
-              </Button>
+              </LoadingButton>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -830,18 +825,13 @@ export default function UserManagementPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Submit Loading Modal */}
-      {showSubmitModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] flex items-center justify-center">
-          <div className="bg-white rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-200">
-            <div className="relative">
-              <div className="w-16 h-16 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin"></div>
-            </div>
-            <p className="text-lg font-semibold text-slate-800">Menyimpan Data...</p>
-            <p className="text-sm text-slate-500">Mohon tunggu sebentar</p>
-          </div>
-        </div>
-      )}
+      {/* Loading Overlay */}
+      <LoadingOverlay
+        isOpen={submitting}
+        title="Menyimpan Data..."
+        description="Mohon tunggu sebentar"
+        variant="default"
+      />
     </div>
   );
 }

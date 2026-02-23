@@ -24,6 +24,7 @@ import Link from "next/link";
 import { getAssignmentById } from "@/lib/actions/sampling";
 import { deleteJobOrderWithPhotos } from "@/lib/actions/jobs";
 import { cn } from "@/lib/utils";
+import { createClient } from '@/lib/supabase/client';
 import {
   Dialog,
   DialogContent,
@@ -530,10 +531,4 @@ export default function AdminSamplingDetailPage() {
       </Dialog>
     </div>
   );
-}
-
-// Import createClient dynamically to avoid SSR issues
-function createClient() {
-  const { createClient: createClientFn } = require('@/lib/supabase/client');
-  return createClientFn();
 }

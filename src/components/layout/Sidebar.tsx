@@ -9,7 +9,6 @@ import {
   Users,
   FlaskConical,
   LogOut,
-  Menu,
   ChevronLeft,
   Settings,
   Tag,
@@ -19,7 +18,16 @@ import {
   Bell,
   UserCheck,
   CreditCard,
-  Banknote
+  Banknote,
+  Building2,
+  User,
+  BookOpen,
+  Briefcase,
+  Microscope,
+  Map,
+  Utensils,
+  Shield,
+  ClipboardCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -32,69 +40,87 @@ import Image from "next/image";
 const adminMenuItems = (pendingApprovals: number = 0) => [
   {
     group: "Dashboard",
+    icon: LayoutDashboard,
     items: [
       { icon: LayoutDashboard, label: "Beranda", href: "/admin" },
     ]
   },
   {
-    group: "Manajemen Pesanan",
+    group: "Penawaran & Order",
+    icon: FileText,
     items: [
       { icon: FileText, label: "Penawaran Harga", href: "/admin/quotations" },
+      { icon: Bell, label: "Persetujuan", href: "/admin/approval-requests", 
+        badge: pendingApprovals > 0 ? pendingApprovals : undefined },
     ]
   },
   {
-    group: "Manajemen Sampling",
+    group: "Laboratorium",
+    icon: Microscope,
     items: [
-      { icon: MapPin, label: "Penugasan Sampling", href: "/admin/sampling" },
+      { icon: FlaskConical, label: "Katalog Layanan", href: "/admin/services" },
+      { icon: Tag, label: "Kategori", href: "/admin/categories" },
+      { icon: BookOpen, label: "Regulasi", href: "/admin/regulations" },
+      { icon: Wrench, label: "Sewa Alat", href: "/admin/equipment" },
+    ]
+  },
+  {
+    group: "Sampling",
+    icon: Map,
+    items: [
+      { icon: MapPin, label: "Penugasan", href: "/admin/sampling" },
       { icon: Truck, label: "Biaya Transport", href: "/admin/transport-costs" },
       { icon: Users, label: "Biaya Engineer", href: "/admin/engineer-costs" },
     ]
   },
   {
-    group: "Manajemen Laboratorium",
+    group: "User",
+    icon: Users,
     items: [
-      { icon: FlaskConical, label: "Katalog Layanan", href: "/admin/services" },
-      { icon: Tag, label: "Kategori Layanan", href: "/admin/categories" },
-      { icon: Wrench, label: "Sewa Alat", href: "/admin/equipment" },
+      { icon: Users, label: "Pengguna", href: "/admin/users" },
+      { icon: UserCheck, label: "Customer", href: "/admin/customers" },
     ]
   },
   {
-    group: "Administrasi",
+    group: "Settings",
+    icon: Settings,
     items: [
-      { icon: Users, label: "Data Pengguna", href: "/admin/users" },
-      { icon: UserCheck, label: "Data Customer", href: "/admin/customers" },
-      {
-        icon: Bell,
-        label: "Persetujuan",
-        href: "/admin/approval-requests",
-        badge: pendingApprovals > 0 ? pendingApprovals : undefined
-      },
-      { icon: Settings, label: "Pengaturan", href: "/admin/settings/company" },
+      { icon: Building2, label: "Perusahaan", href: "/admin/settings/company" },
+      { icon: User, label: "Profil Saya", href: "/admin/settings/profile" },
     ]
   },
 ];
 
 const operatorMenuItems = [
   {
-    group: "Utama",
+    group: "Dashboard",
+    icon: LayoutDashboard,
     items: [
       { icon: LayoutDashboard, label: "Beranda", href: "/operator" },
-      { icon: FileText, label: "Penawaran Harga", href: "/operator/quotations" },
-      { icon: FileText, label: "Progress Pekerjaan", href: "/operator/jobs" },
+      { icon: Briefcase, label: "Progress Order", href: "/operator/jobs" },
     ]
   },
   {
-    group: "Biaya Operasional",
+    group: "Penawaran",
+    icon: FileText,
     items: [
-      { icon: Truck, label: "Biaya Transport", href: "/operator/transport-costs" },
-      { icon: Users, label: "Biaya Engineer", href: "/operator/engineer-costs" },
+      { icon: FileText, label: "Penawaran Harga", href: "/operator/quotations" },
     ]
   },
   {
-    group: "Manajemen Laboratorium",
+    group: "Operasional",
+    icon: Truck,
+    items: [
+      { icon: Truck, label: "Transport", href: "/operator/transport-costs" },
+      { icon: Users, label: "Engineer", href: "/operator/engineer-costs" },
+    ]
+  },
+  {
+    group: "Laboratorium",
+    icon: Microscope,
     items: [
       { icon: FlaskConical, label: "Katalog Layanan", href: "/operator/services" },
-      { icon: Tag, label: "Kategori Layanan", href: "/operator/categories" },
+      { icon: Tag, label: "Kategori", href: "/operator/categories" },
       { icon: Wrench, label: "Sewa Alat", href: "/operator/equipment" },
     ]
   },
@@ -102,36 +128,62 @@ const operatorMenuItems = [
 
 const clientMenuItems = [
   {
-    group: "Utama",
+    group: "Dashboard",
+    icon: LayoutDashboard,
     items: [
       { icon: LayoutDashboard, label: "Beranda", href: "/dashboard" },
-      { icon: FileText, label: "Riwayat Pesanan", href: "/dashboard/orders" },
+      { icon: FileText, label: "Riwayat Order", href: "/dashboard/orders" },
     ]
   },
 ];
 
 const fieldOfficerMenuItems = [
   {
-    group: "Utama",
+    group: "Dashboard",
+    icon: LayoutDashboard,
     items: [
       { icon: LayoutDashboard, label: "Beranda", href: "/field" },
-      { icon: FileText, label: "Penugasan Sampling", href: "/field/assignments" },
+      { icon: MapPin, label: "Tugas Sampling", href: "/field/assignments" },
+    ]
+  },
+];
+
+const analystMenuItems = [
+  {
+    group: "Dashboard",
+    icon: LayoutDashboard,
+    items: [
+      { icon: LayoutDashboard, label: "Beranda", href: "/analyst" },
+      { icon: FlaskConical, label: "Analisis", href: "/analyst/jobs" },
+    ]
+  },
+];
+
+const reportingMenuItems = [
+  {
+    group: "Dashboard",
+    icon: LayoutDashboard,
+    items: [
+      { icon: LayoutDashboard, label: "Beranda", href: "/reporting" },
+      { icon: FileText, label: "Laporan Hasil Uji", href: "/reporting/jobs" },
     ]
   },
 ];
 
 const financeMenuItems = [
   {
-    group: "Utama",
+    group: "Dashboard",
+    icon: LayoutDashboard,
     items: [
       { icon: LayoutDashboard, label: "Beranda", href: "/finance" },
     ]
   },
   {
-    group: "Manajemen Keuangan",
+    group: "Pembayaran",
+    icon: CreditCard,
     items: [
-      { icon: CreditCard, label: "Pembayaran", href: "/finance/payments" },
-      { icon: Banknote, label: "Riwayat Transaksi", href: "/finance/transactions" },
+      { icon: CreditCard, label: "Pembayaran Masuk", href: "/finance/payments" },
+      { icon: Banknote, label: "Transaksi", href: "/finance/transactions" },
     ]
   },
 ];
@@ -193,13 +245,59 @@ export function Sidebar({ className }: { className?: string }) {
       ? operatorMenuItems
       : role === 'field_officer'
         ? fieldOfficerMenuItems
-        : role === 'finance'
-          ? financeMenuItems
-          : role === 'client'
-            ? clientMenuItems
-            : []; // Don't show any menu if role is null/unknown
+        : role === 'analyst'
+          ? analystMenuItems
+          : role === 'reporting'
+            ? reportingMenuItems
+            : role === 'finance'
+              ? financeMenuItems
+              : role === 'client'
+                ? clientMenuItems
+                : []; // Don't show any menu if role is null/unknown
 
-  const NavContent = () => (
+  return (
+    <>
+      {/* Desktop Sidebar */}
+      <aside
+        className={cn(
+          "hidden md:flex flex-col bg-emerald-950 text-white transition-all duration-300 border-r border-emerald-900 sticky top-0 h-screen",
+          isCollapsed ? "w-20" : "w-64",
+          className
+        )}
+      >
+        <Button
+          variant="ghost"
+          size="icon"
+          className="absolute -right-3 top-20 h-6 w-6 rounded-full bg-emerald-600 text-white hover:bg-emerald-500 border border-emerald-900 z-50 shadow-md"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+        >
+          <ChevronLeft className={cn("h-4 w-4 transition-transform", isCollapsed && "rotate-180")} />
+        </Button>
+        <NavContent 
+          isCollapsed={isCollapsed} 
+          menuItems={menuItems} 
+          pathname={pathname} 
+          companyName={companyName} 
+          logoUrl={logoUrl} 
+          logout={logout} 
+        />
+      </aside>
+    </>
+  );
+}
+
+// Move NavContent outside of Sidebar component
+interface NavContentProps {
+  isCollapsed: boolean;
+  menuItems: any[];
+  pathname: string;
+  companyName: string;
+  logoUrl: string | null;
+  logout: () => Promise<void>;
+}
+
+function NavContent({ isCollapsed, menuItems, pathname, companyName, logoUrl, logout }: NavContentProps) {
+  return (
     <div className="flex flex-col h-full py-4">
       <div className={cn("px-6 mb-8 flex items-center gap-3", isCollapsed && "px-4 justify-center")}>
         {logoUrl ? (
@@ -225,9 +323,12 @@ export function Sidebar({ className }: { className?: string }) {
         {menuItems.map((group, groupIndex) => (
           <div key={groupIndex}>
             {!isCollapsed && group.group && (
-              <h3 className="px-3 mb-2 text-xs font-semibold text-emerald-400 uppercase tracking-wider">
-                {group.group}
-              </h3>
+              <div className="flex items-center gap-2 px-3 mb-2">
+                {group.icon && <group.icon className="h-3 w-3 text-emerald-400" />}
+                <h3 className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
+                  {group.group}
+                </h3>
+              </div>
             )}
             <div className="space-y-1">
               {group.items.map((item: any) => (
@@ -249,12 +350,10 @@ export function Sidebar({ className }: { className?: string }) {
                       <span className="font-medium">{item.label}</span>
                       {item.badge && (
                         typeof item.badge === 'number' ? (
-                          // Notification badge (red)
                           <span className="ml-2 px-2 py-0.5 text-xs font-bold bg-red-500 text-white rounded-full min-w-[20px] text-center">
                             {item.badge}
                           </span>
                         ) : (
-                          // Text badge (amber for "View Only")
                           <span className="ml-2 px-2 py-0.5 text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded uppercase">
                             {item.badge}
                           </span>
@@ -274,8 +373,8 @@ export function Sidebar({ className }: { className?: string }) {
 
       <div className="px-3 mt-auto border-t border-emerald-800 pt-4">
         <form action={logout}>
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             className={cn(
               "w-full justify-start text-emerald-100 hover:text-white hover:bg-emerald-800 group",
               isCollapsed && "justify-center px-0"
@@ -287,28 +386,5 @@ export function Sidebar({ className }: { className?: string }) {
         </form>
       </div>
     </div>
-  );
-
-  return (
-    <>
-      {/* Desktop Sidebar */}
-      <aside 
-        className={cn(
-          "hidden md:flex flex-col bg-emerald-950 text-white transition-all duration-300 border-r border-emerald-900 sticky top-0 h-screen",
-          isCollapsed ? "w-20" : "w-64",
-          className
-        )}
-      >
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute -right-3 top-20 h-6 w-6 rounded-full bg-emerald-600 text-white hover:bg-emerald-500 border border-emerald-900 z-50 shadow-md"
-          onClick={() => setIsCollapsed(!isCollapsed)}
-        >
-          <ChevronLeft className={cn("h-4 w-4 transition-transform", isCollapsed && "rotate-180")} />
-        </Button>
-        <NavContent />
-      </aside>
-    </>
   );
 }

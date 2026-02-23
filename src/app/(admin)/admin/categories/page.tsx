@@ -595,17 +595,21 @@ export default function CategoriesPage() {
       </Dialog>
 
       {/* Submit Loading Modal */}
-      {showSubmitModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] flex items-center justify-center">
-          <div className="bg-white rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-200">
-            <div className="relative">
-              <div className="w-16 h-16 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin"></div>
-            </div>
-            <p className="text-lg font-semibold text-slate-800">Menyimpan Data...</p>
-            <p className="text-sm text-slate-500">Mohon tunggu sebentar</p>
-          </div>
-        </div>
-      )}
+      <Dialog open={showSubmitModal} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-center">
+              <div className="flex flex-col items-center gap-4 py-4">
+                <ChemicalLoader size="lg" />
+                <div className="text-center">
+                  <p className="text-lg font-semibold text-emerald-900">Menyimpan Data</p>
+                  <p className="text-sm text-slate-500 mt-1">Mohon tunggu sebentar</p>
+                </div>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

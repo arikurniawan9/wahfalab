@@ -966,15 +966,15 @@ export default function ServicesPage() {
             </AlertDialogTitle>
             <AlertDialogDescription className="pt-4">
               {deleteItemId === "bulk" ? (
-                <>
+                <div>
                   Apakah Anda yakin ingin menghapus <strong className="text-slate-900">{selectedIds.length} layanan</strong> terpilih?
-                  <p className="mt-2 text-sm text-amber-600 font-medium">⚠️ Tindakan ini tidak dapat dibatalkan.</p>
-                </>
+                  <div className="mt-2 text-sm text-amber-600 font-medium">⚠️ Tindakan ini tidak dapat dibatalkan.</div>
+                </div>
               ) : (
-                <>
+                <div>
                   Apakah Anda yakin ingin menghapus layanan ini?
-                  <p className="mt-2 text-sm text-amber-600 font-medium">⚠️ Data akan dihapus permanen dari katalog.</p>
-                </>
+                  <div className="mt-2 text-sm text-amber-600 font-medium">⚠️ Data akan dihapus permanen dari katalog.</div>
+                </div>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -42,6 +42,8 @@ import {
   DollarSign
 } from "lucide-react";
 import { ChemicalLoader } from "@/components/ui";
+import { LoadingOverlay, LoadingButton, TableSkeleton, EmptyState } from "@/components/ui";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   getOperationalCatalogs,
   deleteOperationalCatalog,
@@ -73,7 +75,6 @@ import { Label } from "@/components/ui/label";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Sheet,
   SheetContent,
@@ -98,7 +99,7 @@ const transportSchema = z.object({
   description: z.string().optional(),
   unit: z.string().min(1, "Satuan wajib diisi"),
   items: z.array(z.object({
-    distance_category: z.string().min(1, "Kategori jarak wajib diisi"),
+    distance_category: z.string().optional(),
     price: z.number().min(1, "Harga harus lebih dari 0"),
   })).min(1, "Minimal 1 item harga"),
 });
@@ -126,17 +127,6 @@ const getPriceBadgeColor = (price: number, minPrice: number, maxPrice: number) =
   return "bg-red-100 text-red-700 border-red-200";
 };
 
-// Preset distance categories
-const distanceCategories = [
-  "Dekat (< 50km)",
-  "Sedang (50-200km)",
-  "Jauh (> 200km)",
-  "Dalam Kota",
-  "Luar Kota",
-  "Luar Provinsi",
-  "Luar Negeri"
-];
-
 export default function TransportCostsPage() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -147,17 +137,12 @@ export default function TransportCostsPage() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [quickEditId, setQuickEditId] = useState<string | null>(null);
   const [quickEditPrice, setQuickEditPrice] = useState<number>(0);
   const [search, setSearch] = useState("");
-  const [filterDistance, setFilterDistance] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<string>("name");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [importData, setImportData] = useState<string>("");
-
-  // Auto-suggest options
-  const [distanceSuggestions, setDistanceSuggestions] = useState<string[]>(distanceCategories);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleteConfirmIds, setDeleteConfirmIds] = useState<string[]>([]);
 
   const { register, control, handleSubmit, watch, setValue, reset, formState: { errors }, trigger } = useForm({
     resolver: zodResolver(transportSchema),
@@ -165,7 +150,7 @@ export default function TransportCostsPage() {
       category: "transport",
       name: "",
       description: "",
-      unit: "trip",
+      unit: "hari",
       items: [{ distance_category: "", price: 0 }]
     }
   });
@@ -183,11 +168,6 @@ export default function TransportCostsPage() {
       const result = await getAllOperationalCatalogs();
       const transportItems = result.filter((item: any) => item.category === "transport");
       setData(transportItems);
-      
-      // Extract suggestions from existing data
-      const distances = Array.from(new Set(transportItems.map((item: any) => item.distance_category).filter(Boolean))) as string[];
-      
-      setDistanceSuggestions([...new Set([...distanceCategories, ...distances])]);
     } catch (error) {
       toast.error("Gagal memuat data");
     } finally {
@@ -234,7 +214,6 @@ export default function TransportCostsPage() {
       if (!confirmed) return;
     }
 
-    setShowSubmitModal(true);
     setSubmitting(true);
     try {
       if (selectedItem) {
@@ -245,7 +224,7 @@ export default function TransportCostsPage() {
           await deleteOperationalCatalog(item.id);
         }
       }
-      
+
       // Create new entries
       for (const item of formData.items) {
         await createOperationalCatalog({
@@ -255,7 +234,7 @@ export default function TransportCostsPage() {
           category: "transport"
         });
       }
-      
+
       toast.success("Data berhasil disimpan", {
         description: `${formData.name} dengan ${formData.items.length} kombinasi harga`
       });
@@ -269,7 +248,6 @@ export default function TransportCostsPage() {
       });
     } finally {
       setSubmitting(false);
-      setShowSubmitModal(false);
     }
   };
 
@@ -301,7 +279,7 @@ export default function TransportCostsPage() {
 
   const handleDelete = async () => {
     if (!selectedItem) return;
-    setShowSubmitModal(true);
+    setSubmitting(true);
     try {
       const relatedItems = data.filter((d: any) => d.name === selectedItem.name && d.category === "transport");
       for (const item of relatedItems) {
@@ -319,7 +297,97 @@ export default function TransportCostsPage() {
         description: error?.message || "Silakan coba lagi"
       });
     } finally {
-      setShowSubmitModal(false);
+      setSubmitting(false);
+    }
+  };
+
+  // Toggle select for bulk delete
+  const toggleSelect = (id: string) => {
+    if (selectedIds.includes(id)) {
+      setSelectedIds(selectedIds.filter(sid => sid !== id));
+    } else {
+      setSelectedIds([...selectedIds, id]);
+    }
+  };
+
+  const toggleSelectAll = (ids: string[]) => {
+    if (selectedIds.length === ids.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(ids);
+    }
+  };
+
+  // Bulk delete with quotation usage validation
+  const handleBulkDelete = async () => {
+    if (deleteConfirmIds.length === 0) return;
+    
+    setSubmitting(true);
+    try {
+      // Check if any items are used in quotations
+      const quotationsResponse = await fetch('/api/quotations');
+      const quotations = await quotationsResponse.json();
+      
+      const usedItems: string[] = [];
+      const unusedIds: string[] = [];
+      
+      for (const id of deleteConfirmIds) {
+        const item = data.find(d => d.id === id);
+        if (!item) continue;
+        
+        // Check if this transport cost is used in any quotation
+        const isUsed = quotations.some((q: any) => 
+          q.items?.some((qi: any) => 
+            qi.transport_cost_id === id || 
+            qi.description?.toLowerCase().includes(item.name.toLowerCase())
+          )
+        );
+        
+        if (isUsed) {
+          usedItems.push(item.name);
+        } else {
+          unusedIds.push(id);
+        }
+      }
+      
+      // If some items are used, show warning
+      if (usedItems.length > 0) {
+        const uniqueUsedItems = Array.from(new Set(usedItems));
+        toast.error("Tidak dapat menghapus data", {
+          description: `${uniqueUsedItems.length} item sedang digunakan dalam penawaran: ${uniqueUsedItems.join(", ")}`,
+          duration: 8000
+        });
+        
+        // Delete only unused items if there are any
+        if (unusedIds.length === 0) {
+          setSubmitting(false);
+          setDeleteConfirmIds([]);
+          return;
+        }
+      }
+      
+      // Delete unused items
+      for (const id of unusedIds) {
+        const item = data.find(d => d.id === id);
+        if (!item) continue;
+        
+        await createHistory(item.id, "delete", Number(item.price), 0);
+        await deleteOperationalCatalog(item.id);
+      }
+      
+      toast.success(`${unusedIds.length} data berhasil dihapus`, {
+        description: "Data telah dihapus dari sistem"
+      });
+      
+      setDeleteConfirmIds([]);
+      setSelectedIds([]);
+      loadData();
+    } catch (error: any) {
+      toast.error("Gagal menghapus data", {
+        description: error?.message || "Silakan coba lagi"
+      });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -476,25 +544,7 @@ export default function TransportCostsPage() {
         item.transport_mode?.toLowerCase().includes(search.toLowerCase())
       );
     }
-    
-    // Filter by distance
-    if (filterDistance !== "all") {
-      filtered = filtered.filter(item => item.distance_category === filterDistance);
-    }
-    
-    // Sort
-    filtered.sort((a, b) => {
-      let comparison = 0;
-      if (sortBy === "name") {
-        comparison = a.name.localeCompare(b.name);
-      } else if (sortBy === "price") {
-        comparison = Number(a.price) - Number(b.price);
-      } else if (sortBy === "distance") {
-        comparison = (a.distance_category || "").localeCompare(b.distance_category || "");
-      }
-      return sortOrder === "asc" ? comparison : -comparison;
-    });
-    
+
     return filtered;
   };
 
@@ -507,138 +557,110 @@ export default function TransportCostsPage() {
   }, {} as Record<string, any[]>);
 
   const distances = Array.from(new Set(data.map(item => item.distance_category).filter(Boolean)));
-  
+
+  // Keep price calculations for table color coding
   const prices = data.map(item => Number(item.price));
   const minPrice = Math.min(...prices, 0);
   const maxPrice = Math.max(...prices, 0);
 
   return (
     <div className="p-4 md:p-10 pb-24 md:pb-10">
-      {/* Header dengan Actions */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-bold text-emerald-900 tracking-tight">Biaya Transport & Akomodasi</h1>
-          <p className="text-slate-500 text-sm">Kelola biaya transportasi dan akomodasi dengan fitur lengkap.</p>
-        </div>
-
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" onClick={() => setIsCalculatorOpen(true)} className="cursor-pointer">
-            <Calculator className="mr-2 h-4 w-4" /> Kalkulator
-          </Button>
-          <Button variant="outline" onClick={handleExport} className="cursor-pointer">
-            <Download className="mr-2 h-4 w-4" /> Export
-          </Button>
-          <Button variant="outline" onClick={() => setIsImportDialogOpen(true)} className="cursor-pointer">
-            <Upload className="mr-2 h-4 w-4" /> Import
-          </Button>
-          <Button onClick={() => {
-            reset();
-            setSelectedItem(null);
-            setIsDialogOpen(true);
-          }} className="bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100 cursor-pointer">
-            <Plus className="mr-2 h-4 w-4" /> Tambah Data
-          </Button>
+      {/* Header */}
+      <div className="mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-emerald-900 font-[family-name:var(--font-montserrat)] uppercase flex items-center gap-3">
+            <Truck className="h-6 w-6 text-emerald-600" />
+            Biaya Transport & Akomodasi
+          </h1>
+          <p className="text-slate-500 text-sm mt-1">
+            Kelola biaya transportasi dan akomodasi dengan fitur lengkap
+          </p>
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Card className="border-l-4 border-l-emerald-500">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Truck className="h-5 w-5 text-emerald-600" />
-              <span className="font-semibold text-slate-800">Total Tarif</span>
-            </div>
-            <p className="text-2xl font-bold text-emerald-700">{Object.keys(groupedData).length}</p>
-            <p className="text-xs text-slate-500">Nama tarif berbeda</p>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-blue-500">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <MapPin className="h-5 w-5 text-blue-600" />
-              <span className="font-semibold text-slate-800">Kategori Jarak</span>
-            </div>
-            <p className="text-2xl font-bold text-blue-700">{distances.length}</p>
-            <p className="text-xs text-slate-500">Kategori terdaftar</p>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-purple-500">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <DollarSign className="h-5 w-5 text-purple-600" />
-              <span className="font-semibold text-slate-800">Range Harga</span>
-            </div>
-            <p className="text-lg font-bold text-purple-700">
-              Rp {(minPrice/1000).toFixed(0)}k - Rp {(maxPrice/1000).toFixed(0)}k
-            </p>
-            <p className="text-xs text-slate-500">Per {data[0]?.unit || "trip"}</p>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Filters & Actions Bar */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm mb-6">
+        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+          <div className="relative flex-1 w-full md:max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-500" />
+            <Input
+              placeholder="Cari nama atau kategori..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+              }}
+              className="pl-10 h-11 focus-visible:ring-emerald-500 rounded-lg"
+            />
+          </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6">
-        <div className="flex flex-wrap gap-4 items-center justify-between">
-          <div className="flex flex-wrap gap-2">
-            <Select value={filterDistance} onValueChange={setFilterDistance}>
-              <SelectTrigger className="w-40 cursor-pointer">
-                <SelectValue placeholder="Filter Jarak" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Jarak</SelectItem>
-                {distances.map(dist => (
-                  <SelectItem key={dist} value={dist}>{dist}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-40 cursor-pointer">
-                <SelectValue placeholder="Sort By" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="name">Nama</SelectItem>
-                <SelectItem value="price">Harga</SelectItem>
-                <SelectItem value="distance">Jarak</SelectItem>
-              </SelectContent>
-            </Select>
-
+          <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+            {selectedIds.length > 0 && (
+              <Button
+                variant="destructive"
+                size="icon"
+                onClick={() => setDeleteConfirmIds(selectedIds)}
+                className="h-11 w-11 rounded-lg cursor-pointer shadow-sm hover:shadow-md hover:scale-105 transition-all duration-200 animate-in fade-in zoom-in duration-200"
+                title={`Hapus ${selectedIds.length} data terpilih`}
+              >
+                <Trash2 className="h-5 w-5" />
+                <span className="sr-only">Hapus ({selectedIds.length})</span>
+              </Button>
+            )}
+            <Button
+              onClick={() => {
+                reset();
+                setSelectedItem(null);
+                setIsDialogOpen(true);
+              }}
+              size="icon"
+              className="bg-emerald-600 hover:bg-emerald-700 h-11 w-11 cursor-pointer shadow-md hover:shadow-lg hover:scale-105 transition-all duration-200"
+              title="Tambah Data"
+            >
+              <Plus className="h-5 w-5" />
+            </Button>
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-              className="cursor-pointer"
+              onClick={() => setIsCalculatorOpen(true)}
+              className="h-11 w-11 rounded-lg cursor-pointer shadow-sm hover:bg-emerald-50 hover:border-emerald-200 hover:scale-105 transition-all duration-200"
+              title="Kalkulator"
             >
-              <svg className={`h-4 w-4 transition-transform ${sortOrder === "asc" ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
+              <Calculator className="h-5 w-5" />
             </Button>
-          </div>
-
-          <div className="text-sm text-slate-500">
-            {filteredData.length} dari {data.length} data
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleExport}
+              className="h-11 w-11 rounded-lg cursor-pointer shadow-sm hover:bg-emerald-50 hover:border-emerald-200 hover:scale-105 transition-all duration-200"
+              title="Export CSV"
+            >
+              <Download className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setIsImportDialogOpen(true)}
+              className="h-11 w-11 rounded-lg cursor-pointer shadow-sm hover:bg-emerald-50 hover:border-emerald-200 hover:scale-105 transition-all duration-200"
+              title="Import CSV"
+            >
+              <Upload className="h-5 w-5" />
+            </Button>
           </div>
         </div>
       </div>
 
       {/* Table */}
       <div className="bg-white rounded-3xl shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
-        <div className="p-5 border-b bg-emerald-50/5 flex items-center justify-between gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
-            <Input
-              placeholder="Cari nama tarif, jarak, atau mode transport..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 focus-visible:ring-emerald-500 rounded-xl"
-            />
-          </div>
-        </div>
 
         <Table>
           <TableHeader>
             <TableRow className="bg-slate-50/80">
+              <TableHead className="w-12 px-6">
+                <Checkbox
+                  checked={selectedIds.length > 0 && selectedIds.length === data.length}
+                  onCheckedChange={() => toggleSelectAll(data.map(d => d.id))}
+                />
+              </TableHead>
               <TableHead className="font-bold text-emerald-900">Nama Tarif</TableHead>
               <TableHead className="font-bold text-emerald-900">Kategori Jarak</TableHead>
               <TableHead className="font-bold text-emerald-900">Deskripsi</TableHead>
@@ -650,17 +672,29 @@ export default function TransportCostsPage() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-20">
-                  <div className="flex justify-center">
-                    <ChemicalLoader />
-                  </div>
-                  <p className="mt-4 text-sm text-slate-500">Memuat data...</p>
+                <TableCell colSpan={8} className="text-center py-20">
+                  <TableSkeleton rows={5} />
                 </TableCell>
               </TableRow>
             ) : groupedData.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-20 text-slate-500">
-                  Belum ada data biaya transport & akomodasi.
+                <TableCell colSpan={8} className="text-center py-20">
+                  <EmptyState
+                    title="Belum ada data"
+                    description="Belum ada data biaya transport & akomodasi. Mulai dengan menambahkan data pertama Anda"
+                    action={
+                      <Button
+                        onClick={() => {
+                          reset();
+                          setSelectedItem(null);
+                          setIsDialogOpen(true);
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
+                      >
+                        <Plus className="mr-2 h-4 w-4" /> Tambah Data
+                      </Button>
+                    }
+                  />
                 </TableCell>
               </TableRow>
             ) : (
@@ -672,6 +706,12 @@ export default function TransportCostsPage() {
 
                     return (
                       <TableRow key={item.id} className={cn("hover:bg-emerald-50/10 transition-colors", getPriceColor(Number(item.price), minPrice, maxPrice))}>
+                        <TableCell className="px-6">
+                          <Checkbox
+                            checked={selectedIds.includes(item.id)}
+                            onCheckedChange={() => toggleSelect(item.id)}
+                          />
+                        </TableCell>
                         {idx === 0 && (
                           <TableCell 
                             rowSpan={(items as any[]).length} 
@@ -852,21 +892,12 @@ export default function TransportCostsPage() {
                 <div key={field.id} className="flex gap-2 items-end p-3 bg-slate-50 rounded-lg border border-slate-200">
                   <div className="flex-[2] space-y-1">
                     <Label className="text-xs">Kategori Jarak</Label>
-                    <Select 
-                      onValueChange={(val) => setValue(`items.${index}.distance_category`, val)}
-                      defaultValue={watchedItems[index]?.distance_category}
-                    >
-                      <SelectTrigger className="bg-white cursor-pointer h-9">
-                        <SelectValue placeholder="Pilih jarak..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {distanceSuggestions.map((dist) => (
-                          <SelectItem key={dist} value={dist} className="cursor-pointer">
-                            {dist}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Input
+                      placeholder="Contoh: Ring 1 : Cianjur, Sukabumi, Bandung, Bogor"
+                      value={watchedItems[index]?.distance_category || ""}
+                      onChange={(e) => setValue(`items.${index}.distance_category`, e.target.value)}
+                      className="bg-white focus-visible:ring-emerald-500 h-9"
+                    />
                     {errors.items?.[index]?.distance_category && (
                       <p className="text-xs text-red-500">{errors.items[index]?.distance_category?.message}</p>
                     )}
@@ -937,6 +968,46 @@ export default function TransportCostsPage() {
             >
               <Trash2 className="mr-2 h-4 w-4" /> Hapus
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmIds.length > 0} onOpenChange={(open) => !open && setDeleteConfirmIds([])}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="text-red-600 flex items-center gap-2">
+              <AlertCircle className="h-5 w-5" />
+              Konfirmasi Hapus Massal
+            </DialogTitle>
+            <DialogDescription>
+              <div className="space-y-2 mt-2">
+                <p>Apakah Anda yakin ingin menghapus <strong className="text-slate-900">{deleteConfirmIds.length} data</strong> terpilih?</p>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
+                  <p className="font-semibold text-amber-800 mb-1">⚠️ Perhatian:</p>
+                  <p className="text-amber-700">Data yang sedang digunakan dalam penawaran tidak dapat dihapus.</p>
+                </div>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteConfirmIds([])}
+              className="cursor-pointer"
+              disabled={submitting}
+            >
+              Batal
+            </Button>
+            <LoadingButton
+              variant="destructive"
+              onClick={handleBulkDelete}
+              loading={submitting}
+              loadingText="Menghapus..."
+              className="cursor-pointer"
+            >
+              <Trash2 className="mr-2 h-4 w-4" /> Hapus {deleteConfirmIds.length} Data
+            </LoadingButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1059,18 +1130,13 @@ export default function TransportCostsPage() {
         </SheetContent>
       </Sheet>
 
-      {/* Submit Loading Modal */}
-      {showSubmitModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] flex items-center justify-center">
-          <div className="bg-white rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-200">
-            <div className="relative">
-              <div className="w-16 h-16 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin"></div>
-            </div>
-            <p className="text-lg font-semibold text-slate-800">Menyimpan Data...</p>
-            <p className="text-sm text-slate-500">Mohon tunggu sebentar</p>
-          </div>
-        </div>
-      )}
+      {/* Loading Overlay */}
+      <LoadingOverlay
+        isOpen={submitting}
+        title="Menyimpan Data..."
+        description="Mohon tunggu sebentar"
+        variant="default"
+      />
     </div>
   );
 }
