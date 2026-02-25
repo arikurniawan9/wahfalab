@@ -47,6 +47,10 @@ export async function login(formData: FormData) {
     redirect('/field')
   } else if (profile?.role === 'finance') {
     redirect('/finance')
+  } else if (profile?.role === 'analyst') {
+    redirect('/analyst')
+  } else if (profile?.role === 'reporting') {
+    redirect('/reporting')
   } else {
     redirect('/dashboard')
   }

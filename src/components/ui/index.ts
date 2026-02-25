@@ -14,3 +14,6 @@ export { LazyPDFButton } from "./lazy-pdf-button";
 export { LoadingOverlay } from "./loading-overlay";
 export { LoadingButton } from "./loading-button";
 export { InlineLoader } from "./inline-loader";
+
+// Notification components
+export { NotificationBell } from "./notification-bell";

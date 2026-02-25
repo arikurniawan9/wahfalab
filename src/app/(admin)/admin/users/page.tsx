@@ -347,83 +347,87 @@ export default function UserManagementPage() {
   return (
     <div className="p-4 md:p-10 pb-24 md:pb-10">
       {/* Header */}
-      <div className="mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-emerald-900 font-[family-name:var(--font-montserrat)] uppercase flex items-center gap-3">
-            <Users className="h-6 w-6 text-emerald-600" />
-            Manajemen Pengguna
-          </h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Kelola data admin, petugas, dan pelanggan laboratorium
-          </p>
-        </div>
+      <div className="mb-10">
+        <h1 className="text-2xl font-bold text-emerald-900 font-[family-name:var(--font-montserrat)] uppercase flex items-center gap-3">
+          <UsersIcon className="h-6 w-6 text-emerald-600" />
+          Manajemen Pengguna
+        </h1>
+        <p className="text-slate-500 text-sm mt-1">
+          Kelola data admin, petugas, dan staf operasional laboratorium.
+        </p>
       </div>
 
       {/* Filters & Actions Bar */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm mb-6">
-        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-          <div className="relative flex-1 w-full md:max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-500" />
-            <Input
-              placeholder="Cari nama atau email..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="pl-10 h-11 focus-visible:ring-emerald-500 rounded-lg"
-            />
-          </div>
+      <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6 shadow-sm flex flex-col md:flex-row gap-4 items-center">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-500" />
+          <Input
+            placeholder="Cari nama atau email..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="pl-10 h-11 focus-visible:ring-emerald-500 rounded-lg"
+          />
+        </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+        <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+          {selectedIds.length > 0 && (
             <Button
-              onClick={() => {
-                reset();
-                setEditingUser(null);
-                setIsDialogOpen(true);
-              }}
+              variant="destructive"
               size="icon"
-              className="bg-emerald-600 hover:bg-emerald-700 h-11 w-11 cursor-pointer shadow-md hover:shadow-lg hover:scale-105 transition-all duration-200"
-              title="Tambah User"
+              onClick={handleBulkDelete}
+              className="h-11 w-11 rounded-lg cursor-pointer shadow-sm hover:shadow-md hover:scale-105 transition-all duration-200 animate-in fade-in zoom-in duration-200"
+              title={`Hapus ${selectedIds.length} user terpilih`}
             >
-              <Plus className="h-5 w-5" />
+              <Trash2 className="h-5 w-5" />
+              <span className="sr-only">Hapus ({selectedIds.length})</span>
             </Button>
-            {selectedIds.length > 0 && (
-              <Button
-                variant="destructive"
-                size="icon"
-                onClick={handleBulkDelete}
-                className="h-11 w-11 rounded-lg cursor-pointer shadow-sm hover:shadow-md hover:scale-105 transition-all duration-200 animate-in fade-in zoom-in duration-200"
-                title={`Hapus ${selectedIds.length} user terpilih`}
-              >
-                <Trash2 className="h-5 w-5" />
-                <span className="sr-only">Hapus ({selectedIds.length})</span>
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleExport}
-              className="h-11 w-11 rounded-lg cursor-pointer shadow-sm hover:bg-emerald-50 hover:border-emerald-200 hover:scale-105 transition-all duration-200"
-              title="Export CSV"
-            >
-              <Download className="h-5 w-5" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setIsImportDialogOpen(true)}
-              className="h-11 w-11 rounded-lg cursor-pointer shadow-sm hover:bg-emerald-50 hover:border-emerald-200 hover:scale-105 transition-all duration-200"
-              title="Import CSV"
-            >
-              <Upload className="h-5 w-5" />
-            </Button>
-          </div>
+          )}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleExport}
+            className="h-11 w-11 rounded-lg cursor-pointer shadow-sm hover:bg-emerald-50 hover:border-emerald-200 hover:scale-105 transition-all duration-200"
+            title="Export CSV"
+          >
+            <Download className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setIsImportDialogOpen(true)}
+            className="h-11 w-11 rounded-lg cursor-pointer shadow-sm hover:bg-emerald-50 hover:border-emerald-200 hover:scale-105 transition-all duration-200"
+            title="Import CSV"
+          >
+            <Upload className="h-5 w-5" />
+          </Button>
+          <Button
+            onClick={() => {
+              reset();
+              setEditingUser(null);
+              setIsDialogOpen(true);
+            }}
+            size="icon"
+            className="bg-emerald-600 hover:bg-emerald-700 h-11 w-11 cursor-pointer shadow-md hover:shadow-lg hover:scale-105 transition-all duration-200"
+            title="Tambah User"
+          >
+            <Plus className="h-5 w-5" />
+          </Button>
         </div>
       </div>
 
-      {/* Table */}
+      {/* Table Section Header */}
       <div className="bg-white rounded-3xl shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
+        <div className="p-5 border-b bg-emerald-50/10 flex items-center justify-between gap-4">
+          <div className="text-sm font-medium text-slate-600">
+            Daftar Staff & Pengguna Internal
+          </div>
+          <div className="text-sm text-slate-500">
+            {filteredUsers.length} dari {data.total} pengguna
+          </div>
+        </div>
 
         {/* Desktop View */}
         <div className="hidden md:block">

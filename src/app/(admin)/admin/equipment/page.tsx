@@ -40,7 +40,7 @@ import {
   Tag,
   DollarSign
 } from "lucide-react";
-import { ChemicalLoader } from "@/components/ui";
+import { ChemicalLoader, LoadingOverlay, LoadingButton } from "@/components/ui";
 import { getEquipment, createOrUpdateEquipment, deleteEquipment, deleteManyEquipment } from "@/lib/actions/equipment";
 import { getCategories, createOrUpdateCategory } from "@/lib/actions/categories";
 import { useForm } from "react-hook-form";
@@ -89,7 +89,6 @@ export default function EquipmentPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
@@ -103,7 +102,6 @@ export default function EquipmentPage() {
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [creatingCategory, setCreatingCategory] = useState(false);
-  const [showCategorySubmitModal, setShowCategorySubmitModal] = useState(false);
 
   const { register, handleSubmit, reset, setValue, watch } = useForm();
 
@@ -134,7 +132,6 @@ export default function EquipmentPage() {
   }, [page, limit, search]);
 
   const onSubmit = async (formData: any) => {
-    setShowSubmitModal(true);
     setSubmitting(true);
     try {
       await createOrUpdateEquipment(formData, editingItem?.id);
@@ -151,7 +148,6 @@ export default function EquipmentPage() {
       });
     } finally {
       setSubmitting(false);
-      setShowSubmitModal(false);
     }
   };
 
@@ -188,7 +184,6 @@ export default function EquipmentPage() {
       return;
     }
 
-    setShowCategorySubmitModal(true);
     setCreatingCategory(true);
     try {
       await createOrUpdateCategory({ name: trimmedName });
@@ -206,7 +201,6 @@ export default function EquipmentPage() {
       toast.error(error.message || "Gagal membuat kategori");
     } finally {
       setCreatingCategory(false);
-      setShowCategorySubmitModal(false);
     }
   };
 
@@ -468,53 +462,16 @@ export default function EquipmentPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6">
-        <div className="flex flex-wrap gap-4 items-center justify-between">
-          <div className="flex flex-wrap gap-2">
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-40 cursor-pointer">
-                <SelectValue placeholder="Filter Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Status</SelectItem>
-                {availabilityStatusOptions.map(opt => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-40 cursor-pointer">
-                <SelectValue placeholder="Sort By" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="name">Nama</SelectItem>
-                <SelectItem value="price">Harga</SelectItem>
-                <SelectItem value="quantity">Jumlah</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-              className="cursor-pointer"
-            >
-              <svg className={`h-4 w-4 transition-transform ${sortOrder === "asc" ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </Button>
+      {/* Table */}
+      <div className="bg-white rounded-3xl shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
+        <div className="p-5 border-b bg-emerald-50/10 flex items-center justify-between gap-4">
+          <div className="text-sm font-medium text-slate-600">
+            Daftar Katalog Alat Laboratorium
           </div>
-
           <div className="text-sm text-slate-500">
             {filteredItems.length} dari {data.total} alat
           </div>
         </div>
-      </div>
-
-      {/* Table */}
-      <div className="bg-white rounded-3xl shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
         {/* Desktop View */}
         <div className="hidden md:block">
           <Table>
@@ -857,9 +814,9 @@ export default function EquipmentPage() {
               />
             </div>
             <DialogFooter className="pt-4">
-              <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 cursor-pointer" disabled={submitting}>
+              <LoadingButton type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 cursor-pointer" loading={submitting} loadingText="Menyimpan...">
                 {editingItem ? "Simpan Perubahan" : "Tambahkan ke Katalog"}
-              </Button>
+              </LoadingButton>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -944,23 +901,6 @@ export default function EquipmentPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Submit Loading Modal */}
-      <Dialog open={showSubmitModal} onOpenChange={() => {}}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle className="text-center">
-              <div className="flex flex-col items-center gap-4 py-4">
-                <ChemicalLoader size="lg" />
-                <div className="text-center">
-                  <p className="text-lg font-semibold text-emerald-900">Menyimpan Data</p>
-                  <p className="text-sm text-slate-500 mt-1">Mohon tunggu sebentar</p>
-                </div>
-              </div>
-            </DialogTitle>
-          </DialogHeader>
-        </DialogContent>
-      </Dialog>
-
       {/* Quick Add Category Dialog */}
       <Dialog open={isCategoryDialogOpen} onOpenChange={(open) => {
         setIsCategoryDialogOpen(open);
@@ -1001,34 +941,34 @@ export default function EquipmentPage() {
               >
                 Batal
               </Button>
-              <Button
+              <LoadingButton
                 onClick={handleCreateCategory}
                 disabled={creatingCategory || !newCategoryName.trim()}
+                loading={creatingCategory}
+                loadingText="Membuat..."
                 className="flex-1 bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
               >
                 <Plus className="mr-2 h-4 w-4" /> Buat Kategori
-              </Button>
+              </LoadingButton>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Loading Modal for Category */}
-      <Dialog open={showCategorySubmitModal} onOpenChange={() => {}}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle className="text-center">
-              <div className="flex flex-col items-center gap-4 py-4">
-                <ChemicalLoader size="lg" />
-                <div className="text-center">
-                  <p className="text-lg font-semibold text-emerald-900">Menyimpan Kategori</p>
-                  <p className="text-sm text-slate-500 mt-1">Kategori baru sedang dibuat...</p>
-                </div>
-              </div>
-            </DialogTitle>
-          </DialogHeader>
-        </DialogContent>
-      </Dialog>
+      {/* Loading Overlays */}
+      <LoadingOverlay
+        isOpen={submitting}
+        title="Menyimpan Data..."
+        description="Alat sedang disimpan ke katalog"
+        variant="default"
+      />
+      
+      <LoadingOverlay
+        isOpen={creatingCategory}
+        title="Menyimpan Kategori..."
+        description="Kategori baru sedang dibuat"
+        variant="default"
+      />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { createClient } from '@supabase/supabase-js'
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { serializeData } from '@/lib/utils/serialize'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -159,9 +160,10 @@ export async function deleteManyUsers(ids: string[]) {
 }
 
 export async function getClients() {
-  return await prisma.profile.findMany({
+  const clients = await prisma.profile.findMany({
     where: { role: 'client' },
     select: { id: true, full_name: true, company_name: true, email: true },
     orderBy: { full_name: 'asc' }
   })
+  return serializeData(clients)
 }

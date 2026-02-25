@@ -43,9 +43,10 @@ import {
   MapPin,
   Car,
   X,
-  Clock
+  Clock,
+  Check
 } from "lucide-react";
-import { ChemicalLoader } from "@/components/ui";
+import { ChemicalLoader, LoadingOverlay, LoadingButton } from "@/components/ui";
 import { 
   getQuotations, 
   deleteQuotation, 
@@ -121,23 +122,24 @@ function StatCard({ title, value, icon: Icon, color }: any) {
 }
 
 const quotationSchema = z.object({
-  quotation_number: z.string().min(1, "Wajib diisi"),
-  user_id: z.string().min(1, "Pilih pelanggan"),
+  quotation_number: z.string().min(1, "Nomor penawaran wajib diisi"),
+  user_id: z.string().optional().nullable(), // Validasi manual di onSubmit untuk toast lebih jelas
   use_tax: z.boolean().default(true),
-  discount_amount: z.number().default(0),
+  discount_amount: z.coerce.number().default(0),
   perdiem_name: z.string().optional().nullable(),
-  perdiem_price: z.number().default(0),
-  perdiem_qty: z.number().default(0),
+  perdiem_price: z.coerce.number().default(0),
+  perdiem_qty: z.coerce.number().default(0),
   transport_name: z.string().optional().nullable(),
-  transport_price: z.number().default(0),
-  transport_qty: z.number().default(0),
+  transport_price: z.coerce.number().default(0),
+  transport_qty: z.coerce.number().default(0),
   items: z.array(z.object({
     service_id: z.string().optional().nullable(),
     equipment_id: z.string().optional().nullable(),
-    qty: z.number().min(1, "Qty minimal 1"),
-    price: z.number().min(0, "Harga minimal 0"),
+    qty: z.coerce.number().default(1),
+    price: z.coerce.number().default(0),
     name: z.string().optional().nullable(),
-  })).min(1, "Minimal 1 item harus diisi"),
+    parameters: z.array(z.string()).optional(),
+  })).default([]),
 });
 
 const statusOptions = [
@@ -163,7 +165,6 @@ export default function QuotationListPage() {
   const [isTransportDialogOpen, setIsTransportDialogOpen] = useState(false);
   const [isEquipmentDialogOpen, setIsEquipmentDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
@@ -172,6 +173,8 @@ export default function QuotationListPage() {
   const [sortBy, setSortBy] = useState<string>("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
+  const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
+  const [pendingFormData, setPendingFormData] = useState<any>(null);
 
   // Form Hooks
   const { register, control, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
@@ -197,10 +200,10 @@ export default function QuotationListPage() {
   // Watches for Calculations
   const watchedItems = watch("items") || [];
   const watchedUseTax = watch("use_tax");
-  const watchedDiscount = watch("discount_amount") || 0;
-  const watchedPerdiemPrice = watch("perdiem_price") || 0;
+  const watchedDiscount = Number(watch("discount_amount")) || 0;
+  const watchedPerdiemPrice = Number(watch("perdiem_price")) || 0;
   const watchedPerdiemQty = watch("perdiem_qty") || 0;
-  const watchedTransportPrice = watch("transport_price") || 0;
+  const watchedTransportPrice = Number(watch("transport_price")) || 0;
   const watchedTransportQty = watch("transport_qty") || 0;
   const watchedPerdiemName = watch("perdiem_name");
   const watchedTransportName = watch("transport_name");
@@ -284,27 +287,95 @@ export default function QuotationListPage() {
     }
   };
 
-  const onSubmit = async (formData: any) => {
-    // Validasi tambahan: Pastikan setiap item punya ID (Layanan atau Alat)
-    const isValidItems = formData.items.every((item: any) => item.service_id || item.equipment_id);
-    if (!isValidItems) {
-      toast.error("Setiap baris item harus memiliki Layanan atau Alat yang dipilih");
+  const onSubmit = (formData: any) => {
+    // 1. Validasi Pelanggan
+    if (!formData.user_id || formData.user_id === "") {
+      toast.error("Data Belum Lengkap", {
+        description: "Silakan pilih pelanggan terlebih dahulu."
+      });
       return;
     }
 
-    setShowSubmitModal(true);
+    // 2. Filter item untuk memisahkan Layanan dan Sewa Alat
+    const servicesItems = formData.items.filter((item: any) => item.service_id);
+    const equipmentItems = formData.items.filter((item: any) => item.equipment_id);
+
+    // 3. Validasi: Minimal harus ada 1 Layanan yang dipilih
+    if (servicesItems.length === 0) {
+      toast.error("Layanan Wajib Diisi", {
+        description: "Harap tambahkan minimal 1 layanan laboratorium."
+      });
+      return;
+    }
+
+    // 4. Validasi Layanan: Pastikan semua layanan yang ditambahkan sudah dipilih dan punya harga
+    const hasIncompleteService = servicesItems.some((item: any) => !item.service_id || Number(item.price) <= 0);
+    if (hasIncompleteService) {
+      toast.error("Layanan Belum Lengkap", {
+        description: "Pastikan semua baris layanan sudah dipilih dan harga sudah terisi."
+      });
+      return;
+    }
+
+    // 5. Validasi Sewa Alat (Opsional): Jika ada alat yang ditambahkan, harganya harus > 0
+    if (equipmentItems.length > 0) {
+      const hasIncompleteEquipment = equipmentItems.some((item: any) => Number(item.price) <= 0);
+      if (hasIncompleteEquipment) {
+        toast.error("Harga Alat Belum Terisi", {
+          description: "Ada sewa alat yang harganya masih 0 atau kosong."
+        });
+        return;
+      }
+    }
+
+    // 6. Validasi Perdiem (Wajib)
+    if (!formData.perdiem_name || formData.perdiem_name.trim() === "") {
+      toast.error("Perdiem Wajib Diisi", {
+        description: "Harap pilih atau isi keterangan Perdiem (Bisa via Katalog)."
+      });
+      return;
+    }
+    if (Number(formData.perdiem_price) <= 0 || Number(formData.perdiem_qty) <= 0) {
+      toast.error("Detail Perdiem Tidak Valid", {
+        description: "Harga dan hari perdiem harus lebih dari 0."
+      });
+      return;
+    }
+
+    // 7. Validasi Transport (Wajib)
+    if (!formData.transport_name || formData.transport_name.trim() === "") {
+      toast.error("Transport Wajib Diisi", {
+        description: "Harap pilih atau isi keterangan Transport (Bisa via Katalog)."
+      });
+      return;
+    }
+    if (Number(formData.transport_price) <= 0 || Number(formData.transport_qty) <= 0) {
+      toast.error("Detail Transport Tidak Valid", {
+        description: "Harga dan qty transport harus lebih dari 0."
+      });
+      return;
+    }
+
+    setPendingFormData(formData);
+    setIsSaveConfirmOpen(true);
+  };
+
+  const handleConfirmSave = async () => {
+    if (!pendingFormData) return;
+    
+    setIsSaveConfirmOpen(false);
     setSubmitting(true);
     try {
       const result = await createQuotation({
-        ...formData,
+        ...pendingFormData,
         subtotal: subtotalBeforeDiscount,
         tax_amount: tax,
         total_amount: total
       });
       
       if (result.success) {
-        toast.success("Penawaran berhasil disimpan dan dikirim", {
-          description: "Status otomatis menjadi TERKIRIM"
+        toast.success("Penawaran berhasil disimpan", {
+          description: "Status otomatis menjadi DRAFT"
         });
         setIsDialogOpen(false);
         reset();
@@ -314,14 +385,14 @@ export default function QuotationListPage() {
       toast.error("Gagal menyimpan penawaran", { description: error?.message || "Silakan coba lagi" });
     } finally {
       setSubmitting(false);
-      setShowSubmitModal(false);
+      setPendingFormData(null);
     }
   };
 
   const onInvalid = (errors: any) => {
-    console.error("Validation Errors:", errors);
-    toast.error("Form tidak valid", {
-      description: "Mohon periksa kembali inputan Anda yang berwarna merah"
+    console.error("Hook Form Errors:", errors);
+    toast.error("Form Belum Lengkap", {
+      description: "Mohon periksa kembali inputan Anda, pastikan data wajib sudah terisi."
     });
   };
 
@@ -330,6 +401,19 @@ export default function QuotationListPage() {
     if (service) {
       setValue(`items.${index}.service_id`, serviceId);
       setValue(`items.${index}.price`, Number(service.price));
+      
+      // Load default parameters
+      if (service.parameters) {
+        try {
+          const params = typeof service.parameters === 'string' ? JSON.parse(service.parameters) : service.parameters;
+          const paramNames = Array.isArray(params) ? params.map((p: any) => p.name) : [];
+          setValue(`items.${index}.parameters`, paramNames);
+        } catch (e) {
+          setValue(`items.${index}.parameters`, []);
+        }
+      } else {
+        setValue(`items.${index}.parameters`, []);
+      }
     }
   };
 
@@ -521,38 +605,39 @@ export default function QuotationListPage() {
               placeholder="Cari nomor penawaran atau klien..."
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="pl-10 rounded-xl h-10"
+              className="pl-10 h-11 focus-visible:ring-emerald-500 rounded-lg"
             />
           </div>
-          <div className="flex gap-2 shrink-0">
+          <div className="flex gap-2 w-full md:w-auto justify-end">
             {selectedIds.length > 0 && (
               <Button 
                 variant="destructive" 
-                onClick={handleBulkDelete} 
                 size="icon"
-                className="h-10 w-12 rounded-xl shadow-lg shadow-red-100 animate-in zoom-in duration-200 flex items-center justify-center gap-1 border-none hover:bg-red-600 transition-all active:scale-95"
+                onClick={handleBulkDelete} 
+                className="h-11 w-11 rounded-lg shadow-sm animate-in zoom-in duration-200"
                 title={`Hapus ${selectedIds.length} data`}
               >
-                <Trash2 className="h-4 w-4" />
-                <span className="text-[10px] font-bold">{selectedIds.length}</span>
+                <Trash2 className="h-5 w-5" />
               </Button>
             )}
-            <Button 
-              onClick={() => { reset(); setIsDialogOpen(true); }} 
-              size="icon"
-              className="bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100 cursor-pointer rounded-xl h-10 w-10 shrink-0 border-none transition-all active:scale-95 group"
-              title="Buat Penawaran Baru"
-            >
-              <Plus className="h-5 w-5 text-white group-hover:rotate-90 transition-transform duration-300" />
-            </Button>
+            
             <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-40 h-10 rounded-xl border-slate-200 bg-white shadow-sm focus:ring-emerald-500 font-medium text-xs">
-                <SelectValue placeholder="Semua Status" />
+              <SelectTrigger className="w-full md:w-40 h-11 rounded-lg border-slate-200 bg-white">
+                <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
                 {statusOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
               </SelectContent>
             </Select>
+
+            <Button 
+              onClick={() => { reset(); setIsDialogOpen(true); }} 
+              size="icon"
+              className="bg-emerald-600 hover:bg-emerald-700 shadow-lg cursor-pointer h-11 w-11 shrink-0"
+              title="Buat Penawaran Baru"
+            >
+              <Plus className="h-5 w-5" />
+            </Button>
           </div>
         </div>
 
@@ -746,32 +831,62 @@ export default function QuotationListPage() {
               <div className="space-y-2">
                 {fields.map((field, index) => {
                   if (watchedItems[index]?.equipment_id) return null;
+                  const itemParams = watchedItems[index]?.parameters || [];
+                  
                   return (
-                    <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-white border border-slate-100 p-3 rounded-xl relative shadow-sm hover:border-emerald-200 transition-all">
-                      <div className="md:col-span-6 space-y-1">
-                        <label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Layanan Lab</label>
-                        <Controller
-                          control={control}
-                          name={`items.${index}.service_id`}
-                          render={({ field }) => (
-                            <Select value={field.value || ""} onValueChange={(val) => { field.onChange(val); handleServiceChange(index, val); }}>
-                              <SelectTrigger className="h-8 border-slate-200 text-xs"><SelectValue placeholder="Pilih layanan..." /></SelectTrigger>
-                              <SelectContent>{services.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}</SelectContent>
-                            </Select>
-                          )}
-                        />
+                    <div key={field.id} className="bg-white border border-slate-100 p-4 rounded-2xl relative shadow-sm hover:border-emerald-200 transition-all space-y-3">
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                        <div className="md:col-span-6 space-y-1">
+                          <label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Layanan Lab</label>
+                          <Controller
+                            control={control}
+                            name={`items.${index}.service_id`}
+                            render={({ field }) => (
+                              <Select value={field.value || ""} onValueChange={(val) => { field.onChange(val); handleServiceChange(index, val); }}>
+                                <SelectTrigger className="h-9 border-slate-200 text-xs"><SelectValue placeholder="Pilih layanan..." /></SelectTrigger>
+                                <SelectContent>{services.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}</SelectContent>
+                              </Select>
+                            )}
+                          />
+                        </div>
+                        <div className="md:col-span-2 space-y-1 text-center">
+                          <label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Qty</label>
+                          <Input type="number" {...register(`items.${index}.qty`)} className="h-9 text-center font-bold text-xs" />
+                        </div>
+                        <div className="md:col-span-3 space-y-1">
+                          <label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Harga (Rp)</label>
+                          <Input type="number" {...register(`items.${index}.price`)} className="h-9 font-bold text-emerald-700 text-xs" />
+                        </div>
+                        <div className="md:col-span-1">
+                          <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="w-full h-9 text-slate-300 hover:text-red-500"><Trash2 className="h-4 w-4" /></Button>
+                        </div>
                       </div>
-                      <div className="md:col-span-2 space-y-1 text-center">
-                        <label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Qty</label>
-                        <Input type="number" {...register(`items.${index}.qty`, { valueAsNumber: true })} className="h-8 text-center font-bold text-xs" />
-                      </div>
-                      <div className="md:col-span-3 space-y-1">
-                        <label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Harga (Rp)</label>
-                        <Input type="number" {...register(`items.${index}.price`, { valueAsNumber: true })} className="h-8 font-bold text-emerald-700 text-xs" />
-                      </div>
-                      <div className="md:col-span-1">
-                        <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="w-full h-8 text-slate-300 hover:text-red-500"><Trash2 className="h-4 w-4" /></Button>
-                      </div>
+
+                      {/* PARAMETER TAGS UI */}
+                      {itemParams.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {itemParams.map((param: string, pIdx: number) => (
+                            <Badge 
+                              key={`${index}-${pIdx}`} 
+                              variant="secondary" 
+                              className="text-[8px] font-bold bg-blue-50 text-blue-600 border border-blue-100 pl-2 pr-1 py-0.5 rounded-md flex items-center gap-1 group/tag"
+                            >
+                              {param}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newList = [...itemParams];
+                                  newList.splice(pIdx, 1);
+                                  setValue(`items.${index}.parameters`, newList);
+                                }}
+                                className="hover:bg-blue-200 rounded-sm p-0.5 transition-colors"
+                              >
+                                <X className="h-2 w-2" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -900,19 +1015,17 @@ export default function QuotationListPage() {
               </div>
               <div className="flex gap-3">
                 <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)} className="font-bold text-slate-400 text-xs uppercase px-6 h-10 rounded-xl">Batal</Button>
-                <Button type="submit" disabled={submitting} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-8 h-12 rounded-xl shadow-lg shadow-emerald-900/20 text-xs tracking-wide uppercase transition-all active:scale-95 group">
-                  {submitting ? "PROSES..." : (
-                    <div className="flex flex-col items-center leading-none gap-1">
-                      <span className="flex items-center gap-2">
-                        SIMPAN DRAFT 
-                        <FileText className="h-4 w-4" />
-                      </span>
-                      <span className="text-[7px] opacity-60 font-bold tracking-[0.1em] hidden md:block lowercase">
-                        [ ctrl + enter ]
-                      </span>
-                    </div>
-                  )}
-                </Button>
+                <LoadingButton type="submit" loading={submitting} loadingText="MEMPROSES..." className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-8 h-12 rounded-xl shadow-lg shadow-emerald-900/20 text-xs tracking-wide uppercase transition-all active:scale-95 group">
+                  <div className="flex flex-col items-center leading-none gap-1">
+                    <span className="flex items-center gap-2">
+                      SIMPAN DRAFT 
+                      <FileText className="h-4 w-4" />
+                    </span>
+                    <span className="text-[7px] opacity-60 font-bold tracking-[0.1em] hidden md:block lowercase">
+                      [ ctrl + enter ]
+                    </span>
+                  </div>
+                </LoadingButton>
               </div>
             </div>
           </form>
@@ -1010,22 +1123,36 @@ export default function QuotationListPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Submit Loading Modal */}
-      <Dialog open={showSubmitModal} onOpenChange={() => {}}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle className="text-center">
-              <div className="flex flex-col items-center gap-4 py-4">
-                <ChemicalLoader size="lg" />
-                <div className="text-center">
-                  <p className="text-lg font-semibold text-emerald-900">Menyimpan Penawaran</p>
-                  <p className="text-sm text-slate-500 mt-1">Mohon tunggu sebentar</p>
-                </div>
-              </div>
-            </DialogTitle>
-          </DialogHeader>
-        </DialogContent>
-      </Dialog>
+      {/* Save Confirmation AlertDialog */}
+      <AlertDialog open={isSaveConfirmOpen} onOpenChange={setIsSaveConfirmOpen}>
+        <AlertDialogContent className="sm:max-w-[425px] rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-emerald-600">
+              <Check className="h-5 w-5" />
+              Konfirmasi Simpan
+            </AlertDialogTitle>
+            <AlertDialogDescription className="pt-4">
+              Apakah Anda yakin ingin menyimpan penawaran ini? Pastikan semua rincian layanan, alat, dan biaya tambahan sudah benar.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel className="rounded-xl cursor-pointer">Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmSave}
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl cursor-pointer"
+            >
+              Ya, Simpan & Kirim
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Loading Overlay */}
+      <LoadingOverlay 
+        isOpen={submitting} 
+        title="Menyimpan Penawaran..." 
+        description="Mohon tunggu sebentar, penawaran sedang diproses" 
+      />
 
       {/* Add Customer Dialog */}
       <Dialog open={isCustomerDialogOpen} onOpenChange={setIsCustomerDialogOpen}>
@@ -1037,7 +1164,7 @@ export default function QuotationListPage() {
             <div className="space-y-2"><label className="text-sm font-medium">Nama Perusahaan</label><Input placeholder="PT. Maju Mundur" value={customerData.company_name} onChange={(e) => setCustomerData({...customerData, company_name: e.target.value})} className="rounded-xl" /></div>
             <div className="space-y-2"><label className="text-sm font-medium">Alamat</label><Input placeholder="Jl. Raya No. 123..." value={customerData.address} onChange={(e) => setCustomerData({...customerData, address: e.target.value})} className="rounded-xl" /></div>
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setIsCustomerDialogOpen(false)} className="rounded-xl">Batal</Button><Button onClick={handleCreateCustomer} disabled={submitting} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl px-8">{submitting ? "Menyimpan..." : "Simpan Customer"}</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setIsCustomerDialogOpen(false)} className="rounded-xl">Batal</Button><LoadingButton onClick={handleCreateCustomer} loading={submitting} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl px-8">Simpan Customer</LoadingButton></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

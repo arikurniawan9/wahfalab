@@ -44,15 +44,7 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter
-} from "@/components/ui/dialog";
-import { ChemicalLoader } from "@/components/ui";
+import { ChemicalLoader, PageSkeleton } from "@/components/ui";
 import { createClient } from '@/lib/supabase/client';
 import { getMySamplingAssignments, updateSamplingStatus } from "@/lib/actions/sampling";
 import { getProfile } from "@/lib/actions/auth";
@@ -74,9 +66,6 @@ export default function FieldDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [selectedAssignment, setSelectedAssignment] = useState<any>(null);
-  const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   const supabase = createClient();
 
@@ -151,30 +140,10 @@ export default function FieldDashboard() {
     total: assignments.length
   };
 
-  const handleUpdateStatus = async (assignmentId: string, newStatus: string) => {
-    setUpdatingStatus(true);
-    try {
-      await updateSamplingStatus(assignmentId, newStatus);
-      toast.success("Status berhasil diperbarui", {
-        description: `Status → ${newStatus}`
-      });
-      loadData();
-      if (selectedAssignment?.id === assignmentId) {
-        setSelectedAssignment({ ...selectedAssignment, status: newStatus });
-      }
-    } catch (error: any) {
-      toast.error("Gagal update status", {
-        description: error?.message || "Silakan coba lagi"
-      });
-    } finally {
-      setUpdatingStatus(false);
-    }
-  };
-
   if (loading) {
     return (
-      <div className="flex h-[80vh] items-center justify-center">
-        <ChemicalLoader />
+      <div className="p-4 md:p-8">
+        <PageSkeleton />
       </div>
     );
   }
@@ -325,8 +294,7 @@ export default function FieldDashboard() {
                   key={assignment.id}
                   className="p-5 hover:bg-slate-50 transition-all cursor-pointer"
                   onClick={() => {
-                    setSelectedAssignment(assignment);
-                    setIsDetailOpen(true);
+                    router.push(`/field/assignments/${assignment.id}`);
                   }}
                 >
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -374,8 +342,7 @@ export default function FieldDashboard() {
                       className="bg-emerald-600 hover:bg-emerald-700 h-8 px-4 text-xs font-bold rounded-lg shrink-0 cursor-pointer"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setSelectedAssignment(assignment);
-                        setIsDetailOpen(true);
+                        router.push(`/field/assignments/${assignment.id}`);
                       }}
                     >
                       Detail <ChevronRight className="ml-1 h-3 w-3" />
@@ -387,165 +354,6 @@ export default function FieldDashboard() {
           )}
         </div>
       </div>
-
-      {/* Assignment Detail Dialog */}
-      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className="sm:max-w-[550px] rounded-2xl p-0 overflow-hidden">
-          <div className="bg-gradient-to-r from-emerald-900 to-emerald-800 p-6 text-white">
-            <DialogHeader>
-              <DialogTitle className="text-xl font-bold">
-                Detail Sampling
-              </DialogTitle>
-              <DialogDescription className="text-emerald-200 text-xs font-medium">
-                {selectedAssignment?.job_order?.tracking_code}
-              </DialogDescription>
-            </DialogHeader>
-          </div>
-
-          <div className="p-6 bg-white space-y-6">
-            {/* Location Info */}
-            <div className="bg-slate-50 p-4 rounded-xl">
-              <div className="flex items-start gap-3 mb-3">
-                <MapPin className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <h5 className="text-xs font-bold text-slate-500 uppercase mb-1">Lokasi Sampling</h5>
-                  <p className="text-sm font-semibold text-slate-800">{selectedAssignment?.location}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="flex-1 text-xs cursor-pointer"
-                  onClick={() => {
-                    const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedAssignment?.location)}`;
-                    window.open(mapUrl, '_blank');
-                  }}
-                >
-                  <Navigation className="h-3 w-3 mr-1" />
-                  Buka Maps
-                </Button>
-              </div>
-            </div>
-
-            {/* Schedule */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-slate-50 p-4 rounded-xl">
-                <h5 className="text-xs font-bold text-slate-500 uppercase mb-2">Tanggal Rencana</h5>
-                <p className="text-sm font-semibold text-slate-800">
-                  {new Date(selectedAssignment?.scheduled_date).toLocaleDateString("id-ID", {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </p>
-              </div>
-              <div className="bg-slate-50 p-4 rounded-xl">
-                <h5 className="text-xs font-bold text-slate-500 uppercase mb-2">Status</h5>
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-[9px] h-6 px-2 font-bold uppercase",
-                    statusConfig[selectedAssignment?.status]?.color || "bg-slate-100"
-                  )}
-                >
-                  {statusConfig[selectedAssignment?.status]?.label || selectedAssignment?.status}
-                </Badge>
-              </div>
-            </div>
-
-            {/* Customer Info */}
-            <div className="bg-slate-50 p-4 rounded-xl">
-              <h5 className="text-xs font-bold text-slate-500 uppercase mb-3">Informasi Pelanggan</h5>
-              <div className="space-y-2">
-                <p className="text-sm font-semibold text-slate-800">
-                  {selectedAssignment?.job_order?.quotation?.profile?.full_name}
-                </p>
-                {selectedAssignment?.job_order?.quotation?.profile?.company_name && (
-                  <p className="text-xs text-slate-500">
-                    {selectedAssignment.job_order.quotation.profile.company_name}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Status Update Actions */}
-            {selectedAssignment?.status !== 'completed' && selectedAssignment?.status !== 'cancelled' && (
-              <div>
-                <h5 className="text-xs font-bold text-slate-500 uppercase mb-3">Update Status</h5>
-                <div className="grid grid-cols-2 gap-2">
-                  {selectedAssignment?.status === 'pending' && (
-                    <Button
-                      onClick={() => handleUpdateStatus(selectedAssignment.id, 'in_progress')}
-                      disabled={updatingStatus}
-                      className="bg-blue-600 hover:bg-blue-700 text-xs cursor-pointer"
-                    >
-                      <MapPin className="h-3 w-3 mr-1" />
-                      Mulai Sampling
-                    </Button>
-                  )}
-                  {selectedAssignment?.status === 'in_progress' && (
-                    <Button
-                      onClick={() => handleUpdateStatus(selectedAssignment.id, 'completed')}
-                      disabled={updatingStatus}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-xs cursor-pointer"
-                    >
-                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Selesai
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    className="text-xs cursor-pointer"
-                    onClick={() => {
-                      toast.info("Fitur upload foto", {
-                        description: "Fitur akan segera hadir"
-                      });
-                    }}
-                  >
-                    <Camera className="h-3 w-3 mr-1" />
-                    Upload Foto
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Notes */}
-            {selectedAssignment?.notes && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                  <div>
-                    <h5 className="text-xs font-bold text-amber-800 mb-1">Catatan</h5>
-                    <p className="text-xs text-amber-700 italic">{selectedAssignment.notes}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="p-4 bg-slate-50 gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setIsDetailOpen(false)}
-              className="flex-1 cursor-pointer"
-            >
-              Tutup
-            </Button>
-            <Button
-              onClick={() => {
-                setIsDetailOpen(false);
-                router.push(`/field/assignments/${selectedAssignment?.id}`);
-              }}
-              className="flex-1 bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
-            >
-              Kelola Assignment
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

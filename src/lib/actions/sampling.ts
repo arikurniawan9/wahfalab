@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
 import { createClient } from '@/lib/supabase/server'
 import { generateInvoice } from '@/lib/actions/payment'
+import { notifySamplingCompleted, notifyInvoiceGenerated } from '@/lib/actions/notifications'
 
 export async function getSamplingAssignments(fieldOfficerId: string) {
   const assignments = await prisma.samplingAssignment.findMany({
@@ -79,6 +80,107 @@ export async function getMySamplingAssignments(page = 1, limit = 10, status?: st
   return serializeData({ items: assignments, total, pages: Math.ceil(total / limit) })
 }
 
+/**
+ * Complete sampling assignment with auto-notifications and invoice generation
+ */
+export async function completeSamplingAssignment(
+  assignmentId: string,
+  photos?: string[],
+  notes?: string
+) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return { error: 'Unauthorized' }
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Update sampling assignment status
+      const assignment = await tx.samplingAssignment.update({
+        where: { id: assignmentId },
+        data: {
+          status: 'completed',
+          actual_date: new Date(),
+          photos: photos || undefined,
+          notes: notes
+        },
+        include: {
+          job_order: {
+            include: {
+              quotation: {
+                include: {
+                  profile: true,
+                  items: {
+                    include: {
+                      service: true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      })
+
+      // 2. Update job_order status to analysis_ready
+      const jobOrder = await tx.jobOrder.update({
+        where: { id: assignment.job_order_id },
+        data: {
+          status: 'analysis_ready'
+        }
+      })
+
+      // 3. Auto-generate Invoice (Draft)
+      const quotation = assignment.job_order.quotation
+      const invoiceNumber = `INV-${Date.now()}`
+      
+      const invoice = await tx.invoice.create({
+        data: {
+          invoice_number: invoiceNumber,
+          job_order_id: jobOrder.id,
+          quotation_id: quotation.id,
+          amount: quotation.total_amount,
+          status: 'draft',
+          due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days
+          created_by: user.id
+        }
+      })
+
+      return { assignment, jobOrder, invoice }
+    })
+
+    // 4. Send notifications (outside transaction)
+    const trackingCode = result.jobOrder.tracking_code
+    await notifySamplingCompleted(result.jobOrder.id, trackingCode)
+    await notifyInvoiceGenerated(
+      result.invoice.id,
+      result.invoice.invoice_number,
+      Number(result.invoice.amount),
+      result.assignment.job_order.quotation.profile?.company_name || 
+      result.assignment.job_order.quotation.profile?.full_name || 
+      'Client'
+    )
+
+    revalidatePath('/field')
+    revalidatePath('/field/assignments')
+    revalidatePath('/analyst/jobs')
+    revalidatePath('/finance')
+    revalidatePath('/operator/jobs')
+
+    return { 
+      success: true, 
+      assignment: result.assignment,
+      jobOrder: result.jobOrder,
+      invoice: result.invoice
+    }
+  } catch (error: any) {
+    console.error('Error completing sampling assignment:', error)
+    return { error: error.message }
+  }
+}
+
 export async function updateSamplingStatus(assignmentId: string, status: any, notes?: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -116,18 +218,48 @@ export async function updateSamplingStatus(assignmentId: string, status: any, no
     data: updateData
   })
 
+  let invoice: any = null
+
   // Update JobOrder status jika sampling selesai
   if (status === 'completed') {
-    await prisma.jobOrder.update({
+    // Update to analysis_ready instead of completed
+    const jobOrder = await prisma.jobOrder.update({
       where: { id: assignment.job_order_id },
       data: {
-        status: 'completed',
+        status: 'analysis_ready',
         notes: `Sampling completed by ${user.email || 'field officer'} - ${notes || ''}`
       }
     })
-    
-    // Auto-generate invoice when sampling is completed
-    await generateInvoice(assignment.job_order_id)
+
+    // Auto-generate invoice (draft)
+    const quotation = await prisma.quotation.findUnique({
+      where: { id: jobOrder.quotation_id },
+      include: { profile: true }
+    })
+
+    if (quotation) {
+      const invoiceNumber = `INV-${Date.now()}`
+      invoice = await prisma.invoice.create({
+        data: {
+          invoice_number: invoiceNumber,
+          job_order_id: jobOrder.id,
+          quotation_id: quotation.id,
+          amount: quotation.total_amount,
+          status: 'draft',
+          due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+          created_by: user.id
+        }
+      })
+
+      // Send notifications
+      await notifySamplingCompleted(jobOrder.id, jobOrder.tracking_code)
+      await notifyInvoiceGenerated(
+        invoice.id,
+        invoice.invoice_number,
+        Number(invoice.amount),
+        quotation.profile?.company_name || quotation.profile?.full_name || 'Client'
+      )
+    }
   } else if (status === 'in_progress') {
     await prisma.jobOrder.update({
       where: { id: assignment.job_order_id },
@@ -139,10 +271,12 @@ export async function updateSamplingStatus(assignmentId: string, status: any, no
 
   revalidatePath('/field')
   revalidatePath('/field/assignments')
+  revalidatePath('/analyst/jobs')
+  revalidatePath('/finance')
   revalidatePath('/operator/jobs')
   revalidatePath('/dashboard')
 
-  return { success: true }
+  return { success: true, invoice }
 }
 
 export async function updateSamplingPhotos(assignmentId: string, photoUrls: string[]) {
@@ -236,6 +370,14 @@ export async function getAssignmentById(assignmentId: string) {
                   }
                 }
               }
+            }
+          },
+          invoice: {
+            select: {
+              id: true,
+              invoice_number: true,
+              status: true,
+              amount: true
             }
           }
         }
@@ -342,3 +484,7 @@ export async function getAllSamplingAssignments(page = 1, limit = 10, search = "
 
   return serializeData({ items: assignments, total, pages: Math.ceil(total / limit) })
 }
+
+/**
+ * Complete sampling assignment with auto-notifications and invoice generation
+ */

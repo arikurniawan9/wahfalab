@@ -18,9 +18,24 @@ enum UserRole {
   reporting    // Staff reporting - menerbitkan laporan hasil uji
 }
 
+// Notification Types
+enum NotificationType {
+  sampling_completed
+  analysis_ready
+  analysis_completed
+  reporting_completed
+  invoice_generated
+  invoice_sent
+  payment_received
+  job_assigned
+  approval_requested
+  approval_decided
+}
+
 enum JobStatus {
   scheduled
   sampling
+  analysis_ready  // Sampling selesai, siap untuk analisis
   analysis        // Sedang dianalisis oleh analis
   analysis_done   // Analisis selesai, menunggu reporting
   reporting       // Sedang dibuat laporan oleh staff reporting
@@ -102,11 +117,19 @@ model Profile {
   quotations           Quotation[]
   sampling_assignments SamplingAssignment[]
   approval_requests    ApprovalRequest[]
-  
+  notifications        Notification[]
+
   // Analyst & Reporting Relations
   analyst_jobs         JobOrder[]          @relation("AnalystJobs")
   reporting_jobs       JobOrder[]          @relation("ReportingJobs")
   lab_analyses         LabAnalysis[]
+
+  // Handover Relations
+  sent_handovers       SampleHandover[]    @relation("SenderHandover")
+  received_handovers   SampleHandover[]    @relation("ReceiverHandover")
+
+  // Finance Relations
+  payments_handled     Payment[]           @relation("FinanceHandler")
 
   @@map("profiles")
   @@index([email])
@@ -169,6 +192,7 @@ model Quotation {
   created_at       DateTime        @default(now())
   items            QuotationItem[]
   job_orders       JobOrder[]
+  invoices         Invoice[]
 
   @@map("quotations")
   @@index([user_id])
@@ -200,7 +224,7 @@ model JobOrder {
   status              JobStatus           @default(scheduled)
   notes               String?             // Added for progress remarks
   certificate_url     String?
-  
+
   // Analyst & Reporting Tracking
   analyst_id          String?             // Analis yang menangani
   analyst             Profile?            @relation("AnalystJobs", fields: [analyst_id], references: [id])
@@ -209,11 +233,13 @@ model JobOrder {
   analysis_started_at DateTime?           // Waktu analisis dimulai
   analysis_done_at    DateTime?           // Waktu analisis selesai
   reporting_done_at   DateTime?           // Waktu laporan selesai
-  
+
   created_at          DateTime            @default(now())
   sampling_assignment SamplingAssignment?
   lab_analysis        LabAnalysis?        // Hasil analisis laboratorium
+  sample_handover     SampleHandover?     // Berita Acara Serah Terima (BAST)
   payment             Payment?
+  invoice             Invoice?
 
   @@map("job_orders")
   @@index([quotation_id])
@@ -222,6 +248,32 @@ model JobOrder {
   @@index([created_at])
   @@index([analyst_id])
   @@index([reporting_id])
+}
+
+// Berita Acara Serah Terima (BAST) Sampel
+model SampleHandover {
+  id                String   @id @default(uuid())
+  job_order_id      String   @unique
+  job_order         JobOrder @relation(fields: [job_order_id], references: [id], onDelete: Cascade)
+  handover_number   String   @unique // BAST-XXXX
+  received_at       DateTime @default(now())
+  
+  sender_id         String   // Biasanya Field Officer
+  sender            Profile  @relation("SenderHandover", fields: [sender_id], references: [id])
+  receiver_id       String   // Biasanya Analis
+  receiver          Profile  @relation("ReceiverHandover", fields: [receiver_id], references: [id])
+  
+  sample_condition  String   // Misal: Segel Utuh, Dingin, Wadah Pecah, dll
+  sample_qty        Int      // Jumlah wadah/botol
+  sample_notes      String?  
+  
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  @@map("sample_handovers")
+  @@index([job_order_id])
+  @@index([sender_id])
+  @@index([receiver_id])
 }
 
 model SamplingAssignment {
@@ -323,9 +375,7 @@ model Regulation {
   id                  String   @id @default(uuid())
   name                String   @unique  // Nama regulasi (SNI, ISO, dll)
   code                String?  // Kode regulasi
-  description         String?  // Deskripsi regulasi
-  published_date      DateTime?  // Tanggal publikasi
-  effective_date      DateTime?  // Tanggal efektif
+  parameters_list     String[] @default([]) // List parameter utama (tags)
   status              String   @default("active")  // active, inactive, draft
   parameters          RegulationParameter[]
   services            Service[]
@@ -405,6 +455,60 @@ model ApprovalRequest {
   @@index([created_at])
 }
 
+// Notifications for real-time updates
+model Notification {
+  id          String            @id @default(uuid())
+  user_id     String
+  user        Profile           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  type        NotificationType
+  title       String
+  message     String
+  link        String?           // Optional link to related page
+  is_read     Boolean           @default(false)
+  metadata    Json?             // Additional data (job_id, invoice_id, etc.)
+  created_at  DateTime          @default(now())
+
+  @@map("notifications")
+  @@index([user_id])
+  @@index([is_read])
+  @@index([created_at])
+  @@index([type])
+}
+
+// Invoices for billing
+model Invoice {
+  id                String        @id @default(uuid())
+  invoice_number    String        @unique
+  job_order_id      String        @unique
+  job_order         JobOrder      @relation(fields: [job_order_id], references: [id])
+  quotation_id      String
+  quotation         Quotation     @relation(fields: [quotation_id], references: [id])
+  amount            Decimal       @db.Decimal(10, 2)
+  status            InvoiceStatus @default(draft)
+  due_date          DateTime
+  paid_at           DateTime?
+  notes             String?
+  pdf_url           String?       // Generated PDF invoice
+  created_by        String?       // User who created the invoice
+  created_at        DateTime      @default(now())
+  updated_at        DateTime      @default(now())
+  payments          Payment[]
+
+  @@map("invoices")
+  @@index([job_order_id])
+  @@index([invoice_number])
+  @@index([status])
+  @@index([due_date])
+}
+
+enum InvoiceStatus {
+  draft
+  sent
+  paid
+  overdue
+  cancelled
+}
+
 model AuditLog {
   id          String   @id @default(uuid())
   action      String   // create, update, delete, login, logout, etc.
@@ -442,12 +546,16 @@ model Payment {
   id                String        @id @default(uuid())
   job_order_id      String        @unique
   job_order         JobOrder      @relation(fields: [job_order_id], references: [id])
+  invoice_id        String?       @unique
+  invoice           Invoice?      @relation(fields: [invoice_id], references: [id])
   invoice_number    String        @unique
   amount            Decimal       @db.Decimal(10, 2)
   payment_method    PaymentMethod?
   payment_status    PaymentStatus @default(pending)
   transfer_reference String?      // Nomor referensi transfer
   paid_at           DateTime?
+  handled_by        String?       // Finance user who processed
+  handler           Profile?      @relation("FinanceHandler", fields: [handled_by], references: [id])
   created_at        DateTime      @default(now())
   updated_at        DateTime      @default(now())
 
@@ -455,4 +563,5 @@ model Payment {
   @@index([job_order_id])
   @@index([invoice_number])
   @@index([payment_status])
+  @@index([handled_by])
 }

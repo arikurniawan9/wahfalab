@@ -41,7 +41,7 @@ import {
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
 import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Search, Tag, Download, Upload } from "lucide-react";
-import { ChemicalLoader } from "@/components/ui";
+import { ChemicalLoader, LoadingOverlay, LoadingButton } from "@/components/ui";
 import { getCategories, createOrUpdateCategory, deleteCategory, deleteManyCategories } from "@/lib/actions/categories";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -64,7 +64,6 @@ export default function CategoriesPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
@@ -95,7 +94,6 @@ export default function CategoriesPage() {
   }, [page, limit, search]);
 
   const onSubmit = async (formData: any) => {
-    setShowSubmitModal(true);
     setSubmitting(true);
     try {
       await createOrUpdateCategory(formData, editingItem?.id);
@@ -112,7 +110,6 @@ export default function CategoriesPage() {
       });
     } finally {
       setSubmitting(false);
-      setShowSubmitModal(false);
     }
   };
 
@@ -227,31 +224,49 @@ export default function CategoriesPage() {
 
   return (
     <div className="p-4 md:p-10 pb-24 md:pb-10">
-      {/* Header dengan Actions */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-bold text-emerald-900 tracking-tight">Kategori Layanan</h1>
-          <p className="text-slate-500 text-sm">Kelola pengelompokan layanan laboratorium.</p>
-        </div>
+      {/* Header */}
+      <div className="mb-10">
+        <h1 className="text-3xl font-bold text-emerald-900 tracking-tight">Kategori Layanan</h1>
+        <p className="text-slate-500 text-sm mt-1">Kelola pengelompokan layanan laboratorium.</p>
+      </div>
 
-        <div className="flex gap-2 flex-wrap w-full md:w-auto">
+      {/* Filters & Actions Bar */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6 shadow-sm flex flex-col md:flex-row gap-4 items-center">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-500" />
+          <Input
+            placeholder="Cari kategori..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="pl-10 h-11 focus-visible:ring-emerald-500 rounded-lg"
+          />
+        </div>
+        <div className="flex gap-2 w-full md:w-auto">
           {selectedIds.length > 0 && (
-            <Button variant="destructive" onClick={handleBulkDelete} className="animate-in fade-in zoom-in duration-200 cursor-pointer">
+            <Button variant="destructive" onClick={handleBulkDelete} className="h-11 animate-in fade-in zoom-in duration-200 cursor-pointer flex-1 md:flex-none">
               <Trash2 className="mr-2 h-4 w-4" /> Hapus ({selectedIds.length})
             </Button>
           )}
-          <Button variant="outline" onClick={handleExport} className="cursor-pointer">
+          <Button variant="outline" onClick={handleExport} className="cursor-pointer h-11 flex-1 md:flex-none">
             <Download className="mr-2 h-4 w-4" /> Export
           </Button>
-          <Button variant="outline" onClick={() => setIsImportDialogOpen(true)} className="cursor-pointer">
+          <Button variant="outline" onClick={() => setIsImportDialogOpen(true)} className="cursor-pointer h-11 flex-1 md:flex-none">
             <Upload className="mr-2 h-4 w-4" /> Import
           </Button>
-          <Button onClick={() => {
-            reset();
-            setEditingItem(null);
-            setIsDialogOpen(true);
-          }} className="bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100 cursor-pointer flex-1 md:flex-none">
-            <Plus className="mr-2 h-4 w-4" /> Tambah Kategori
+          <Button 
+            onClick={() => {
+              reset();
+              setEditingItem(null);
+              setIsDialogOpen(true);
+            }} 
+            size="icon"
+            className="bg-emerald-600 hover:bg-emerald-700 shadow-lg cursor-pointer h-11 w-11 shrink-0"
+            title="Tambah Kategori"
+          >
+            <Plus className="h-5 w-5" />
           </Button>
         </div>
       </div>
@@ -259,17 +274,8 @@ export default function CategoriesPage() {
       {/* Table */}
       <div className="bg-white rounded-3xl shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
         <div className="p-5 border-b bg-emerald-50/10 flex items-center justify-between gap-4">
-          <div className="relative max-w-sm flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
-            <Input
-              placeholder="Cari kategori..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="pl-10 focus-visible:ring-emerald-500 rounded-xl"
-            />
+          <div className="text-sm font-medium text-slate-600">
+            Daftar Kategori Layanan
           </div>
           <div className="text-sm text-slate-500">
             {data.items.length} dari {data.total} kategori
@@ -505,9 +511,9 @@ export default function CategoriesPage() {
               <Input {...register("name")} placeholder="Contoh: Udara Ambien, Air Limbah" required className="focus-visible:ring-emerald-500" />
             </div>
             <DialogFooter className="pt-4">
-              <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 cursor-pointer" disabled={submitting}>
+              <LoadingButton type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 cursor-pointer" loading={submitting} loadingText="Menyimpan...">
                 {editingItem ? "Simpan Perubahan" : "Buat Kategori"}
-              </Button>
+              </LoadingButton>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -594,22 +600,13 @@ export default function CategoriesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Submit Loading Modal */}
-      <Dialog open={showSubmitModal} onOpenChange={() => {}}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle className="text-center">
-              <div className="flex flex-col items-center gap-4 py-4">
-                <ChemicalLoader size="lg" />
-                <div className="text-center">
-                  <p className="text-lg font-semibold text-emerald-900">Menyimpan Data</p>
-                  <p className="text-sm text-slate-500 mt-1">Mohon tunggu sebentar</p>
-                </div>
-              </div>
-            </DialogTitle>
-          </DialogHeader>
-        </DialogContent>
-      </Dialog>
+      {/* Loading Overlay */}
+      <LoadingOverlay
+        isOpen={submitting}
+        title="Menyimpan Data..."
+        description="Kategori sedang disimpan"
+        variant="default"
+      />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { logAudit } from "@/lib/audit-log";
 import { cache } from "react";
+import { createNotification } from "@/lib/actions/notifications";
 
 /**
  * Server Actions untuk Analyst (Analis Laboratorium)
@@ -498,6 +499,13 @@ export async function completeAnalysis(jobOrderId: string) {
           },
         },
       },
+      include: {
+        quotation: {
+          include: {
+            profile: true
+          }
+        }
+      }
     });
 
     await logAudit({
@@ -513,8 +521,27 @@ export async function completeAnalysis(jobOrderId: string) {
       },
     });
 
-    // TODO: Send notification to reporting team
-    // await notifyReportingTeam(jobOrderId);
+    // Get reporting staff to send notification
+    const reportingStaff = await prisma.profile.findFirst({
+      where: { role: 'reporting' }
+    });
+
+    // Send notification to reporting team
+    if (reportingStaff) {
+      await createNotification({
+        user_id: reportingStaff.id!,
+        type: 'analysis_completed',
+        title: 'Analisis Selesai - Siap untuk Reporting',
+        message: `Job Order ${updated.tracking_code} telah selesai dianalisis. Silakan buat laporan hasil uji.`,
+        link: `/reporting/jobs/${jobOrderId}`,
+        metadata: {
+          job_order_id: jobOrderId,
+          tracking_code: updated.tracking_code,
+          quotation_number: updated.quotation?.quotation_number,
+          customer_name: updated.quotation?.profile?.full_name
+        }
+      });
+    }
 
     revalidatePath("/analyst");
     revalidatePath("/operator/jobs");
@@ -549,7 +576,11 @@ export async function getMyAnalysisJobs(
     const skip = (page - 1) * limit;
 
     const where: any = {
-      analyst_id: profile.id,
+      OR: [
+        { analyst_id: profile.id },
+        { status: 'sampling' },
+        { status: 'analysis_ready' } // NEW: Show jobs ready for analysis
+      ]
     };
 
     if (status) {
@@ -576,11 +607,21 @@ export async function getMyAnalysisJobs(
           },
           sampling_assignment: {
             select: {
+              id: true,
+              field_officer_id: true,
               scheduled_date: true,
               actual_date: true,
               location: true,
               status: true,
+              photos: true, // Include sampling photos
+              notes: true,
             },
+          },
+          sample_handover: {
+            include: {
+              sender: { select: { full_name: true } },
+              receiver: { select: { full_name: true } },
+            }
           },
           lab_analysis: {
             select: {
@@ -631,7 +672,12 @@ export const getAnalysisJobById = cache(async (jobOrderId: string) => {
             profile: true,
             items: {
               include: {
-                service: true,
+                service: {
+                  include: {
+                    category_ref: true,
+                    regulation_ref: true
+                  }
+                },
               },
             },
           },
@@ -641,6 +687,12 @@ export const getAnalysisJobById = cache(async (jobOrderId: string) => {
             field_officer: true,
             travel_order: true,
           },
+        },
+        sample_handover: {
+          include: {
+            sender: { select: { full_name: true } },
+            receiver: { select: { full_name: true } },
+          }
         },
         lab_analysis: true,
       },
@@ -656,11 +708,27 @@ export const getAnalysisJobById = cache(async (jobOrderId: string) => {
       throw new Error("Unauthorized");
     }
 
-    if (profile!.role === "analyst" && jobOrder.analyst_id !== profile!.id) {
-      throw new Error("You are not assigned to this job order");
+    // Analysts can only access jobs assigned to them OR jobs ready for analysis (sampling/analysis_ready)
+    if (profile!.role === "analyst") {
+      const isAssigned = jobOrder.analyst_id === profile!.id;
+      const isReadyForAnalysis = ["sampling", "analysis_ready"].includes(jobOrder.status);
+
+      if (!isAssigned && !isReadyForAnalysis) {
+        throw new Error("You are not assigned to this job order");
+      }
     }
 
-    return { jobOrder, success: true };
+    // Return job order with serialized data
+    return { 
+      jobOrder: {
+        ...jobOrder,
+        sample_handover: jobOrder.sample_handover,
+        lab_analysis: jobOrder.lab_analysis,
+        quotation: jobOrder.quotation,
+        sampling_assignment: jobOrder.sampling_assignment,
+      }, 
+      success: true 
+    };
   } catch (error) {
     console.error("Error getting analysis job:", error);
     return {

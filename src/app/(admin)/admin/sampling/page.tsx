@@ -42,7 +42,7 @@ import {
   AlertCircle,
   X
 } from "lucide-react";
-import { ChemicalLoader } from "@/components/ui";
+import { ChemicalLoader, LoadingOverlay, LoadingButton } from "@/components/ui";
 import { getAllSamplingAssignments, createSamplingAssignment } from "@/lib/actions/sampling";
 import { getUsers } from "@/lib/actions/users";
 import { getJobOrders } from "@/lib/actions/jobs";
@@ -295,9 +295,6 @@ export default function SamplingAssignmentListPage() {
         </div>
 
         <div className="flex gap-2 flex-wrap w-full md:w-auto">
-          <Button onClick={handleOpenCreateModal} className="bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100 cursor-pointer">
-            <Plus className="mr-2 h-4 w-4" /> Buat Penugasan
-          </Button>
         </div>
       </div>
 
@@ -340,58 +337,10 @@ export default function SamplingAssignmentListPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6">
-        <div className="flex flex-wrap gap-4 items-center justify-between">
-          <div className="flex flex-wrap gap-2">
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-40 cursor-pointer">
-                <SelectValue placeholder="Filter Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Status</SelectItem>
-                {statusOptions.filter(opt => opt.value !== "all").map(opt => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-40 cursor-pointer">
-                <SelectValue placeholder="Sort By" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="date">Tanggal</SelectItem>
-                <SelectItem value="status">Status</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-              className="cursor-pointer"
-            >
-              <svg className={`h-4 w-4 transition-transform ${sortOrder === "asc" ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </Button>
-
-            <Button variant="outline" onClick={handleExport} className="cursor-pointer">
-              <Download className="mr-2 h-4 w-4" /> Export
-            </Button>
-          </div>
-
-          <div className="text-sm text-slate-500">
-            {filteredItems.length} dari {data.total} penugasan
-          </div>
-        </div>
-      </div>
-
-      {/* Table */}
+      {/* Table Container */}
       <div className="bg-white rounded-3xl shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
-        <div className="p-5 border-b bg-emerald-50/10 flex items-center justify-between gap-4">
-          <div className="relative max-w-sm flex-1">
+        <div className="p-5 border-b bg-emerald-50/10 flex flex-col md:flex-row gap-4 items-center">
+          <div className="relative flex-1 w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
             <Input
               placeholder="Cari lokasi, petugas, atau tracking code..."
@@ -400,8 +349,26 @@ export default function SamplingAssignmentListPage() {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="pl-10 focus-visible:ring-emerald-500 rounded-xl"
+              className="pl-10 h-11 focus-visible:ring-emerald-500 rounded-xl"
             />
+          </div>
+          <div className="flex gap-2 w-full md:w-auto justify-end">
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-full md:w-40 h-11 rounded-xl border-slate-200 bg-white">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                {statusOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+
+            <Button variant="outline" size="icon" onClick={handleExport} className="h-11 w-11 rounded-xl" title="Export CSV">
+              <Download className="h-5 w-5" />
+            </Button>
+
+            <Button onClick={handleOpenCreateModal} size="icon" className="bg-emerald-600 hover:bg-emerald-700 shadow-lg cursor-pointer h-11 w-11 shrink-0" title="Buat Penugasan Baru">
+              <Plus className="h-5 w-5" />
+            </Button>
           </div>
         </div>
 
@@ -646,161 +613,164 @@ export default function SamplingAssignmentListPage() {
           });
         }
       }}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-emerald-900 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <MapPin className="h-5 w-5" />
-                Buat Penugasan Sampling Baru
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setIsCreateModalOpen(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </DialogTitle>
-            <DialogDescription>
-              Tugaskan petugas lapangan untuk pengambilan sampel di lokasi.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <form onSubmit={handleSubmit} className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="job_order_id">Job Order</Label>
-              <Select
-                value={formData.job_order_id}
-                onValueChange={(val) => handleFormDataChange("job_order_id", val)}
-              >
-                <SelectTrigger className="cursor-pointer">
-                  <SelectValue placeholder="Pilih Job Order" />
-                </SelectTrigger>
-                <SelectContent>
-                  {jobOrders.length === 0 ? (
-                    <SelectItem value="none" disabled>Tidak ada job order tersedia</SelectItem>
-                  ) : (
-                    jobOrders.map((job: any) => (
-                      <SelectItem key={job.id} value={job.id} className="cursor-pointer">
-                        <div className="flex flex-col">
-                          <span className="font-medium">{job.tracking_code}</span>
-                          <span className="text-xs text-slate-500">{job.quotation?.profile?.full_name}</span>
-                        </div>
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              {jobOrders.length === 0 && (
-                <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded">
-                  <p className="font-medium">⚠️ Tidak ada job order tersedia</p>
-                  <p className="text-slate-500 mt-1">
-                    Job order harus status "scheduled" atau "sampling" dan belum punya assignment.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="field_officer_id">Petugas Lapangan</Label>
-              <Select
-                value={formData.field_officer_id}
-                onValueChange={(val) => handleFormDataChange("field_officer_id", val)}
-              >
-                <SelectTrigger className="cursor-pointer">
-                  <SelectValue placeholder="Pilih Petugas Lapangan" />
-                </SelectTrigger>
-                <SelectContent>
-                  {fieldOfficers.length === 0 ? (
-                    <SelectItem value="none" disabled>Tidak ada petugas lapangan</SelectItem>
-                  ) : (
-                    fieldOfficers.map((officer: any) => (
-                      <SelectItem key={officer.id} value={officer.id} className="cursor-pointer">
-                        <div className="flex items-center gap-2">
-                          <User className="h-4 w-4" />
-                          <div className="flex flex-col">
-                            <span className="font-medium">{officer.full_name}</span>
-                            <span className="text-xs text-slate-500">{officer.email}</span>
-                          </div>
-                        </div>
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              {fieldOfficers.length === 0 && (
-                <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded">
-                  <p className="font-medium">⚠️ Tidak ada petugas lapangan</p>
-                  <p className="text-slate-500 mt-1">
-                    Buat user dengan role "field_officer" terlebih dahulu.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="scheduled_date" className="flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                Tanggal & Waktu Rencana
-              </Label>
-              <Input
-                id="scheduled_date"
-                type="datetime-local"
-                value={formData.scheduled_date}
-                onChange={(e) => handleFormDataChange("scheduled_date", e.target.value)}
-                required
-                className="cursor-pointer"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="location" className="flex items-center gap-2">
+        <DialogContent className="sm:max-w-xl p-0 border-none shadow-2xl rounded-3xl overflow-hidden">
+          {/* Emerald Glassmorphism Header */}
+          <div className="bg-emerald-700/80 backdrop-blur-md p-4 text-white border-b border-emerald-600/50 shadow-lg flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-white border border-white/20 shadow-inner">
                 <MapPin className="h-4 w-4" />
-                Lokasi Sampling
-              </Label>
-              <Input
-                id="location"
-                placeholder="Contoh: Jakarta Industrial Estate, Blok A No. 5"
-                value={formData.location}
-                onChange={(e) => handleFormDataChange("location", e.target.value)}
-                required
-              />
+              </div>
+              <DialogTitle className="text-base font-black uppercase tracking-widest">Buat Penugasan Baru</DialogTitle>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setIsCreateModalOpen(false)} 
+              className="text-white/60 hover:text-white hover:bg-white/10 rounded-xl h-8 w-8 transition-all"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          
+          <form onSubmit={handleSubmit} className="p-6 space-y-5">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="job_order_id" className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Job Order</Label>
+                <Select
+                  value={formData.job_order_id}
+                  onValueChange={(val) => handleFormDataChange("job_order_id", val)}
+                >
+                  <SelectTrigger className="h-11 rounded-xl border-slate-200 bg-slate-50/50 focus:ring-emerald-500 cursor-pointer">
+                    <SelectValue placeholder="Pilih Job Order..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {jobOrders.length === 0 ? (
+                      <SelectItem value="none" disabled>Tidak ada job order tersedia</SelectItem>
+                    ) : (
+                      jobOrders.map((job: any) => (
+                        <SelectItem key={job.id} value={job.id} className="cursor-pointer py-2">
+                          <div className="flex flex-col">
+                            <span className="font-bold text-slate-800">{job.tracking_code}</span>
+                            <span className="text-[10px] text-slate-500 uppercase">{job.quotation?.profile?.full_name}</span>
+                          </div>
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                {jobOrders.length === 0 && (
+                  <div className="text-[10px] text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-100 flex items-center gap-2">
+                    <AlertCircle className="h-3 w-3" />
+                    Belum ada job order yang siap ditugaskan.
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="field_officer_id" className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Petugas Lapangan</Label>
+                <Select
+                  value={formData.field_officer_id}
+                  onValueChange={(val) => handleFormDataChange("field_officer_id", val)}
+                >
+                  <SelectTrigger className="h-11 rounded-xl border-slate-200 bg-slate-50/50 focus:ring-emerald-500 cursor-pointer">
+                    <SelectValue placeholder="Pilih Petugas..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {fieldOfficers.length === 0 ? (
+                      <SelectItem value="none" disabled>Tidak ada petugas lapangan</SelectItem>
+                    ) : (
+                      fieldOfficers.map((officer: any) => (
+                        <SelectItem key={officer.id} value={officer.id} className="cursor-pointer py-2">
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-xs uppercase">
+                              {officer.full_name.charAt(0)}
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="font-bold text-slate-800">{officer.full_name}</span>
+                              <span className="text-[10px] text-slate-500 uppercase tracking-tighter">Field Officer</span>
+                            </div>
+                          </div>
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="scheduled_date" className="text-[10px] font-black text-emerald-600 uppercase tracking-wider flex items-center gap-2">
+                    <Calendar className="h-3 w-3" />
+                    Tanggal Rencana
+                  </Label>
+                  <Input
+                    id="scheduled_date"
+                    type="datetime-local"
+                    value={formData.scheduled_date}
+                    onChange={(e) => handleFormDataChange("scheduled_date", e.target.value)}
+                    required
+                    className="h-11 rounded-xl border-slate-200 bg-slate-50/50 focus:ring-emerald-500 cursor-pointer"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="location" className="text-[10px] font-black text-emerald-600 uppercase tracking-wider flex items-center gap-2">
+                    <MapPin className="h-3 w-3" />
+                    Lokasi Sampling
+                  </Label>
+                  <Input
+                    id="location"
+                    placeholder="Contoh: Site A, Karawang"
+                    value={formData.location}
+                    onChange={(e) => handleFormDataChange("location", e.target.value)}
+                    required
+                    className="h-11 rounded-xl border-slate-200 bg-slate-50/50 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="notes" className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Catatan Khusus</Label>
+                <Textarea
+                  id="notes"
+                  placeholder="Instruksi khusus untuk petugas lapangan..."
+                  value={formData.notes}
+                  onChange={(e) => handleFormDataChange("notes", e.target.value)}
+                  rows={3}
+                  className="rounded-xl border-slate-200 bg-slate-50/50 focus:ring-emerald-500 resize-none"
+                />
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="notes">Catatan / Instruksi Khusus</Label>
-              <Textarea
-                id="notes"
-                placeholder="Instruksi khusus untuk pengambilan sampel..."
-                value={formData.notes}
-                onChange={(e) => handleFormDataChange("notes", e.target.value)}
-                rows={3}
-                className="resize-none"
-              />
-            </div>
-
-            <DialogFooter className="gap-2 pt-4">
+            <DialogFooter className="flex items-center justify-between pt-4 border-t gap-3">
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 onClick={() => setIsCreateModalOpen(false)}
-                className="cursor-pointer"
+                className="font-bold text-slate-400 text-xs uppercase px-6 h-11 rounded-xl"
               >
                 Batal
               </Button>
-              <Button
+              <LoadingButton
                 type="submit"
-                className="bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
-                disabled={submitting || !formData.job_order_id || !formData.field_officer_id}
+                loading={submitting}
+                loadingText="MEMPROSES..."
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-8 h-12 rounded-xl shadow-lg shadow-emerald-900/20 text-xs tracking-wide uppercase transition-all active:scale-95 flex-1 md:flex-none"
+                disabled={!formData.job_order_id || !formData.field_officer_id || !formData.scheduled_date || !formData.location}
               >
-                {submitting && <ChemicalLoader size="sm" />}
                 Buat Penugasan
-              </Button>
+              </LoadingButton>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Loading Overlay */}
+      <LoadingOverlay 
+        isOpen={submitting} 
+        title="Menyimpan Penugasan..." 
+        description="Mohon tunggu sebentar, petugas sedang didaftarkan" 
+      />
     </div>
   );
 }

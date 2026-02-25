@@ -26,9 +26,7 @@ export interface RegulationParameterInput {
 export interface RegulationInput {
   name: string;
   code?: string;
-  description?: string;
-  published_date?: string;
-  effective_date?: string;
+  parameters_list?: string[];
   status?: string;
   parameters?: RegulationParameterInput[];
 }
@@ -36,7 +34,14 @@ export interface RegulationInput {
 /**
  * Get semua regulasi
  */
-export async function getRegulations(page = 1, limit = 20, search = "", status = "all") {
+export async function getRegulations(
+  page = 1, 
+  limit = 20, 
+  search = "", 
+  status = "all",
+  sortBy = "created_at",
+  sortOrder = "desc"
+) {
   try {
     const profile = await getProfile();
     
@@ -51,9 +56,13 @@ export async function getRegulations(page = 1, limit = 20, search = "", status =
     // Search
     if (search) {
       where.OR = [
-        { name: { contains: search, mode: "insensitive" } },
-        { code: { contains: search, mode: "insensitive" } },
-        { description: { contains: search, mode: "insensitive" } },
+        { name: { contains: search, mode: "insensitive" as const } },
+        { code: { contains: search, mode: "insensitive" as const } },
+        { 
+          parameters_list: { 
+            hasSome: [search] 
+          } 
+        },
       ];
     }
 
@@ -67,7 +76,7 @@ export async function getRegulations(page = 1, limit = 20, search = "", status =
         where,
         skip,
         take: limit,
-        orderBy: { created_at: "desc" },
+        orderBy: { [sortBy]: sortOrder as any },
         include: {
           parameters: {
             orderBy: { sequence: "asc" },
@@ -159,9 +168,7 @@ export async function createOrUpdateRegulation(data: RegulationInput, id?: strin
         data: {
           name: data.name,
           code: data.code,
-          description: data.description,
-          published_date: data.published_date ? new Date(data.published_date) : undefined,
-          effective_date: data.effective_date ? new Date(data.effective_date) : undefined,
+          parameters_list: data.parameters_list || [],
           status: data.status || "active",
           updated_at: new Date(),
         },
@@ -175,9 +182,7 @@ export async function createOrUpdateRegulation(data: RegulationInput, id?: strin
         data: {
           name: data.name,
           code: data.code,
-          description: data.description,
-          published_date: data.published_date ? new Date(data.published_date) : undefined,
-          effective_date: data.effective_date ? new Date(data.effective_date) : undefined,
+          parameters_list: data.parameters_list || [],
           status: data.status || "active",
         },
       });
@@ -190,6 +195,36 @@ export async function createOrUpdateRegulation(data: RegulationInput, id?: strin
     return {
       success: false,
       error: error.message || "Gagal menyimpan regulasi",
+    };
+  }
+}
+
+/**
+ * Update hanya daftar parameter (quick edit)
+ */
+export async function updateParametersList(id: string, parameters: string[]) {
+  try {
+    const profile = await getProfile();
+    
+    if (!profile || !["admin", "operator"].includes(profile.role)) {
+      throw new Error("Unauthorized");
+    }
+
+    const regulation = await prisma.regulation.update({
+      where: { id },
+      data: {
+        parameters_list: parameters,
+        updated_at: new Date(),
+      },
+    });
+
+    revalidatePath("/admin/regulations");
+    return { success: true, regulation };
+  } catch (error: any) {
+    console.error("Error updating parameters list:", error);
+    return {
+      success: false,
+      error: error.message || "Gagal memperbarui parameter",
     };
   }
 }
@@ -335,6 +370,7 @@ export async function getAllRegulationsForDropdown() {
         id: true,
         name: true,
         code: true,
+        parameters_list: true,
       },
       orderBy: { name: "asc" },
     });

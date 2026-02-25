@@ -44,7 +44,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { getAllPayments, processPayment, cancelPayment, getPendingPaymentsCount } from "@/lib/actions/payment";
-import { ChemicalLoader } from "@/components/ui";
+import { ChemicalLoader, PageSkeleton } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 const statusColors: Record<string, string> = {
@@ -355,10 +355,8 @@ export default function FinanceDashboardPage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex justify-center py-20">
-              <ChemicalLoader />
-            </div>
-          ) : (
+          <PageSkeleton />
+        ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>

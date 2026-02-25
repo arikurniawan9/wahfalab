@@ -1,3 +1,7 @@
+/**
+ * Utility to serialize Prisma objects (handling Decimal and Date) 
+ * so they can be passed from Server Components to Client Components.
+ */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return data;
 
@@ -8,16 +12,20 @@ export function serializeData(data: any): any {
 
   // Handle Objects
   if (typeof data === 'object') {
-    // Jika ini adalah objek Decimal dari Prisma/decimal.js
-    if (data.constructor && (data.constructor.name === 'Decimal' || typeof data.toNumber === 'function')) {
-      return Number(data);
+    // 1. Handle Decimal (Prisma / Decimal.js)
+    // Check for common Decimal.js properties/methods
+    if (data.constructor?.name === 'Decimal' || 
+        typeof data.toNumber === 'function' || 
+        data.d !== undefined && data.s !== undefined) {
+      return Number(data.toString());
     }
 
-    // Jika ini adalah objek Date (opsional, tapi seringkali lebih aman dikonversi ke string/plain date)
+    // 2. Handle Dates
     if (data instanceof Date) {
-      return data; // Next.js mendukung Date, tapi jika error lanjut, gunakan data.toISOString()
+      return data.toISOString(); // Convert to ISO string for maximum compatibility
     }
 
+    // 3. Recursive serialization for nested objects
     const newObj: any = {};
     for (const key in data) {
       if (Object.prototype.hasOwnProperty.call(data, key)) {

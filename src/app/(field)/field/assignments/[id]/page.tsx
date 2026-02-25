@@ -201,6 +201,8 @@ export default function AssignmentDetailPage() {
     }
   };
 
+  const [generatedInvoice, setGeneratedInvoice] = useState<any>(null);
+
   const handleStatusUpdate = (status: string) => {
     startTransition(async () => {
       const result = await updateSamplingStatus(params.id as string, status, notes);
@@ -210,15 +212,27 @@ export default function AssignmentDetailPage() {
         // User-friendly notification messages
         const statusMessages: Record<string, string> = {
           in_progress: "🚀 Sampling dimulai! Petugas sedang melaksanakan tugas.",
-          completed: "✅ Sampling selesai! Job order akan dilanjutkan ke tahap analisis.",
+          completed: "✅ Sampling selesai! Invoice telah dibuat otomatis.",
           pending: "⏸️ Sampling ditunda. Status dikembalikan ke menunggu.",
           cancelled: "❌ Sampling dibatalkan."
         };
-        
+
         toast.success(
           statusMessages[status] || `Status berhasil diubah ke ${status}`
         );
-        router.push("/field");
+
+        // If completed and invoice was generated, store it and show link
+        if (status === 'completed' && result.invoice) {
+          setGeneratedInvoice(result.invoice);
+          toast.success(
+            `📄 Invoice ${result.invoice.invoice_number} telah dibuat`,
+            {
+              description: "Invoice dapat diunduh dan dikirim ke customer",
+              duration: 5000,
+            }
+          );
+        }
+
         router.refresh();
       }
     });
@@ -1019,10 +1033,48 @@ export default function AssignmentDetailPage() {
           </div>
           
           {assignment.status === 'completed' && (
-            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
-              <div className="flex items-center gap-2 text-emerald-700">
-                <CheckCircle2 className="h-5 w-5" />
-                <p className="text-sm font-medium">Sampling telah selesai dilaksanakan</p>
+            <div className="space-y-4">
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <div className="flex items-center gap-2 text-emerald-700">
+                  <CheckCircle2 className="h-5 w-5" />
+                  <p className="text-sm font-medium">Sampling telah selesai dilaksanakan</p>
+                </div>
+              </div>
+
+              {/* Invoice Link Card */}
+              <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center shrink-0">
+                    <FileText className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-sm font-semibold text-blue-900">Invoice Pembayaran</h4>
+                    <p className="text-xs text-blue-700 mt-1">
+                      Invoice telah dibuat otomatis dan siap untuk diunduh serta dikirim ke customer
+                    </p>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      <Link href={`/finance/invoices/${assignment.job_order?.invoice?.id || generatedInvoice?.id}`}>
+                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-xs h-9">
+                          <FileText className="h-3 w-3 mr-2" />
+                          Lihat Invoice
+                        </Button>
+                      </Link>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-blue-600 text-blue-600 hover:bg-blue-50 text-xs h-9"
+                        onClick={() => {
+                          toast.info("Invoice dapat diunduh dari halaman detail invoice", {
+                            duration: 3000
+                          });
+                        }}
+                      >
+                        <Download className="h-3 w-3 mr-2" />
+                        Unduh PDF
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}

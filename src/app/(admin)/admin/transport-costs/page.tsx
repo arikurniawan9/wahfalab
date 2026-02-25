@@ -39,7 +39,9 @@ import {
   AlertCircle,
   Calculator,
   MapPin,
-  DollarSign
+  DollarSign,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { ChemicalLoader } from "@/components/ui";
 import { LoadingOverlay, LoadingButton, TableSkeleton, EmptyState } from "@/components/ui";
@@ -128,7 +130,7 @@ const getPriceBadgeColor = (price: number, minPrice: number, maxPrice: number) =
 };
 
 export default function TransportCostsPage() {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<{ items: any[], total: number, pages: number }>({ items: [], total: 0, pages: 1 });
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -140,6 +142,8 @@ export default function TransportCostsPage() {
   const [quickEditId, setQuickEditId] = useState<string | null>(null);
   const [quickEditPrice, setQuickEditPrice] = useState<number>(0);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [importData, setImportData] = useState<string>("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deleteConfirmIds, setDeleteConfirmIds] = useState<string[]>([]);
@@ -150,7 +154,7 @@ export default function TransportCostsPage() {
       category: "transport",
       name: "",
       description: "",
-      unit: "hari",
+      unit: "trip",
       items: [{ distance_category: "", price: 0 }]
     }
   });
@@ -165,9 +169,8 @@ export default function TransportCostsPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const result = await getAllOperationalCatalogs();
-      const transportItems = result.filter((item: any) => item.category === "transport");
-      setData(transportItems);
+      const result = await getOperationalCatalogs(page, limit, search, "transport");
+      setData(result);
     } catch (error) {
       toast.error("Gagal memuat data");
     } finally {
@@ -176,8 +179,11 @@ export default function TransportCostsPage() {
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    const timer = setTimeout(() => {
+      loadData();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [page, limit, search]);
 
   // Deteksi duplikasi
   const checkDuplicates = (items: any[], name: string) => {
@@ -205,6 +211,21 @@ export default function TransportCostsPage() {
       return;
     }
 
+    // Cek apakah nama tarif sudah ada (kecuali saat edit)
+    if (!selectedItem) {
+      const existingName = data.items.some((d: any) => 
+        d.name.toLowerCase() === formData.name.toLowerCase() && d.category === "transport"
+      );
+      
+      if (existingName) {
+        toast.error("Nama tarif sudah ada", {
+          description: `"${formData.name}" sudah terdaftar. Gunakan nama yang berbeda atau edit data yang sudah ada.`,
+          duration: 8000
+        });
+        return;
+      }
+    }
+
     // Cek duplikasi
     const duplicates = checkDuplicates(formData.items, formData.name);
     if (duplicates.length > 0) {
@@ -218,7 +239,7 @@ export default function TransportCostsPage() {
     try {
       if (selectedItem) {
         // Update - catat history
-        const relatedItems = data.filter((d: any) => d.name === selectedItem.name);
+        const relatedItems = data.items.filter((d: any) => d.name === selectedItem.name);
         for (const item of relatedItems) {
           await createHistory(item.id, "update", Number(item.price), 0);
           await deleteOperationalCatalog(item.id);
@@ -227,6 +248,13 @@ export default function TransportCostsPage() {
 
       // Create new entries
       for (const item of formData.items) {
+        console.log('Saving item:', {
+          ...formData,
+          ...item,
+          transport_mode: null,
+          category: "transport"
+        });
+        
         await createOperationalCatalog({
           ...formData,
           ...item,
@@ -252,7 +280,7 @@ export default function TransportCostsPage() {
   };
 
   const handleEdit = (item: any) => {
-    const relatedItems = data.filter((d: any) => d.name === item.name && d.category === "transport");
+    const relatedItems = data.items.filter((d: any) => d.name === item.name);
 
     setSelectedItem(item);
     setValue("category", "transport");
@@ -264,6 +292,8 @@ export default function TransportCostsPage() {
       distance_category: d.distance_category || "",
       price: Number(d.price)
     }));
+
+    console.log('Items to load:', items);
 
     // Reset field array dengan cara yang benar
     reset({
@@ -281,7 +311,7 @@ export default function TransportCostsPage() {
     if (!selectedItem) return;
     setSubmitting(true);
     try {
-      const relatedItems = data.filter((d: any) => d.name === selectedItem.name && d.category === "transport");
+      const relatedItems = data.items.filter((d: any) => d.name === selectedItem.name);
       for (const item of relatedItems) {
         await createHistory(item.id, "delete", Number(item.price), 0);
         await deleteOperationalCatalog(item.id);
@@ -332,7 +362,7 @@ export default function TransportCostsPage() {
       const unusedIds: string[] = [];
       
       for (const id of deleteConfirmIds) {
-        const item = data.find(d => d.id === id);
+        const item = data.items.find(d => d.id === id);
         if (!item) continue;
         
         // Check if this transport cost is used in any quotation
@@ -368,7 +398,7 @@ export default function TransportCostsPage() {
       
       // Delete unused items
       for (const id of unusedIds) {
-        const item = data.find(d => d.id === id);
+        const item = data.items.find(d => d.id === id);
         if (!item) continue;
         
         await createHistory(item.id, "delete", Number(item.price), 0);
@@ -453,7 +483,7 @@ export default function TransportCostsPage() {
   // Export CSV
   const handleExport = () => {
     const headers = ["Nama", "Kategori Jarak", "Mode Transport", "Harga", "Satuan", "Deskripsi"];
-    const csvData = data.map(item => [
+    const csvData = data.items.map(item => [
       item.name,
       item.distance_category,
       item.transport_mode,
@@ -533,7 +563,7 @@ export default function TransportCostsPage() {
 
   // Filter & Sort
   const getFilteredAndSortedData = () => {
-    let filtered = [...data];
+    let filtered = [...data.items];
     
     // Search
     if (search) {
@@ -556,12 +586,10 @@ export default function TransportCostsPage() {
     return acc;
   }, {} as Record<string, any[]>);
 
-  const distances = Array.from(new Set(data.map(item => item.distance_category).filter(Boolean)));
-
   // Keep price calculations for table color coding
-  const prices = data.map(item => Number(item.price));
-  const minPrice = Math.min(...prices, 0);
-  const maxPrice = Math.max(...prices, 0);
+  const prices = data.items.map(item => Number(item.price));
+  const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+  const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
 
   return (
     <div className="p-4 md:p-10 pb-24 md:pb-10">
@@ -657,8 +685,8 @@ export default function TransportCostsPage() {
             <TableRow className="bg-slate-50/80">
               <TableHead className="w-12 px-6">
                 <Checkbox
-                  checked={selectedIds.length > 0 && selectedIds.length === data.length}
-                  onCheckedChange={() => toggleSelectAll(data.map(d => d.id))}
+                  checked={selectedIds.length > 0 && selectedIds.length === data.items.length}
+                  onCheckedChange={() => toggleSelectAll(data.items.map(d => d.id))}
                 />
               </TableHead>
               <TableHead className="font-bold text-emerald-900">Nama Tarif</TableHead>
@@ -676,7 +704,7 @@ export default function TransportCostsPage() {
                   <TableSkeleton rows={5} />
                 </TableCell>
               </TableRow>
-            ) : groupedData.length === 0 ? (
+            ) : Object.keys(groupedData).length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="text-center py-20">
                   <EmptyState
@@ -698,7 +726,7 @@ export default function TransportCostsPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              Object.entries(groupedData).map(([name, items]) => (
+              (Object.entries(groupedData) as [string, any[]][]).map(([name, items]) => (
                 <React.Fragment key={name}>
                   {(items as any[]).map((item: any, idx: number) => {
                     const priceColor = getPriceBadgeColor(Number(item.price), minPrice, maxPrice);
@@ -818,6 +846,55 @@ export default function TransportCostsPage() {
             )}
           </TableBody>
         </Table>
+
+        {/* Pagination */}
+        {!loading && data.total > 0 && (
+          <div className="p-5 border-t bg-slate-50/50 flex flex-col md:flex-row gap-4 items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="text-xs font-medium text-slate-500">
+                Menampilkan <span className="text-slate-900 font-bold">{data.items.length}</span> dari <span className="text-slate-900 font-bold">{data.total}</span> data
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Baris:</span>
+                <Select value={limit.toString()} onValueChange={(v) => { setLimit(Number(v)); setPage(1); }}>
+                  <SelectTrigger className="h-8 w-16 text-xs rounded-xl border-slate-200">
+                    <SelectValue placeholder={limit.toString()} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10" className="cursor-pointer">10</SelectItem>
+                    <SelectItem value="25" className="cursor-pointer">25</SelectItem>
+                    <SelectItem value="50" className="cursor-pointer">50</SelectItem>
+                    <SelectItem value="100" className="cursor-pointer">100</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-9 w-9 rounded-xl cursor-pointer border-slate-200 hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-95" 
+                disabled={page === 1} 
+                onClick={() => setPage(p => p - 1)}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <div className="flex items-center px-4 text-xs font-bold bg-white border border-slate-200 rounded-xl shadow-sm text-slate-600">
+                {page} / {data.pages}
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-9 w-9 rounded-xl cursor-pointer border-slate-200 hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-95" 
+                disabled={page === data.pages} 
+                onClick={() => setPage(p => p + 1)}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add/Edit Dialog */}

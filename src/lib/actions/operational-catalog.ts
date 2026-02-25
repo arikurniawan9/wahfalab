@@ -4,14 +4,21 @@ import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
 
-export async function getOperationalCatalogs(page = 1, limit = 20, search = "") {
+export async function getOperationalCatalogs(page = 1, limit = 20, search = "", category?: string) {
   const skip = (page - 1) * limit
-  const where = search ? {
-    OR: [
+  const where: any = {}
+  
+  if (search) {
+    where.OR = [
       { name: { contains: search, mode: 'insensitive' as const } },
       { description: { contains: search, mode: 'insensitive' as const } },
+      { location: { contains: search, mode: 'insensitive' as const } },
     ]
-  } : {}
+  }
+
+  if (category) {
+    where.category = category
+  }
 
   const [items, total] = await Promise.all([
     prisma.operationalCatalog.findMany({
@@ -23,7 +30,11 @@ export async function getOperationalCatalogs(page = 1, limit = 20, search = "") 
     prisma.operationalCatalog.count({ where })
   ])
 
-  return serializeData(items)
+  return serializeData({
+    items,
+    total,
+    pages: Math.ceil(total / limit)
+  })
 }
 
 export async function createOperationalCatalog(formData: any) {
@@ -33,13 +44,14 @@ export async function createOperationalCatalog(formData: any) {
         category: formData.category,
         perdiem_type: formData.perdiem_type,
         location: formData.location,
+        distance_category: formData.distance_category,
         name: formData.name,
         description: formData.description,
         price: formData.price,
         unit: formData.unit,
       },
     })
-    revalidatePath('/admin/engineer-costs')
+    revalidatePath('/admin/transport-costs')
     return { success: true }
   } catch (error) {
     console.error('Prisma Error:', error)
@@ -55,13 +67,14 @@ export async function updateOperationalCatalog(id: string, formData: any) {
         category: formData.category,
         perdiem_type: formData.perdiem_type,
         location: formData.location,
+        distance_category: formData.distance_category,
         name: formData.name,
         description: formData.description,
         price: formData.price,
         unit: formData.unit,
       },
     })
-    revalidatePath('/admin/engineer-costs')
+    revalidatePath('/admin/transport-costs')
     return { success: true }
   } catch (error) {
     console.error('Prisma Error:', error)
@@ -108,10 +121,26 @@ export async function updatePrice(id: string, price: number) {
       data: { price }
     })
     revalidatePath('/admin/engineer-costs')
+    revalidatePath('/admin/transport-costs')
     return { success: true }
   } catch (error) {
     console.error('Prisma Error:', error)
     throw new Error('Gagal update harga')
+  }
+}
+
+export async function updateLocation(id: string, location: string) {
+  try {
+    await prisma.operationalCatalog.update({
+      where: { id },
+      data: { location }
+    })
+    revalidatePath('/admin/engineer-costs')
+    revalidatePath('/admin/transport-costs')
+    return { success: true }
+  } catch (error) {
+    console.error('Prisma Error:', error)
+    throw new Error('Gagal update lokasi')
   }
 }
 

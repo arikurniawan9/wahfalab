@@ -50,6 +50,8 @@ const adminMenuItems = (pendingApprovals: number = 0) => [
     icon: FileText,
     items: [
       { icon: FileText, label: "Penawaran Harga", href: "/admin/quotations" },
+      { icon: Briefcase, label: "Progress Order", href: "/admin/jobs" },
+      { icon: MapPin, label: "Penugasan", href: "/admin/sampling" },
       { icon: Bell, label: "Persetujuan", href: "/admin/approval-requests", 
         badge: pendingApprovals > 0 ? pendingApprovals : undefined },
     ]
@@ -68,9 +70,8 @@ const adminMenuItems = (pendingApprovals: number = 0) => [
     group: "Sampling",
     icon: Map,
     items: [
-      { icon: MapPin, label: "Penugasan", href: "/admin/sampling" },
       { icon: Truck, label: "Biaya Transport", href: "/admin/transport-costs" },
-      { icon: Users, label: "Biaya Engineer", href: "/admin/engineer-costs" },
+      { icon: UserCheck, label: "Biaya Petugas Sampling", href: "/admin/engineer-costs" },
     ]
   },
   {
@@ -97,22 +98,22 @@ const operatorMenuItems = [
     icon: LayoutDashboard,
     items: [
       { icon: LayoutDashboard, label: "Beranda", href: "/operator" },
-      { icon: Briefcase, label: "Progress Order", href: "/operator/jobs" },
     ]
   },
   {
-    group: "Penawaran",
+    group: "Penawaran & Order",
     icon: FileText,
     items: [
       { icon: FileText, label: "Penawaran Harga", href: "/operator/quotations" },
+      { icon: Briefcase, label: "Progress Order", href: "/operator/jobs" },
     ]
   },
   {
     group: "Operasional",
     icon: Truck,
     items: [
-      { icon: Truck, label: "Transport", href: "/operator/transport-costs" },
-      { icon: Users, label: "Engineer", href: "/operator/engineer-costs" },
+      { icon: Truck, label: "Biaya Transport", href: "/operator/transport-costs" },
+      { icon: UserCheck, label: "Biaya Petugas Sampling", href: "/operator/engineer-costs" },
     ]
   },
   {
@@ -133,6 +134,7 @@ const clientMenuItems = [
     items: [
       { icon: LayoutDashboard, label: "Beranda", href: "/dashboard" },
       { icon: FileText, label: "Riwayat Order", href: "/dashboard/orders" },
+      { icon: Settings, label: "Pengaturan", href: "/dashboard/settings" },
     ]
   },
 ];

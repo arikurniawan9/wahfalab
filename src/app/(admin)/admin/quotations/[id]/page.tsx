@@ -230,13 +230,35 @@ export default function QuotationDetailPage() {
                 <tbody className="divide-y">
                   {quotation.items.map((item: any) => {
                     const itemName = item.service?.name || item.equipment?.name || "Item Tidak Dikenal";
-                    const itemCategory = item.service?.category || "ALAT LAB";
+                    const itemCategory = item.service?.category || (item.equipment ? "ALAT LAB" : "Layanan Lab");
                     
+                    // Parameters logic: prioritized snapshot, fallback to default service params
+                    let params: string[] = [];
+                    if (item.parameter_snapshot) {
+                      params = item.parameter_snapshot.split(",").map((p: string) => p.trim());
+                    } else if (item.service?.parameters) {
+                      try {
+                        const parsed = typeof item.service.parameters === 'string' ? JSON.parse(item.service.parameters) : item.service.parameters;
+                        params = Array.isArray(parsed) ? parsed.map((p: any) => p.name) : [];
+                      } catch {
+                        params = [];
+                      }
+                    }
+
                     return (
                       <tr key={item.id}>
                         <td className="px-6 py-4">
-                          <div className="font-medium text-slate-800">{itemName}</div>
+                          <div className="font-bold text-slate-800">{itemName}</div>
                           <div className="text-[10px] text-slate-400 uppercase tracking-wider">{itemCategory}</div>
+                          {params.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {params.map((p: string, i: number) => (
+                                <Badge key={i} variant="outline" className="text-[8px] py-0 h-4 bg-blue-50 text-blue-600 border-blue-100">
+                                  {p}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-center">{item.qty}</td>
                         <td className="px-6 py-4 text-right">Rp {Number(item.price_snapshot).toLocaleString("id-ID")}</td>

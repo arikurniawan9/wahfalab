@@ -1,16 +1,12 @@
 // ============================================================================
-// OPERATOR JOB PROGRESS PAGE
-// Fitur:
-// 1. List semua job orders dengan progress
-// 2. Update progress pekerjaan (Sampling, Analisis, Reporting, Selesai)
-// 3. Upload sertifikat saat selesai
-// 4. Filter & Search
-// 5. Stats by status
+// OPERATOR JOB PROGRESS PAGE - Refactored v3.0
+// Powerful dashboard for operators to track and manage job progress.
 // ============================================================================
 
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import {
   Table,
   TableBody,
@@ -21,37 +17,48 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
 import {
+  Briefcase,
   Search,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
   Eye,
-  FileCheck,
-  TestTube,
-  Truck,
-  FileText,
-  FileDown,
-  MessageSquare,
-  CheckCircle,
   Clock,
-  Calendar,
-  User,
+  CheckCircle,
+  FlaskConical,
   MapPin,
-  Plus,
-  X,
+  FileText,
+  AlertCircle,
+  ArrowRight,
+  ClipboardCheck,
+  Truck,
+  TestTube,
+  Printer,
+  User,
+  Calendar,
   Save,
-  Printer
+  MessageSquare,
+  FileDown,
+  FileCheck,
+  X
 } from "lucide-react";
-import { ChemicalLoader } from "@/components/ui";
-import { getJobOrders, updateJobStatus, uploadCertificate } from "@/lib/actions/jobs";
+import { ChemicalLoader, LoadingOverlay, LoadingButton } from "@/components/ui";
+import { getJobOrders, updateJobStatus, uploadCertificate, getFieldOfficers, getCustomers, getJobStats } from "@/lib/actions/jobs";
 import { createSamplingAssignment } from "@/lib/actions/sampling";
 import { createTravelOrder } from "@/lib/actions/travel-order";
 import { getUsers } from "@/lib/actions/users";
-import { getProfile } from "@/lib/actions/auth";
-import { assignAnalystToJob } from "@/lib/actions/analyst";
-import { assignReportingToJob } from "@/lib/actions/reporting";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
-import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -60,46 +67,128 @@ import {
   DialogFooter,
   DialogDescription
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+
+// Stat Card Component
+function StatCard({ title, value, icon: Icon, color, onClick, active }: any) {
+  const colors: any = {
+    blue: "bg-blue-50 text-blue-600 border-blue-100",
+    amber: "bg-amber-50 text-amber-600 border-amber-100",
+    indigo: "bg-indigo-50 text-indigo-600 border-indigo-100",
+    purple: "bg-purple-50 text-purple-600 border-purple-100",
+    emerald: "bg-emerald-50 text-emerald-600 border-emerald-100",
+    slate: "bg-slate-50 text-slate-600 border-slate-100",
+    red: "bg-red-50 text-red-600 border-red-100",
+    violet: "bg-violet-50 text-violet-600 border-violet-100",
+  };
+
+  return (
+    <Card
+      className={cn(
+        "border-2 transition-all duration-300 cursor-pointer overflow-hidden",
+        active ? "border-emerald-500 shadow-lg scale-[1.02]" : "border-transparent shadow-sm hover:shadow-md",
+        colors[color]
+      )}
+      onClick={onClick}
+    >
+      <CardContent className="p-4 flex items-center gap-4">
+        <div className={cn("p-2.5 rounded-xl bg-white shadow-sm shrink-0")}>
+          <Icon className="h-5 w-5" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[9px] font-bold uppercase opacity-60 tracking-wider truncate">{title}</p>
+          <p className="text-xl font-black tracking-tight leading-none">{value}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Workflow Timeline Component
+function WorkflowTimeline({ status, analysisStartedAt, analysisDoneAt, reportingDoneAt }: any) {
+  const stages = [
+    { id: 1, name: "Order", icon: FileText, complete: true },
+    { id: 2, name: "Sampling", icon: MapPin, complete: ["sampling", "analysis_ready", "analysis", "analysis_done", "reporting", "completed"].includes(status) },
+    { id: 3, name: "Handover", icon: ClipboardCheck, complete: ["analysis_ready", "analysis", "analysis_done", "reporting", "completed"].includes(status) },
+    { id: 4, name: "Analisis", icon: FlaskConical, complete: ["analysis", "analysis_done", "reporting", "completed"].includes(status) },
+    { id: 5, name: "Reporting", icon: FileText, complete: ["reporting", "completed"].includes(status) },
+    { id: 6, name: "Selesai", icon: CheckCircle, complete: status === "completed" },
+  ];
+
+  const getStatusColor = (stage: any) => {
+    if (stage.complete) return "bg-emerald-500 text-white border-emerald-600";
+    if (stage.id === stages.findIndex(s => !s.complete) + 1) return "bg-amber-500 text-white border-amber-600 animate-pulse";
+    return "bg-slate-100 text-slate-400 border-slate-200";
+  };
+
+  return (
+    <div className="flex items-center gap-1 min-w-[200px]">
+      {stages.map((stage, index) => (
+        <React.Fragment key={stage.id}>
+          <div className="flex flex-col items-center gap-1">
+            <div className={cn(
+              "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-300",
+              getStatusColor(stage)
+            )}>
+              <stage.icon className="h-3 w-3" />
+            </div>
+            <span className={cn(
+              "text-[8px] font-bold uppercase tracking-tighter",
+              stage.complete ? "text-emerald-600" : stage.id === stages.findIndex(s => !s.complete) + 1 ? "text-amber-600" : "text-slate-400"
+            )}>
+              {stage.name}
+            </span>
+          </div>
+          {index < stages.length - 1 && (
+            <div className={cn(
+              "w-4 h-0.5 transition-all duration-300",
+              stage.complete ? "bg-emerald-500" : "bg-slate-200"
+            )} />
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
 
 const statusOptions = [
-  { value: "all", label: "Semua Status", color: "bg-slate-100 text-slate-700" },
-  { value: "scheduled", label: "Dijadwalkan", color: "bg-slate-100 text-slate-600", icon: Clock },
-  { value: "sampling", label: "Sampling", color: "bg-blue-100 text-blue-700", icon: Truck },
-  { value: "analysis", label: "Analisis", color: "bg-violet-100 text-violet-700", icon: TestTube },
-  { value: "analysis_done", label: "Selesai Analisis", color: "bg-emerald-100 text-emerald-700", icon: CheckCircle },
-  { value: "reporting", label: "Pelaporan", color: "bg-amber-100 text-amber-700", icon: FileText },
-  { value: "completed", label: "Selesai", color: "bg-emerald-100 text-emerald-700", icon: CheckCircle }
+  { value: "all", label: "Semua Status", color: "bg-slate-100 text-slate-700", theme: "bg-slate-50", icon: Briefcase, progress: 0 },
+  { value: "scheduled", label: "Terjadwal", color: "bg-blue-100 text-blue-700", theme: "bg-blue-50", icon: Clock, progress: 20 },
+  { value: "sampling", label: "Sampling", color: "bg-amber-100 text-amber-700", theme: "bg-amber-50", icon: MapPin, progress: 40 },
+  { value: "analysis_ready", label: "Siap Analisis", color: "bg-emerald-100 text-emerald-700", theme: "bg-emerald-50", icon: ClipboardCheck, progress: 50 },
+  { value: "analysis", label: "Analisis Lab", color: "bg-indigo-100 text-indigo-700", theme: "bg-indigo-50", icon: FlaskConical, progress: 60 },
+  { value: "analysis_done", label: "Selesai Analisis", color: "bg-violet-100 text-violet-700", theme: "bg-violet-50", icon: TestTube, progress: 80 },
+  { value: "reporting", label: "Pelaporan", color: "bg-purple-100 text-purple-700", theme: "bg-purple-50", icon: FileText, progress: 90 },
+  { value: "completed", label: "Selesai", color: "bg-emerald-100 text-emerald-700", theme: "bg-emerald-50", icon: CheckCircle, progress: 100 },
 ];
 
-export default function OperatorJobsPage() {
-  const router = useRouter();
-  const [jobs, setJobs] = useState<any>({ items: [], total: 0 });
-  const [loading, setLoading] = useState(true);
+export default function OperatorJobProgressPage() {
+  const [data, setData] = useState<any>({ items: [], total: 0, pages: 1 });
+  const [stats, setStats] = useState<any>({ total: 0 });
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(10);
+  const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filters, setFilters] = useState<any>({
+    dateFrom: "",
+    dateTo: "",
+    fieldOfficerId: "",
+    customerId: "",
+  });
+  const [fieldOfficers, setFieldOfficers] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
 
   // Modal states
-  const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState<any>(null);
-  const [nextStatus, setNextStatus] = useState<string>("");
-  const [statusNote, setStatusNote] = useState<string>("");
-  const [certificateFile, setCertificateFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  
+  const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false);
+
   // Assign modal states
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
-  const [fieldOfficers, setFieldOfficers] = useState<any[]>([]);
   const [assignFormData, setAssignFormData] = useState({
     job_order_id: "",
     field_officer_id: "",
@@ -108,30 +197,76 @@ export default function OperatorJobsPage() {
     location: "",
     notes: ""
   });
-  const [assignSubmitting, setAssignSubmitting] = useState(false);
 
   const supabase = createClient();
 
-  const loadData = async (searchQuery: string = search) => {
+  // Debounced search
+  const useDebounce = (value: string, delay: number) => {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+
+    useEffect(() => {
+      const handler = setTimeout(() => {
+        setDebouncedValue(value);
+      }, delay);
+
+      return () => {
+        clearTimeout(handler);
+      };
+    }, [value, delay]);
+
+    return debouncedValue;
+  };
+
+  const debouncedSearch = useDebounce(search, 700);
+
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await getJobOrders(page, 100, searchQuery);
-      setJobs(result);
-    } catch (error) {
-      toast.error("Gagal memuat data", {
-        description: "Silakan refresh halaman"
+      const { getJobOrders } = await import('@/lib/actions/jobs');
+      const result = await getJobOrders(page, limit, debouncedSearch, {
+        status: filterStatus !== 'all' ? filterStatus : undefined,
+        ...filters
       });
+      setData(result);
+    } catch (error: any) {
+      toast.error("Gagal memuat data progress pekerjaan");
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, limit, debouncedSearch, filterStatus, filters]);
+
+  const loadStats = useCallback(async () => {
+    try {
+      const { getJobStats } = await import('@/lib/actions/jobs');
+      const statsData = await getJobStats();
+      setStats(statsData);
+    } catch (error) {
+      console.error('Failed to load stats:', error);
+    }
+  }, []);
+
+  const loadFilterOptions = useCallback(async () => {
+    try {
+      const { getFieldOfficers, getCustomers } = await import('@/lib/actions/jobs');
+      const [officers, customers] = await Promise.all([
+        getFieldOfficers(),
+        getCustomers()
+      ]);
+      setFieldOfficers(officers || []);
+      setCustomers(customers || []);
+    } catch (error) {
+      console.error('Failed to load filter options:', error);
+    }
+  }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      loadData(search);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [search]);
+    loadStats();
+    loadFilterOptions();
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const loadFieldOfficers = async () => {
     try {
@@ -139,9 +274,7 @@ export default function OperatorJobsPage() {
       const officers = usersData.users.filter((u: any) => u.role === 'field_officer');
       setFieldOfficers(officers);
     } catch (error: any) {
-      toast.error("Gagal memuat petugas lapangan", {
-        description: error?.message
-      });
+      toast.error("Gagal memuat petugas lapangan");
     }
   };
 
@@ -161,180 +294,63 @@ export default function OperatorJobsPage() {
 
   const handleAssignSubmit = async () => {
     if (!selectedJob) return;
-    if (!assignFormData.field_officer_id) {
-      toast.error("Petugas lapangan wajib dipilih");
-      return;
-    }
-    if (!assignFormData.scheduled_date) {
-      toast.error("Tanggal jadwal wajib diisi");
-      return;
-    }
-    if (!assignFormData.location) {
-      toast.error("Lokasi sampling wajib diisi");
+    if (!assignFormData.field_officer_id || !assignFormData.scheduled_date || !assignFormData.location) {
+      toast.error("Harap lengkapi semua data wajib");
       return;
     }
 
-    setAssignSubmitting(true);
+    setSubmitting(true);
     try {
-      // 1. Create sampling assignment
       const assignmentResult = await createSamplingAssignment({
         ...assignFormData,
         scheduled_date: `${assignFormData.scheduled_date}T${assignFormData.scheduled_time}:00`
       });
-      
-      if (assignmentResult.error) {
-        toast.error(assignmentResult.error);
-        setAssignSubmitting(false);
-        return;
+
+      if (assignmentResult.error || !assignmentResult.assignment) {
+        throw new Error(assignmentResult.error || "Failed to create assignment");
       }
 
-      const assignmentId = assignmentResult.assignment?.id;
-
-      if (!assignmentId) {
-        toast.error("Gagal mendapatkan ID assignment");
-        setAssignSubmitting(false);
-        return;
-      }
-
-      // 2. Auto-create travel order with minimal data
       const travelOrderData = {
-        assignment_id: assignmentId,
+        assignment_id: assignmentResult.assignment.id,
         departure_date: `${assignFormData.scheduled_date}T${assignFormData.scheduled_time}:00`,
         return_date: `${assignFormData.scheduled_date}T17:00:00`,
         destination: assignFormData.location,
         purpose: assignFormData.notes || `Sampling untuk ${selectedJob.tracking_code}`,
-        transportation_type: undefined,
-        accommodation_type: undefined,
-        daily_allowance: undefined,
-        total_budget: undefined,
-        notes: undefined
       };
 
       await createTravelOrder(travelOrderData);
-
-      toast.success("✅ Penugasan berhasil dibuat & surat tugas diterbitkan!");
-      
-      // Reset & close
-      setAssignFormData({
-        job_order_id: "",
-        field_officer_id: "",
-        scheduled_date: "",
-        scheduled_time: "08:00",
-        location: "",
-        notes: ""
-      });
+      toast.success("Penugasan & Surat Tugas Berhasil!");
       setIsAssignDialogOpen(false);
-      
-      // Reload data
       loadData();
     } catch (error: any) {
-      console.error("Assign error:", error);
-      toast.error("Gagal membuat penugasan", {
-        description: error?.message
-      });
-    } finally {
-      setAssignSubmitting(false);
-    }
-  };
-
-  const openStatusDialog = (job: any, status: string) => {
-    setSelectedJob(job);
-    setNextStatus(status);
-    setStatusNote("");
-    setCertificateFile(null);
-    setIsStatusDialogOpen(true);
-  };
-
-  const confirmStatusUpdate = async () => {
-    if (!selectedJob) return;
-
-    setSubmitting(true);
-    try {
-      let certificateUrl = null;
-
-      // Upload sertifikat jika status Selesai dan ada file
-      if (nextStatus === 'completed' && certificateFile) {
-        const fileExt = certificateFile.name.split('.').pop();
-        const fileName = `${selectedJob.tracking_code}-${Date.now()}.${fileExt}`;
-        const filePath = `certificates/${fileName}`;
-
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('lab-documents')
-          .upload(filePath, certificateFile);
-
-        if (uploadError) throw uploadError;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('lab-documents')
-          .getPublicUrl(filePath);
-
-        certificateUrl = publicUrl;
-      }
-
-      await updateJobStatus(selectedJob.id, nextStatus, statusNote);
-
-      // Upload certificate URL ke database
-      if (certificateUrl) {
-        await uploadCertificate(selectedJob.id, certificateUrl);
-      }
-
-      toast.success(`Progress ${selectedJob.tracking_code} berhasil diperbarui`, {
-        description: `Status: ${nextStatus.toUpperCase()}`
-      });
-
-      setIsStatusDialogOpen(false);
-      setCertificateFile(null);
-      loadData();
-    } catch (error: any) {
-      toast.error(error.message || "Gagal memperbarui progress");
+      toast.error(error.message || "Gagal membuat penugasan");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const getJobStatusBadge = (status: string) => {
-    const option = statusOptions.find(opt => opt.value === status);
-    const Icon = option?.icon;
-    
-    return (
-      <Badge className={cn("border-none gap-1", option?.color)}>
-        {Icon && <Icon className="h-3 w-3" />}
-        {option?.label || status.toUpperCase()}
-      </Badge>
-    );
+  const handlePreviewJob = (job: any) => {
+    setSelectedJob(job);
+    setIsPreviewDialogOpen(true);
   };
 
-  // Filter jobs by status
-  const getFilteredJobs = () => {
-    let filtered = [...jobs.items];
-
-    // Search filter
-    if (search) {
-      filtered = filtered.filter(job =>
-        job.tracking_code.toLowerCase().includes(search.toLowerCase()) ||
-        job.quotation?.profile?.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-        job.quotation?.items?.[0]?.service?.name?.toLowerCase().includes(search.toLowerCase())
-      );
-    }
-
-    // Status filter
-    if (filterStatus !== "all") {
-      filtered = filtered.filter(job => job.status === filterStatus);
-    }
-
-    return filtered;
+  const getStatusInfo = (status: string) => {
+    return statusOptions.find(opt => opt.value === status) || statusOptions[0];
   };
 
-  const filteredJobs = getFilteredJobs();
+  const filteredItems = filterStatus === "all"
+    ? data.items
+    : data.items.filter((item: any) => item.status === filterStatus);
 
-  // Stats
-  const stats = {
-    total: jobs.items.length,
-    scheduled: jobs.items.filter((j: any) => j.status === "scheduled").length,
-    sampling: jobs.items.filter((j: any) => j.status === "sampling").length,
-    analysis: jobs.items.filter((j: any) => j.status === "analysis").length,
-    reporting: jobs.items.filter((j: any) => j.status === "reporting").length,
-    completed: jobs.items.filter((j: any) => j.status === "completed").length
+  // Calculate stats from all items (not just current page)
+  const statusCounts = {
+    scheduled: data.items.filter((i: any) => i.status === 'scheduled').length,
+    sampling: data.items.filter((i: any) => i.status === 'sampling').length,
+    analysis_ready: data.items.filter((i: any) => i.status === 'analysis_ready').length,
+    analysis: data.items.filter((i: any) => i.status === 'analysis').length,
+    analysis_done: data.items.filter((i: any) => i.status === 'analysis_done').length,
+    reporting: data.items.filter((i: any) => i.status === 'reporting').length,
+    completed: data.items.filter((i: any) => i.status === 'completed').length,
   };
 
   return (
@@ -342,571 +358,431 @@ export default function OperatorJobsPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold text-emerald-900 tracking-tight">Progress Pekerjaan</h1>
-          <p className="text-slate-500 text-sm">Pantau dan update progress pekerjaan laboratorium.</p>
+          <h1 className="text-3xl font-bold text-emerald-900 tracking-tight flex items-center gap-3">
+            <Briefcase className="h-8 w-8 text-emerald-600" />
+            Progress Order
+          </h1>
+          <p className="text-slate-500 text-sm italic font-medium">Pantau dan kelola setiap tahapan pekerjaan laboratorium.</p>
         </div>
       </div>
 
-      {/* Stats Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <Clock className="h-4 w-4 text-slate-400" />
-            <span className="text-xs font-medium text-slate-500">Total</span>
-          </div>
-          <p className="text-2xl font-bold text-slate-800">{stats.total}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <Clock className="h-4 w-4 text-slate-400" />
-            <span className="text-xs font-medium text-slate-500">Dijadwalkan</span>
-          </div>
-          <p className="text-2xl font-bold text-slate-700">{stats.scheduled}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-blue-200 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <Truck className="h-4 w-4 text-blue-400" />
-            <span className="text-xs font-medium text-blue-500">Sampling</span>
-          </div>
-          <p className="text-2xl font-bold text-blue-700">{stats.sampling}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-amber-200 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <TestTube className="h-4 w-4 text-amber-400" />
-            <span className="text-xs font-medium text-amber-500">Analisis</span>
-          </div>
-          <p className="text-2xl font-bold text-amber-700">{stats.analysis}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-indigo-200 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <FileText className="h-4 w-4 text-indigo-400" />
-            <span className="text-xs font-medium text-indigo-500">Pelaporan</span>
-          </div>
-          <p className="text-2xl font-bold text-indigo-700">{stats.reporting}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-emerald-200 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <CheckCircle className="h-4 w-4 text-emerald-400" />
-            <span className="text-xs font-medium text-emerald-500">Selesai</span>
-          </div>
-          <p className="text-2xl font-bold text-emerald-700">{stats.completed}</p>
-        </div>
+      {/* Workflow Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-9 gap-3 mb-8">
+        <StatCard title="Total" value={stats.total || data.total} icon={Briefcase} color="slate" onClick={() => { setFilterStatus("all"); setFilters({}); }} active={filterStatus === "all"} />
+        <StatCard title="Terjadwal" value={stats.scheduled || 0} icon={Clock} color="blue" onClick={() => setFilterStatus("scheduled")} active={filterStatus === "scheduled"} />
+        <StatCard title="Sampling" value={stats.sampling || 0} icon={MapPin} color="amber" onClick={() => setFilterStatus("sampling")} active={filterStatus === "sampling"} />
+        <StatCard title="Siap Anal." value={stats.analysisReady || 0} icon={ClipboardCheck} color="emerald" onClick={() => setFilterStatus("analysis_ready")} active={filterStatus === "analysis_ready"} />
+        <StatCard title="Analisis" value={stats.analysis || 0} icon={FlaskConical} color="indigo" onClick={() => setFilterStatus("analysis")} active={filterStatus === "analysis"} />
+        <StatCard title="Selesai Anal." value={stats.analysisDone || 0} icon={TestTube} color="violet" onClick={() => setFilterStatus("analysis_done")} active={filterStatus === "analysis_done"} />
+        <StatCard title="Reporting" value={stats.reporting || 0} icon={FileText} color="purple" onClick={() => setFilterStatus("reporting")} active={filterStatus === "reporting"} />
+        <StatCard title="Selesai" value={stats.completed || 0} icon={CheckCircle} color="emerald" onClick={() => setFilterStatus("completed")} active={filterStatus === "completed"} />
+        <StatCard title="Overdue" value={stats.overdue || 0} icon={AlertCircle} color="red" onClick={() => {}} active={false} />
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6">
-        <div className="flex flex-wrap gap-4 items-center justify-between">
-          <div className="flex flex-wrap gap-2">
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-40 cursor-pointer">
-                <SelectValue placeholder="Filter Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Status</SelectItem>
-                {statusOptions.filter(opt => opt.value !== "all").map(opt => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      {/* Main Table Container */}
+      <div className="bg-white rounded-[2rem] shadow-2xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
+        <div className="p-6 border-b bg-emerald-50/10 flex flex-col gap-4">
+          {/* Search & Status Filter */}
+          <div className="flex flex-col md:flex-row gap-4 items-center">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
+              <Input
+                placeholder="Cari kode tracking, klien, atau perusahaan..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                className="pl-11 h-12 rounded-2xl border-slate-200 bg-white"
+              />
+            </div>
+            <div className="flex gap-2 w-full md:w-auto">
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="w-full md:w-48 h-12 rounded-2xl border-slate-200 bg-white font-bold text-xs">
+                  <div className="flex items-center gap-2"><Filter className="h-3 w-3" /><SelectValue placeholder="Status" /></div>
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl">{statusOptions.map(opt => <SelectItem key={opt.value} value={opt.value} className="text-xs cursor-pointer">{opt.label}</SelectItem>)}</SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowFilters(!showFilters)}
+                className="h-12 px-4 rounded-2xl border-slate-200 bg-white font-bold text-xs"
+              >
+                {showFilters ? "Tutup Filter" : "Filter Lanjutan"}
+              </Button>
+            </div>
           </div>
 
-          <div className="text-sm text-slate-500">
-            {filteredJobs.length} dari {jobs.total} pekerjaan
-          </div>
+          {/* Advanced Filters */}
+          {showFilters && (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200 animate-in slide-in-from-top-2">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black text-slate-500 uppercase">Dari Tanggal</Label>
+                <Input
+                  type="date"
+                  value={filters.dateFrom}
+                  onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+                  className="h-10 rounded-xl border-slate-200 bg-white text-xs"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black text-slate-500 uppercase">Sampai Tanggal</Label>
+                <Input
+                  type="date"
+                  value={filters.dateTo}
+                  onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+                  className="h-10 rounded-xl border-slate-200 bg-white text-xs"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black text-slate-500 uppercase">Field Officer</Label>
+                <Select value={filters.fieldOfficerId} onValueChange={(val) => setFilters({ ...filters, fieldOfficerId: val })}>
+                  <SelectTrigger className="h-10 rounded-xl border-slate-200 bg-white text-xs">
+                    <SelectValue placeholder="Semua Officer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Semua Officer</SelectItem>
+                    {fieldOfficers.map((o: any) => (
+                      <SelectItem key={o.id} value={o.id}>{o.full_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black text-slate-500 uppercase">Customer</Label>
+                <Select value={filters.customerId} onValueChange={(val) => setFilters({ ...filters, customerId: val })}>
+                  <SelectTrigger className="h-10 rounded-xl border-slate-200 bg-white text-xs">
+                    <SelectValue placeholder="Semua Customer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Semua Customer</SelectItem>
+                    {customers.map((c: any) => (
+                      <SelectItem key={c.id} value={c.id}>{c.company_name || c.full_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="md:col-span-4 flex justify-end gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setFilters({});
+                    setFilterStatus("all");
+                    setSearch("");
+                  }}
+                  className="text-xs font-bold"
+                >
+                  Reset Filter
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={loadData}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-xs font-bold"
+                >
+                  Terapkan Filter
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
-      </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-3xl shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
-        <div className="p-5 border-b bg-emerald-50/5">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
-            <Input
-              placeholder="Cari kode tracking, customer, atau layanan..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 focus-visible:ring-emerald-500 rounded-xl"
-            />
-          </div>
-        </div>
-
-        <div className="hidden md:block">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-slate-50/80">
-                <TableHead className="w-[180px] font-bold text-emerald-900 px-6">Kode Tracking</TableHead>
-                <TableHead className="font-bold text-emerald-900 px-4">Pekerjaan</TableHead>
-                <TableHead className="font-bold text-emerald-900 px-4">Customer</TableHead>
-                <TableHead className="font-bold text-emerald-900 px-4">Tanggal</TableHead>
-                <TableHead className="text-center font-bold text-emerald-900 px-4">Progress</TableHead>
-                <TableHead className="text-center font-bold text-emerald-900 px-6">Petugas Lapangan</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-20">
-                    <div className="flex justify-center">
-                      <ChemicalLoader />
-                    </div>
-                    <p className="mt-4 text-sm text-slate-500">Memuat data...</p>
-                  </TableCell>
-                </TableRow>
-              ) : filteredJobs.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-20">
-                    <div className="flex flex-col items-center gap-4">
-                      <div className="h-20 w-20 rounded-full bg-emerald-50 flex items-center justify-center">
-                        <Clock className="h-10 w-10 text-emerald-300" />
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-slate-50/50">
+              <TableHead className="px-6 py-4 font-black text-emerald-900 uppercase text-[10px] tracking-widest">Order Info</TableHead>
+              <TableHead className="px-4 py-4 font-black text-emerald-900 uppercase text-[10px] tracking-widest">Klien</TableHead>
+              <TableHead className="px-4 py-4 font-black text-emerald-900 uppercase text-[10px] tracking-widest">Status & Progres</TableHead>
+              <TableHead className="px-4 py-4 font-black text-emerald-900 uppercase text-[10px] tracking-widest text-center">Petugas</TableHead>
+              <TableHead className="px-6 py-4 font-black text-emerald-900 uppercase text-[10px] tracking-widest text-right">Aksi</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i}><TableCell colSpan={5} className="py-8 px-6"><div className="h-12 bg-slate-50 animate-pulse rounded-2xl" /></TableCell></TableRow>
+              ))
+            ) : filteredItems.length === 0 ? (
+              <TableRow><TableCell colSpan={5} className="text-center py-24"><div className="flex flex-col items-center gap-4"><div className="h-20 w-20 rounded-full bg-emerald-50 flex items-center justify-center"><Briefcase className="h-10 w-10 text-emerald-200" /></div><p className="font-bold text-slate-700">Data tidak ditemukan</p></div></TableCell></TableRow>
+            ) : (
+              filteredItems.map((item: any) => {
+                const sInfo = getStatusInfo(item.status);
+                return (
+                  <TableRow key={item.id} className="group hover:bg-emerald-50/5 transition-all">
+                    <TableCell className="px-6 py-4">
+                      <div className="flex flex-col gap-1">
+                        <span className="font-mono text-xs font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded w-fit">{item.tracking_code}</span>
+                        <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1"><FileText className="h-3 w-3" />{item.quotation.quotation_number}</span>
                       </div>
-                      <div className="text-center">
-                        <p className="text-lg font-semibold text-slate-700">Belum ada pekerjaan</p>
-                        <p className="text-sm text-slate-500 mt-1">Pekerjaan akan muncul setelah ada pesanan</p>
-                      </div>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredJobs.map((job: any) => (
-                  <TableRow key={job.id} className="hover:bg-emerald-50/10 transition-colors">
-                    <TableCell className="px-6 font-mono font-bold text-emerald-700">
-                      {job.tracking_code}
                     </TableCell>
                     <TableCell className="px-4">
                       <div className="flex flex-col">
-                        <span className="font-bold text-slate-800">
-                          {job.quotation?.items?.[0]?.service?.name || 'Uji Lab'}
-                        </span>
-                        <span className="text-xs text-slate-400">
-                          {job.quotation?.items?.[0]?.service?.category || 'Layanan'}
-                        </span>
+                        <span className="font-bold text-sm text-slate-800">{item.quotation.profile.full_name}</span>
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{item.quotation.profile.company_name || "Personal"}</span>
                       </div>
                     </TableCell>
                     <TableCell className="px-4">
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-slate-400" />
-                        <div className="flex flex-col">
-                          <span className="font-medium text-slate-700">
-                            {job.quotation?.profile?.full_name || job.quotation?.profile?.company_name || '-'}
-                          </span>
-                          {job.quotation?.profile?.company_name && job.quotation?.profile?.full_name && (
-                            <span className="text-xs text-slate-500">
-                              {job.quotation?.profile?.company_name}
-                            </span>
-                          )}
+                      <div className="space-y-2 min-w-[200px]">
+                        <div className="flex justify-between items-center mb-2">
+                          <Badge variant="outline" className={cn("text-[9px] font-black border-2", sInfo.color)}>{sInfo.label.toUpperCase()}</Badge>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-4">
-                      <div className="flex items-center gap-2 text-sm text-slate-600">
-                        <Calendar className="h-4 w-4 text-slate-400" />
-                        {new Date(job.created_at).toLocaleDateString("id-ID", {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric'
-                        })}
+                        {/* Visual Workflow Timeline */}
+                        <WorkflowTimeline 
+                          status={item.status}
+                          analysisStartedAt={item.analysis_started_at}
+                          analysisDoneAt={item.analysis_done_at}
+                          reportingDoneAt={item.reporting_done_at}
+                        />
                       </div>
                     </TableCell>
                     <TableCell className="px-4 text-center">
-                      {getJobStatusBadge(job.status)}
-                    </TableCell>
-                    <TableCell className="px-6 text-center">
-                      {/* Tombol Tugaskan Petugas - untuk job yang belum punya assignment */}
-                      {!job.sampling_assignment ? (
-                        <Button
-                          variant="default"
-                          size="sm"
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                          onClick={() => openAssignDialog(job)}
-                        >
-                          <MapPin className="h-4 w-4 mr-2" />
-                          Tugaskan Petugas
-                        </Button>
-                      ) : (
-                        <div className="flex items-center justify-center gap-2">
-                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                            <User className="h-3 w-3 mr-1" />
-                            {job.sampling_assignment.field_officer?.full_name || 'Assigned'}
-                          </Badge>
-                          {/* Download PDF Button */}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
-                            title="Unduh Surat Tugas"
-                            onClick={() => {
-                              // Navigate to travel order preview (operator version)
-                              const travelOrderId = job.sampling_assignment?.travel_order?.id;
-                              if (travelOrderId) {
-                                window.open(`/operator/travel-orders/${travelOrderId}/preview`, '_blank');
-                              } else {
-                                toast.error("Surat tugas belum tersedia");
-                              }
-                            }}
-                          >
-                            <Printer className="h-4 w-4" />
-                          </Button>
+                      {item.sampling_assignment ? (
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-2 py-1 rounded-lg border border-blue-100">
+                            <User className="h-3 w-3" />
+                            <span className="text-[10px] font-black uppercase">{item.sampling_assignment.field_officer?.full_name}</span>
+                          </div>
+                          {item.sampling_assignment.travel_order && (
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-emerald-600" onClick={() => window.open(`/operator/travel-orders/${item.sampling_assignment.travel_order.id}/preview`, '_blank')}>
+                              <Printer className="h-3 w-3" />
+                            </Button>
+                          )}
                         </div>
+                      ) : (
+                        <Button size="sm" onClick={() => openAssignDialog(item)} className="bg-amber-100 text-amber-700 hover:bg-amber-200 border-amber-200 font-black text-[10px] uppercase rounded-xl h-8">Tugaskan</Button>
                       )}
                     </TableCell>
+                    <TableCell className="px-6 text-right">
+                      <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handlePreviewJob(item)}
+                          className="h-9 px-4 rounded-xl text-emerald-600 hover:bg-emerald-100 transition-all font-bold text-xs"
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          Preview
+                        </Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
 
-        {/* Mobile View */}
-        <div className="md:hidden divide-y divide-slate-100">
-          {loading ? (
-            <div className="p-10 text-center">
-              <ChemicalLoader />
-            </div>
-          ) : filteredJobs.length === 0 ? (
-            <div className="p-10 text-center flex flex-col items-center gap-4">
-              <div className="h-16 w-16 rounded-full bg-emerald-50 flex items-center justify-center">
-                <Clock className="h-8 w-8 text-emerald-300" />
-              </div>
-              <div>
-                <p className="text-base font-semibold text-slate-700">Belum ada pekerjaan</p>
-                <p className="text-xs text-slate-500 mt-1">Pekerjaan akan muncul setelah ada pesanan</p>
-              </div>
-            </div>
-          ) : (
-            filteredJobs.map((job: any) => (
-              <div key={job.id} className="p-4 space-y-3 bg-white active:bg-slate-50">
-                <div className="flex justify-between items-start">
-                  <div className="space-y-1 flex-1">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-emerald-600" />
-                      <h4 className="font-mono font-bold text-slate-900">{job.tracking_code}</h4>
-                    </div>
-                    <p className="text-sm font-bold text-slate-800">
-                      {job.quotation?.items?.[0]?.service?.name || 'Uji Lab'}
-                    </p>
-                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                      <User className="h-3 w-3" />
-                      {job.quotation?.profile?.full_name || '-'}
-                    </div>
-                  </div>
-                  <div className="ml-2">
-                    {getJobStatusBadge(job.status)}
-                  </div>
-                </div>
-                <div className="flex justify-between items-center pt-3 border-t">
-                  <span className="text-xs text-slate-400">
-                    {new Date(job.created_at).toLocaleDateString("id-ID", {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric'
-                    })}
-                  </span>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={job.status === 'sampling' ? 'text-blue-600 bg-blue-50' : 'text-slate-300'}
-                      onClick={() => openStatusDialog(job, 'sampling')}
-                    >
-                      <Truck className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={job.status === 'analysis' ? 'text-amber-600 bg-amber-50' : 'text-slate-300'}
-                      onClick={() => openStatusDialog(job, 'analysis')}
-                    >
-                      <TestTube className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={job.status === 'reporting' ? 'text-indigo-600 bg-indigo-50' : 'text-slate-300'}
-                      onClick={() => openStatusDialog(job, 'reporting')}
-                    >
-                      <FileText className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={job.status === 'completed' ? 'text-emerald-600 bg-emerald-50' : 'text-slate-300'}
-                      onClick={() => openStatusDialog(job, 'completed')}
-                    >
-                      <FileCheck className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
+        <div className="p-6 bg-slate-50/50 border-t flex items-center justify-between">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total {data.total} Jobs Found</span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="h-9 w-9 rounded-xl border-slate-200" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+            <div className="h-9 px-4 flex items-center justify-center bg-white border border-slate-200 rounded-xl text-xs font-black text-emerald-900">{page} / {data.pages}</div>
+            <Button variant="outline" size="sm" className="h-9 w-9 rounded-xl border-slate-200" disabled={page === data.pages} onClick={() => setPage(p => p + 1)}><ChevronRight className="h-4 w-4" /></Button>
+          </div>
         </div>
       </div>
 
-      {/* Modal Update Status dengan Catatan */}
-      <Dialog open={isStatusDialogOpen} onOpenChange={setIsStatusDialogOpen}>
-        <DialogContent className="sm:max-w-[450px] rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-emerald-900">Update Progress Pekerjaan</DialogTitle>
-            <DialogDescription>
-              Masukkan catatan untuk status <span className="font-bold uppercase text-emerald-600">{nextStatus}</span>
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            {/* Job Info */}
-            {selectedJob && (
-              <div className="bg-slate-50 p-3 rounded-lg space-y-1">
-                <p className="text-xs font-mono font-bold text-emerald-700">{selectedJob.tracking_code}</p>
-                <p className="text-sm font-bold text-slate-800">
-                  {selectedJob.quotation?.items?.[0]?.service?.name || 'Uji Lab'}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {selectedJob.quotation?.profile?.full_name}
-                </p>
-              </div>
-            )}
-
-            {/* Status Note */}
-            <div className="space-y-2">
-              <label className="text-sm font-semibold flex items-center gap-2">
-                <MessageSquare className="h-4 w-4 text-slate-400" />
-                Catatan Pengerjaan
-              </label>
-              <Textarea
-                placeholder="Contoh: Sampel telah diambil di lokasi A dengan kondisi baik..."
-                value={statusNote}
-                onChange={(e) => setStatusNote(e.target.value)}
-                className="min-h-[120px] rounded-2xl focus-visible:ring-emerald-500 border-slate-200"
-              />
-            </div>
-
-            {/* Certificate Upload for Completed Status */}
-            {nextStatus === 'completed' && (
-              <div className="space-y-2 animate-in fade-in slide-in-from-top-4 duration-300">
-                <label className="text-sm font-semibold flex items-center gap-2">
-                  <FileDown className="h-4 w-4 text-emerald-600" />
-                  Unggah Sertifikat (PDF)
-                </label>
-                <div className="border-2 border-dashed border-emerald-100 rounded-2xl p-6 text-center hover:bg-emerald-50 transition-colors">
-                  <input
-                    type="file"
-                    accept=".pdf"
-                    onChange={(e) => setCertificateFile(e.target.files?.[0] || null)}
-                    className="hidden"
-                    id="cert-upload"
-                  />
-                  <label htmlFor="cert-upload" className="cursor-pointer">
-                    {certificateFile ? (
-                      <div className="flex items-center justify-center gap-2 text-emerald-700 font-bold">
-                        <FileCheck className="h-5 w-5" />
-                        {certificateFile.name}
-                      </div>
-                    ) : (
-                      <div className="space-y-1">
-                        <p className="text-sm text-slate-600 font-medium">Klik untuk pilih file sertifikat</p>
-                        <p className="text-[10px] text-slate-400">Hanya file PDF (Maks. 5MB)</p>
-                      </div>
-                    )}
-                  </label>
-                </div>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsStatusDialogOpen(false)}
-              className="rounded-xl cursor-pointer"
-            >
-              Batal
-            </Button>
-            <Button
-              onClick={confirmStatusUpdate}
-              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl px-8 cursor-pointer"
-              disabled={submitting}
-            >
-              {submitting ? <ChemicalLoader size="sm" /> : "Simpan Progress"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* ASSIGN FIELD OFFICER MODAL */}
       <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-xl p-0 border-none shadow-2xl rounded-[2rem] overflow-hidden">
+          <div className="bg-emerald-700 p-6 text-white flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-emerald-600/20 flex items-center justify-center text-emerald-600 border border-emerald-600/30">
-                <MapPin className="h-6 w-6" />
-              </div>
-              <div>
-                <DialogTitle className="text-lg font-bold text-emerald-900">Tugaskan Petugas Lapangan</DialogTitle>
-                <DialogDescription className="text-xs">
-                  Buat penugasan sampling & terbitkan surat tugas otomatis
-                </DialogDescription>
-              </div>
+              <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center border border-white/20"><MapPin className="h-5 w-5" /></div>
+              <div><DialogTitle className="text-lg font-black uppercase tracking-tight">Penugasan Sampling</DialogTitle><DialogDescription className="text-emerald-200 text-[10px] font-bold uppercase tracking-widest">Tugaskan Petugas Lapangan</DialogDescription></div>
             </div>
-          </DialogHeader>
+            <Button variant="ghost" size="icon" onClick={() => setIsAssignDialogOpen(false)} className="text-white/60 hover:text-white rounded-xl"><X className="h-5 w-5" /></Button>
+          </div>
 
-          <div className="space-y-4 mt-4">
-            {/* Job Info */}
-            <div className="bg-emerald-50/50 rounded-xl p-4 border border-emerald-200">
-              <div className="flex items-center gap-2 mb-2">
-                <FileText className="h-4 w-4 text-emerald-600" />
-                <span className="text-xs font-bold text-emerald-700 uppercase">Informasi Job Order</span>
+          <div className="p-8 space-y-6">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Petugas Lapangan</Label>
+                <Select value={assignFormData.field_officer_id} onValueChange={(val) => setAssignFormData({ ...assignFormData, field_officer_id: val })}>
+                  <SelectTrigger className="h-12 rounded-2xl bg-slate-50/50 border-slate-200"><SelectValue placeholder="Pilih Petugas..." /></SelectTrigger>
+                  <SelectContent className="rounded-2xl">{fieldOfficers.map((o) => <SelectItem key={o.id} value={o.id} className="cursor-pointer">{o.full_name}</SelectItem>)}</SelectContent>
+                </Select>
               </div>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <span className="text-slate-500 text-xs">Tracking Code:</span>
-                  <p className="font-semibold text-slate-800">{selectedJob?.tracking_code || '-'}</p>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Tanggal</Label>
+                  <Input type="date" value={assignFormData.scheduled_date} onChange={(e) => setAssignFormData({ ...assignFormData, scheduled_date: e.target.value })} className="h-12 rounded-2xl bg-slate-50/50 border-slate-200" />
                 </div>
-                <div>
-                  <span className="text-slate-500 text-xs">Customer:</span>
-                  <p className="font-semibold text-slate-800">{selectedJob?.quotation?.profile?.full_name || '-'}</p>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Waktu</Label>
+                  <Input type="time" value={assignFormData.scheduled_time} onChange={(e) => setAssignFormData({ ...assignFormData, scheduled_time: e.target.value })} className="h-12 rounded-2xl bg-slate-50/50 border-slate-200" />
                 </div>
               </div>
-            </div>
 
-            {/* Field Officer Selection */}
-            <div className="space-y-1.5">
-              <Label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                <User className="h-4 w-4 text-emerald-600" />
-                Petugas Lapangan <span className="text-red-500">*</span>
-              </Label>
-              <Select 
-                value={assignFormData.field_officer_id} 
-                onValueChange={(val) => setAssignFormData({ ...assignFormData, field_officer_id: val })}
-              >
-                <SelectTrigger className="h-10 border-slate-300">
-                  <SelectValue placeholder="Pilih petugas lapangan..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {fieldOfficers.length === 0 ? (
-                    <div className="p-4 text-center text-sm text-slate-500">
-                      Tidak ada petugas lapangan tersedia.
-                    </div>
-                  ) : (
-                    fieldOfficers.map((officer) => (
-                      <SelectItem key={officer.id} value={officer.id} className="text-xs">
-                        {officer.full_name} - {officer.email}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Scheduled Date & Time */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-emerald-600" />
-                  Tanggal <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  type="date"
-                  value={assignFormData.scheduled_date}
-                  onChange={(e) => setAssignFormData({ ...assignFormData, scheduled_date: e.target.value })}
-                  className="h-10 border-slate-300"
-                  min={new Date().toISOString().split('T')[0]}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-emerald-600" />
-                  Jam <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  type="time"
-                  value={assignFormData.scheduled_time}
-                  onChange={(e) => setAssignFormData({ ...assignFormData, scheduled_time: e.target.value })}
-                  className="h-10 border-slate-300"
-                />
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Lokasi Sampling</Label>
+                <Textarea value={assignFormData.location} onChange={(e) => setAssignFormData({ ...assignFormData, location: e.target.value })} placeholder="Alamat lengkap lokasi..." className="rounded-2xl bg-slate-50/50 border-slate-200 min-h-[100px] resize-none" />
               </div>
             </div>
 
-            {/* Location */}
-            <div className="space-y-1.5">
-              <Label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-emerald-600" />
-                Lokasi Sampling <span className="text-red-500">*</span>
-              </Label>
-              <Textarea
-                value={assignFormData.location}
-                onChange={(e) => setAssignFormData({ ...assignFormData, location: e.target.value })}
-                placeholder="Alamat lengkap lokasi sampling"
-                className="min-h-[80px] border-slate-300"
-                rows={3}
-              />
-            </div>
-
-            {/* Notes */}
-            <div className="space-y-1.5">
-              <Label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                <MessageSquare className="h-4 w-4 text-emerald-600" />
-                Catatan Tambahan
-              </Label>
-              <Textarea
-                value={assignFormData.notes}
-                onChange={(e) => setAssignFormData({ ...assignFormData, notes: e.target.value })}
-                placeholder="Instruksi khusus atau catatan tambahan (opsional)"
-                className="min-h-[60px] border-slate-300"
-                rows={2}
-              />
-            </div>
-
-            {/* Info Box */}
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-              <div className="flex items-start gap-3">
-                <CheckCircle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
-                <div className="text-xs text-blue-800">
-                  <p className="font-bold mb-1">Surat Tugas Akan Diterbitkan Otomatis</p>
-                  <p className="text-blue-600">Setelah penugasan dibuat, surat tugas perjalanan akan otomatis diterbitkan dan dapat diunduh untuk petugas lapangan.</p>
-                </div>
-              </div>
+            <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-2xl border border-blue-100">
+               <AlertCircle className="h-5 w-5 text-blue-600 shrink-0" />
+               <p className="text-[10px] text-blue-700 font-bold uppercase tracking-tight">Surat tugas akan otomatis diterbitkan setelah konfirmasi.</p>
             </div>
           </div>
 
-          <DialogFooter className="sticky bottom-0 bg-white/80 backdrop-blur-md border-t -mx-6 px-6 py-4 mt-6">
-            <div className="flex gap-3 w-full">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setIsAssignDialogOpen(false)}
-                className="font-bold text-slate-400 text-xs uppercase px-6 h-10 rounded-xl"
-              >
-                Batal
-              </Button>
-              <Button
-                onClick={handleAssignSubmit}
-                disabled={assignSubmitting}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-8 h-12 rounded-xl shadow-lg shadow-emerald-900/20 text-xs tracking-wide uppercase transition-all active:scale-95 flex-1"
-              >
-                {assignSubmitting ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>MEMPROSES...</span>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center leading-none gap-1">
-                    <span className="flex items-center gap-2">
-                      BUAT PENUGASAN & SURAT TUGAS
-                      <Save className="h-4 w-4" />
-                    </span>
-                    <span className="text-[7px] opacity-60 font-bold tracking-[0.1em]">
-                      [ Auto-generate travel order ]
-                    </span>
-                  </div>
-                )}
-              </Button>
-            </div>
+          <DialogFooter className="p-6 bg-slate-50 border-t flex gap-3">
+            <Button variant="ghost" onClick={() => setIsAssignDialogOpen(false)} className="flex-1 font-black text-[10px] uppercase h-12 rounded-2xl text-slate-400">Batal</Button>
+            <LoadingButton onClick={handleAssignSubmit} loading={submitting} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase h-12 rounded-2xl shadow-lg shadow-emerald-900/20">Konfirmasi Tugas</LoadingButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* QUICK PREVIEW MODAL */}
+      <Dialog open={isPreviewDialogOpen} onOpenChange={setIsPreviewDialogOpen}>
+        <DialogContent className="sm:max-w-4xl p-0 border-none shadow-2xl rounded-3xl overflow-hidden max-h-[90vh]">
+          <div className="bg-gradient-to-r from-emerald-600 to-indigo-600 p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center border border-white/20">
+                  <Briefcase className="h-6 w-6" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl font-black uppercase tracking-tight">Preview Job Order</DialogTitle>
+                  <DialogDescription className="text-emerald-100 text-xs font-bold uppercase tracking-widest mt-1">
+                    {selectedJob?.tracking_code}
+                  </DialogDescription>
+                </div>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setIsPreviewDialogOpen(false)} className="text-white/60 hover:text-white rounded-xl">
+                <X className="h-6 w-6" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="p-6 overflow-y-auto max-h-[70vh]">
+            {selectedJob && (
+              <div className="space-y-6">
+                {/* Job Info */}
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                    <h4 className="text-xs font-black text-slate-500 uppercase mb-3">Informasi Order</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Tracking Code:</span>
+                        <span className="font-bold text-emerald-700">{selectedJob.tracking_code}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Quotation:</span>
+                        <span className="font-bold text-slate-700">{selectedJob.quotation?.quotation_number}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Customer:</span>
+                        <span className="font-bold text-slate-700">{selectedJob.quotation?.profile?.full_name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Perusahaan:</span>
+                        <span className="font-bold text-slate-700">{selectedJob.quotation?.profile?.company_name || "-"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Status:</span>
+                        <Badge className={cn("text-[9px] font-black", getStatusInfo(selectedJob.status).color)}>
+                          {getStatusInfo(selectedJob.status).label.toUpperCase()}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Workflow Status */}
+                  <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-200">
+                    <h4 className="text-xs font-black text-emerald-600 uppercase mb-3">Workflow Progress</h4>
+                    <div className="space-y-2">
+                      <WorkflowTimeline
+                        status={selectedJob.status}
+                        analysisStartedAt={selectedJob.analysis_started_at}
+                        analysisDoneAt={selectedJob.analysis_done_at}
+                        reportingDoneAt={selectedJob.reporting_done_at}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Field Officer */}
+                {selectedJob.sampling_assignment && (
+                  <div className="bg-blue-50 p-4 rounded-2xl border border-blue-200">
+                    <h4 className="text-xs font-black text-blue-600 uppercase mb-3 flex items-center gap-2">
+                      <User className="h-4 w-4" /> Petugas Lapangan
+                    </h4>
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-black">
+                        {selectedJob.sampling_assignment.field_officer?.full_name?.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-800">{selectedJob.sampling_assignment.field_officer?.full_name}</p>
+                        {selectedJob.sampling_assignment.travel_order && (
+                          <p className="text-xs text-slate-500">Travel Order: {selectedJob.sampling_assignment.travel_order.document_number}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Analyst */}
+                {selectedJob.lab_analysis && (
+                  <div className="bg-purple-50 p-4 rounded-2xl border border-purple-200">
+                    <h4 className="text-xs font-black text-purple-600 uppercase mb-3 flex items-center gap-2">
+                      <FlaskConical className="h-4 w-4" /> Analis Laboratorium
+                    </h4>
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 bg-purple-100 rounded-full flex items-center justify-center text-purple-600 font-black">
+                        {selectedJob.lab_analysis.analyst?.full_name?.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-800">{selectedJob.lab_analysis.analyst?.full_name}</p>
+                        <p className="text-xs text-slate-500">Mulai: {selectedJob.analysis_started_at ? new Date(selectedJob.analysis_started_at).toLocaleDateString('id-ID') : '-'}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Timeline */}
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                  <h4 className="text-xs font-black text-slate-600 uppercase mb-3 flex items-center gap-2">
+                    <Calendar className="h-4 w-4" /> Timeline
+                  </h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500">Created:</span>
+                      <span className="font-semibold">{selectedJob.created_at ? new Date(selectedJob.created_at).toLocaleString('id-ID') : '-'}</span>
+                    </div>
+                    {selectedJob.analysis_started_at && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500">Analysis Started:</span>
+                        <span className="font-semibold">{new Date(selectedJob.analysis_started_at).toLocaleString('id-ID')}</span>
+                      </div>
+                    )}
+                    {selectedJob.analysis_done_at && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500">Analysis Done:</span>
+                        <span className="font-semibold">{new Date(selectedJob.analysis_done_at).toLocaleString('id-ID')}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="p-4 border-t bg-slate-50">
+            <Button variant="outline" onClick={() => setIsPreviewDialogOpen(false)} className="flex-1 font-black text-[10px] uppercase h-12 rounded-2xl">
+              Tutup
+            </Button>
+            {selectedJob && (
+              <Link href={`/operator/quotations/${selectedJob.quotation_id}`} className="flex-1">
+                <Button className="w-full bg-emerald-600 hover:bg-emerald-700 font-black text-[10px] uppercase h-12 rounded-2xl shadow-lg shadow-emerald-900/20">
+                  <Eye className="h-4 w-4 mr-2" />
+                  Lihat Quotation
+                </Button>
+              </Link>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <LoadingOverlay isOpen={submitting} title="Memproses Data..." description="Mohon tunggu sebentar, penugasan sedang dibuat" />
     </div>
   );
-}
-
-// Helper for className
-function cn(...classes: (string | undefined | null | false)[]) {
-  return classes.filter(Boolean).join(' ');
 }

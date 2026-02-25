@@ -370,6 +370,7 @@ export async function createQuotation(formData: any) {
             equipment_id: item.equipment_id || null,
             qty: item.qty,
             price_snapshot: item.price,
+            parameter_snapshot: Array.isArray(item.parameters) ? item.parameters.join(", ") : null,
           })),
         },
       },
@@ -379,7 +380,8 @@ export async function createQuotation(formData: any) {
     await audit.createQuotation(quotation)
 
     revalidatePath('/admin/quotations')
-    return { success: true, id: quotation.id }
+    revalidatePath('/operator/quotations')
+    return { success: true, id: quotation.id, data: serializeData(quotation) }
   } catch (error) {
     console.error('Prisma Error:', error)
     throw new Error('Gagal membuat penawaran')
@@ -435,6 +437,7 @@ export async function updateQuotation(id: string, formData: any) {
               equipment_id: item.equipment_id || null,
               qty: item.qty,
               price_snapshot: item.price,
+              parameter_snapshot: Array.isArray(item.parameters) ? item.parameters.join(", ") : null,
             })),
           },
         },

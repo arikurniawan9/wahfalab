@@ -1,18 +1,11 @@
 // ============================================================================
-// OPTIMIZED OPERATOR DASHBOARD - v2.0
-// Fitur Optimasi:
-// 1. ✅ Real-time stats dengan auto-refresh
-// 2. ✅ Loading states dengan skeleton
-// 3. ✅ Toast notifications untuk update
-// 4. ✅ Filter & search jobs
-// 5. ✅ Quick actions
-// 6. ✅ Responsive design
-// 7. ✅ Empty state yang menarik
+// PREMIUM OPERATOR DASHBOARD - v3.0
+// Designed for maximum productivity and clear operational visibility.
 // ============================================================================
 
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   ClipboardList,
@@ -23,7 +16,6 @@ import {
   Search,
   Filter,
   RefreshCw,
-  Bell,
   FlaskConical,
   FileText,
   MapPin,
@@ -32,11 +24,15 @@ import {
   AlertCircle,
   ChevronRight,
   Truck,
-  TestTube
+  TestTube,
+  TrendingUp,
+  LayoutGrid,
+  Briefcase
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -62,18 +58,18 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 
-const statusConfig: Record<string, { label: string; color: string; icon: any; progress: number }> = {
-  scheduled: { label: 'Antrean', color: 'bg-amber-100 text-amber-700 border-amber-200', icon: Clock, progress: 0 },
-  sampling: { label: 'Sampling', color: 'bg-blue-100 text-blue-700 border-blue-200', icon: Truck, progress: 25 },
-  analysis: { label: 'Analisis', color: 'bg-purple-100 text-purple-700 border-purple-200', icon: TestTube, progress: 50 },
-  reporting: { label: 'Pelaporan', color: 'bg-indigo-100 text-indigo-700 border-indigo-200', icon: FileText, progress: 75 },
-  completed: { label: 'Selesai', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: CheckCircle2, progress: 100 }
+const statusConfig: Record<string, { label: string; color: string; icon: any; progress: number; theme: string }> = {
+  scheduled: { label: 'Terjadwal', color: 'text-blue-600', theme: 'bg-blue-50 border-blue-100', icon: Clock, progress: 20 },
+  sampling: { label: 'Sampling', color: 'text-amber-600', theme: 'bg-amber-50 border-amber-100', icon: Truck, progress: 40 },
+  analysis: { label: 'Analisis Lab', color: 'text-purple-600', theme: 'bg-purple-50 border-purple-100', icon: TestTube, progress: 60 },
+  reporting: { label: 'Pelaporan', color: 'text-indigo-600', theme: 'bg-indigo-50 border-indigo-100', icon: FileText, progress: 80 },
+  completed: { label: 'Selesai', color: 'text-emerald-600', theme: 'bg-emerald-50 border-emerald-100', icon: CheckCircle2, progress: 100 }
 };
 
 const progressSteps = [
-  { key: 'scheduled', label: 'Antrean', icon: Clock },
+  { key: 'scheduled', label: 'Terjadwal', icon: Clock },
   { key: 'sampling', label: 'Sampling', icon: Truck },
-  { key: 'analysis', label: 'Analisis', icon: TestTube },
+  { key: 'analysis', label: 'Analisis Lab', icon: TestTube },
   { key: 'reporting', label: 'Pelaporan', icon: FileText },
   { key: 'completed', label: 'Selesai', icon: CheckCircle2 }
 ];
@@ -90,9 +86,6 @@ export default function OperatorDashboard() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [services, setServices] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
-  const [serviceSearch, setServiceSearch] = useState("");
-  const [isServiceDialogOpen, setIsServiceDialogOpen] = useState(false);
-  const [selectedService, setSelectedService] = useState<any>(null);
   const [stats, setStats] = useState({
     scheduled: 0,
     sampling: 0,
@@ -104,14 +97,14 @@ export default function OperatorDashboard() {
 
   const supabase = createClient();
 
-  const loadData = async (showRefreshToast = false) => {
+  const loadData = useCallback(async (showRefreshToast = false) => {
     if (showRefreshToast) setRefreshing(true);
     else setLoading(true);
 
     try {
       const [prof, jobsData, servicesData, categoriesData] = await Promise.all([
         getProfile(),
-        getJobOrders(1, 100),
+        getJobOrders(1, 50), // Ambil 50 pekerjaan terbaru
         getAllServices(),
         getAllCategories()
       ]);
@@ -133,19 +126,17 @@ export default function OperatorDashboard() {
       });
 
       if (showRefreshToast) {
-        toast.success("Data diperbarui", {
-          description: `${jobList.length} pekerjaan, ${servicesData.length} layanan ditemukan`
+        toast.success("Dashboard Terkini", {
+          description: "Data pekerjaan dan layanan telah diperbarui."
         });
       }
     } catch (error: any) {
-      toast.error("Gagal memuat data", {
-        description: error?.message || "Silakan coba lagi"
-      });
+      toast.error("Sinkronisasi Gagal");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -158,8 +149,8 @@ export default function OperatorDashboard() {
         schema: 'public',
         table: 'job_orders'
       }, (payload) => {
-        toast.info("Status pekerjaan diperbarui!", {
-          description: `Job ${payload.new.tracking_code} → ${payload.new.status}`
+        toast.info("Update Progres!", {
+          description: `Pekerjaan ${payload.new.tracking_code} berganti status.`
         });
         loadData();
       })
@@ -168,7 +159,7 @@ export default function OperatorDashboard() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [loadData, supabase]);
 
   // Filter & Search
   const filteredJobs = jobs.filter((job: any) => {
@@ -182,7 +173,7 @@ export default function OperatorDashboard() {
     return matchesSearch && matchesStatus;
   });
 
-  const recentJobs = filteredJobs.slice(0, 10);
+  const recentJobs = filteredJobs.slice(0, 8);
 
   if (loading) {
     return (
@@ -193,572 +184,345 @@ export default function OperatorDashboard() {
   }
 
   return (
-    <div className="p-4 md:p-8 pb-24 md:pb-8 bg-slate-50/20">
-      {/* Header */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+    <div className="p-4 md:p-10 pb-24 md:pb-10 space-y-10">
+      {/* Dynamic Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
-          <h1 className="text-2xl font-bold text-emerald-950 tracking-tight font-[family-name:var(--font-montserrat)] uppercase">
-            Beranda Petugas
-          </h1>
-          <p className="text-slate-500 text-xs font-medium">
-            Monitoring antrean laboratorium WahfaLab
+          <div className="flex items-center gap-3 mb-1">
+            <div className="h-8 w-1 bg-emerald-600 rounded-full" />
+            <h1 className="text-3xl font-black text-emerald-950 tracking-tighter uppercase font-[family-name:var(--font-montserrat)]">
+              Operasional Center
+            </h1>
+          </div>
+          <p className="text-slate-500 text-sm font-medium italic pl-4">
+            Selamat bekerja, <span className="text-emerald-700 font-bold not-italic">{profile?.full_name}</span>. Pantau antrean hari ini.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
           <Button
-            variant="outline"
+            variant="ghost"
             size="icon"
             onClick={() => loadData(true)}
             disabled={refreshing}
-            className="h-10 w-10 cursor-pointer"
+            className="h-10 w-10 rounded-xl hover:bg-emerald-50 text-emerald-600"
           >
             <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
           </Button>
-          <div className="h-10 w-10 bg-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
-            {profile?.full_name?.charAt(0) || "U"}
+          <div className="h-10 px-4 flex items-center gap-3 border-l border-slate-100">
+             <div className="text-right hidden sm:block">
+                <p className="text-[10px] font-black text-slate-400 uppercase leading-none">Status Anda</p>
+                <p className="text-[11px] font-bold text-emerald-600 uppercase">Aktif (Operator)</p>
+             </div>
+             <div className="h-10 w-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-emerald-900/20">
+                {profile?.full_name?.charAt(0) || "O"}
+             </div>
           </div>
         </div>
-      </header>
-
-      {/* Stats Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-        <StatCard
-          title="Antrean"
-          value={stats.scheduled}
-          icon={Clock}
-          color="amber"
-          onClick={() => setFilterStatus("scheduled")}
-        />
-        <StatCard
-          title="Sampling"
-          value={stats.sampling}
-          icon={MapPin}
-          color="blue"
-          onClick={() => setFilterStatus("sampling")}
-        />
-        <StatCard
-          title="Analisis"
-          value={stats.analysis}
-          icon={Beaker}
-          color="purple"
-          onClick={() => setFilterStatus("analysis")}
-        />
-        <StatCard
-          title="Pelaporan"
-          value={stats.reporting}
-          icon={FileText}
-          color="indigo"
-          onClick={() => setFilterStatus("reporting")}
-        />
-        <StatCard
-          title="Selesai"
-          value={stats.completed}
-          icon={CheckCircle2}
-          color="emerald"
-          onClick={() => setFilterStatus("completed")}
-        />
       </div>
 
-      {/* Filters & Search */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6">
-        <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-          <div className="relative flex-1 w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+      {/* Modern Stats Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <StatCard title="Antrean" value={stats.scheduled} icon={Clock} color="blue" onClick={() => setFilterStatus("scheduled")} active={filterStatus === "scheduled"} />
+        <StatCard title="Sampling" value={stats.sampling} icon={Truck} color="amber" onClick={() => setFilterStatus("sampling")} active={filterStatus === "sampling"} />
+        <StatCard title="Analisis" value={stats.analysis} icon={TestTube} color="purple" onClick={() => setFilterStatus("analysis")} active={filterStatus === "analysis"} />
+        <StatCard title="Pelaporan" value={stats.reporting} icon={FileText} color="indigo" onClick={() => setFilterStatus("reporting")} active={filterStatus === "reporting"} />
+        <StatCard title="Selesai" value={stats.completed} icon={CheckCircle2} color="emerald" onClick={() => setFilterStatus("completed")} active={filterStatus === "completed"} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Main Jobs Section */}
+        <div className="lg:col-span-8 space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-emerald-100 text-emerald-700">
+                <ClipboardList className="h-5 w-5" />
+              </div>
+              <h2 className="text-xl font-black text-emerald-950 uppercase tracking-tight">Antrean Aktif</h2>
+            </div>
+            <Link href="/operator/jobs">
+              <Button variant="link" className="text-emerald-600 font-bold text-xs uppercase tracking-widest hover:no-underline flex items-center gap-1 group">
+                Semua Pekerjaan <ArrowRight className="h-3 w-3 group-hover:translate-x-1 transition-transform" />
+              </Button>
+            </Link>
+          </div>
+
+          {/* Search & Mini Filter Bar */}
+          <div className="relative group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
             <Input
-              placeholder="Cari tracking code, customer, atau layanan..."
+              placeholder="Cari kode tracking, klien, atau jenis layanan..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 focus-visible:ring-emerald-500"
+              className="h-12 pl-12 pr-4 bg-white border-slate-200 rounded-2xl shadow-sm focus-visible:ring-emerald-500 transition-all text-sm font-medium"
             />
           </div>
-          <div className="flex items-center gap-2 w-full md:w-auto">
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-full md:w-40 cursor-pointer">
-                <SelectValue placeholder="Filter Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Status</SelectItem>
-                {Object.entries(statusConfig).map(([key, config]) => (
-                  <SelectItem key={key} value={key}>{config.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setFilterStatus("all")}
-              className="h-10 w-10 cursor-pointer"
-            >
-              <Filter className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </div>
 
-      {/* Jobs List */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-5 border-b bg-slate-50/50 flex items-center justify-between">
-          <h3 className="font-bold text-emerald-900 flex items-center gap-2 text-sm uppercase tracking-wide">
-            <ClipboardList className="h-4 w-4" />
-            Daftar Pekerjaan {filteredJobs.length > 0 && `(${filteredJobs.length})`}
-          </h3>
-          <Link href="/operator/jobs">
-            <Button variant="ghost" size="sm" className="text-emerald-600 font-bold text-[10px] uppercase tracking-widest cursor-pointer">
-              Lihat Semua <ArrowRight className="ml-1 h-3 w-3" />
-            </Button>
-          </Link>
-        </div>
-
-        <div className="divide-y divide-slate-100">
-          {filteredJobs.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="h-20 w-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-4">
-                <ClipboardList className="h-10 w-10 text-slate-300" />
+          {/* Jobs List */}
+          <div className="space-y-4">
+            {filteredJobs.length === 0 ? (
+              <div className="bg-white rounded-3xl border-2 border-dashed border-slate-200 p-12 text-center">
+                <div className="h-20 w-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-4">
+                  <Briefcase className="h-10 w-10 text-slate-200" />
+                </div>
+                <h4 className="font-bold text-slate-700 uppercase text-sm tracking-widest">Data Tidak Ditemukan</h4>
+                <p className="text-slate-400 text-xs mt-1">Coba sesuaikan kata kunci atau filter Anda.</p>
               </div>
-              <h4 className="font-semibold text-slate-700 mb-1">Tidak ada pekerjaan</h4>
-              <p className="text-slate-500 text-sm mb-4">
-                {search || filterStatus !== "all"
-                  ? "Coba ubah filter atau kata kunci pencarian"
-                  : "Belum ada pekerjaan yang terdaftar"}
-              </p>
-              {(search || filterStatus !== "all") && (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setSearch("");
-                    setFilterStatus("all");
-                  }}
-                  className="cursor-pointer"
-                >
-                  Reset Filter
-                </Button>
-              )}
-            </div>
-          ) : (
-            recentJobs.map((job: any) => {
-              const StatusIcon = statusConfig[job.status]?.icon || Clock;
-              return (
-                <div
-                  key={job.id}
-                  className="p-5 hover:bg-slate-50 transition-all cursor-pointer"
-                  onClick={() => {
-                    setSelectedJob(job);
-                    setIsDetailOpen(true);
-                  }}
-                >
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div className="flex gap-4 flex-1">
-                      <div className="h-12 w-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 font-bold text-[10px] shrink-0">
-                        JOB
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className="text-[10px] font-bold text-emerald-600 tracking-wider">
-                            {job.tracking_code}
-                          </span>
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[8px] h-4 px-1.5 font-bold uppercase",
-                              statusConfig[job.status]?.color || "bg-slate-100"
-                            )}
-                          >
-                            <StatusIcon className="h-3 w-3 mr-1" />
-                            {statusConfig[job.status]?.label || job.status}
-                          </Badge>
-                          <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            {new Date(job.created_at).toLocaleDateString("id-ID", {
-                              day: 'numeric',
-                              month: 'short',
-                              year: 'numeric'
-                            })}
-                          </span>
-                        </div>
-                        <h4 className="font-bold text-slate-800 text-sm truncate">
-                          {job.quotation?.items?.[0]?.service?.name || 'Uji Analisis'}
-                        </h4>
-                        <div className="flex items-center gap-3 mt-1 flex-wrap">
-                          <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
-                            <User className="h-3 w-3" />
-                            {job.quotation?.profile?.full_name || 'Unknown'}
-                          </p>
-                          {job.quotation?.profile?.company_name && (
-                            <p className="text-[10px] text-slate-400">
-                              {job.quotation.profile.company_name}
-                            </p>
-                          )}
-                        </div>
-                        {/* Progress Bar */}
-                        <div className="mt-3">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                              Progress: {statusConfig[job.status]?.progress || 0}%
-                            </span>
-                            <span className="text-[9px] text-slate-400">
-                              {progressSteps.find(s => s.key === job.status)?.label || job.status}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {progressSteps.map((step, idx) => {
-                              const jobIndex = progressSteps.findIndex(s => s.key === job.status);
-                              const isPast = idx <= jobIndex;
-                              const StepIcon = step.icon;
-                              
-                              return (
-                                <div key={step.key} className="flex items-center flex-1">
-                                  <div className={cn(
-                                    "h-6 w-6 rounded-full flex items-center justify-center shrink-0 transition-all",
-                                    isPast 
-                                      ? idx === jobIndex 
-                                        ? "bg-emerald-600 text-white scale-110 shadow-md" 
-                                        : "bg-emerald-300 text-white"
-                                      : "bg-slate-200 text-slate-400"
-                                  )}>
-                                    <StepIcon className="h-3 w-3" />
-                                  </div>
-                                  {idx < progressSteps.length - 1 && (
-                                    <div className={cn(
-                                      "flex-1 h-1 mx-1 rounded-full transition-all",
-                                      idx < jobIndex ? "bg-emerald-400" : "bg-slate-200"
-                                    )} />
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      className="bg-emerald-600 hover:bg-emerald-700 h-8 px-4 text-xs font-bold rounded-lg shrink-0 cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedJob(job);
-                        setIsDetailOpen(true);
-                      }}
-                    >
-                      Detail <ChevronRight className="ml-1 h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      {/* Manajemen Laboratorium Section */}
-      <div className="mt-8">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-lg font-bold text-emerald-900 flex items-center gap-2">
-              <FlaskConical className="h-5 w-5" />
-              Manajemen Laboratorium
-            </h2>
-            <p className="text-slate-500 text-xs">Layanan dan kategori pengujian laboratorium</p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsServiceDialogOpen(true)}
-            className="text-emerald-600 border-emerald-200 cursor-pointer"
-          >
-            Lihat Semua <ChevronRight className="ml-1 h-3 w-3" />
-          </Button>
-        </div>
-
-        {/* Categories & Services Preview */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Categories Preview */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="p-4 border-b bg-slate-50/50">
-              <h3 className="font-bold text-slate-700 text-sm flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                Kategori Layanan ({categories.length})
-              </h3>
-            </div>
-            <div className="p-4">
-              {categories.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-xs">
-                  <FileText className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                  <p>Belum ada kategori</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-2">
-                  {categories.slice(0, 4).map((cat: any) => (
-                    <div
-                      key={cat.id}
-                      className="p-3 bg-slate-50 rounded-lg border border-slate-100 hover:bg-emerald-50 transition-colors cursor-default"
-                    >
-                      <p className="text-xs font-bold text-slate-700 truncate">{cat.name}</p>
-                      <p className="text-[9px] text-slate-400 mt-0.5">
-                        {cat._count?.services || 0} layanan
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Services Preview */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="p-4 border-b bg-slate-50/50">
-              <h3 className="font-bold text-slate-700 text-sm flex items-center gap-2">
-                <FlaskConical className="h-4 w-4" />
-                Layanan Pengujian ({services.length})
-              </h3>
-            </div>
-            <div className="p-4">
-              {services.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-xs">
-                  <FlaskConical className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                  <p>Belum ada layanan</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {services.slice(0, 4).map((service: any) => (
-                    <div
-                      key={service.id}
-                      className="p-3 bg-slate-50 rounded-lg border border-slate-100 hover:bg-emerald-50 transition-colors cursor-default"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-slate-700 truncate">{service.name}</p>
-                          <p className="text-[9px] text-slate-400 mt-0.5">
-                            {service.category_ref?.name || service.category || 'Umum'}
-                          </p>
-                        </div>
-                        <p className="text-xs font-bold text-emerald-700 shrink-0">
-                          Rp {Number(service.price).toLocaleString("id-ID")}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Services & Categories Dialog */}
-      <Dialog open={isServiceDialogOpen} onOpenChange={setIsServiceDialogOpen}>
-        <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-emerald-900 flex items-center gap-2">
-              <FlaskConical className="h-5 w-5" />
-              Manajemen Laboratorium
-            </DialogTitle>
-            <DialogDescription>
-              Daftar kategori dan layanan pengujian laboratorium
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-6 py-4">
-            {/* Categories Section */}
-            <div>
-              <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                Kategori Layanan ({categories.length})
-              </h4>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                {categories.map((cat: any) => (
-                  <div
-                    key={cat.id}
-                    className="p-3 bg-slate-50 rounded-lg border border-slate-100"
+            ) : (
+              recentJobs.map((job: any) => {
+                const config = statusConfig[job.status] || statusConfig.scheduled;
+                const StatusIcon = config.icon;
+                return (
+                  <Card 
+                    key={job.id} 
+                    className="group border-none shadow-sm hover:shadow-xl hover:shadow-emerald-900/5 transition-all duration-300 rounded-[1.5rem] overflow-hidden cursor-pointer"
+                    onClick={() => { setSelectedJob(job); setIsDetailOpen(true); }}
                   >
-                    <p className="text-xs font-bold text-slate-700 truncate">{cat.name}</p>
-                    <p className="text-[9px] text-slate-400 mt-0.5">
-                      {cat._count?.services || 0} layanan
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
+                    <CardContent className="p-0">
+                      <div className="flex flex-col sm:flex-row items-stretch">
+                        {/* Status Side Indicator */}
+                        <div className={cn("w-2 shrink-0 transition-all duration-300", config.color.replace('text', 'bg'))} />
+                        
+                        <div className="p-5 flex-1 space-y-4">
+                          <div className="flex justify-between items-start gap-4">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-xs font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded uppercase tracking-tighter">
+                                  {job.tracking_code}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-bold uppercase flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" />
+                                  {new Date(job.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}
+                                </span>
+                              </div>
+                              <h4 className="font-black text-slate-800 text-base leading-tight">
+                                {job.quotation?.items?.[0]?.service?.name || 'Layanan Laboratorium'}
+                              </h4>
+                              <div className="flex items-center gap-3">
+                                <p className="text-[11px] text-slate-500 font-bold uppercase tracking-tight flex items-center gap-1.5">
+                                  <User className="h-3 w-3 text-emerald-600" />
+                                  {job.quotation?.profile?.full_name}
+                                </p>
+                                {job.quotation?.profile?.company_name && (
+                                  <Badge variant="secondary" className="bg-slate-100 text-slate-500 text-[9px] font-black uppercase border-none h-4">
+                                    {job.quotation.profile.company_name}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-2">
+                               <Badge variant="outline" className={cn("border-2 font-black text-[9px] uppercase px-3 py-1 rounded-full", config.theme, config.color)}>
+                                 <StatusIcon className="h-3 w-3 mr-1.5" />
+                                 {config.label}
+                               </Badge>
+                               <div className="text-right">
+                                  <p className="text-[9px] font-black text-slate-400 uppercase">Progress</p>
+                                  <p className="text-lg font-black text-emerald-950 leading-none">{config.progress}%</p>
+                               </div>
+                            </div>
+                          </div>
 
-            {/* Services Section */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                  <FlaskConical className="h-4 w-4" />
-                  Layanan Pengujian ({services.length})
-                </h4>
-                <div className="relative w-48">
-                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
-                  <Input
-                    placeholder="Cari layanan..."
-                    value={serviceSearch}
-                    onChange={(e) => setServiceSearch(e.target.value)}
-                    className="pl-7 h-8 text-xs"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {services
-                  .filter((s: any) =>
-                    serviceSearch === "" ||
-                    s.name.toLowerCase().includes(serviceSearch.toLowerCase()) ||
-                    s.category_ref?.name?.toLowerCase().includes(serviceSearch.toLowerCase())
-                  )
-                  .map((service: any) => (
-                    <div
-                      key={service.id}
-                      className="p-3 bg-slate-50 rounded-lg border border-slate-100"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-slate-700 truncate">{service.name}</p>
-                          <p className="text-[9px] text-slate-400 mt-0.5">
-                            {service.category_ref?.name || service.category || 'Umum'}
-                            {service.parameters && (
-                              <span className="ml-2 text-slate-400">
-                                • {Array.isArray(service.parameters) ? service.parameters.length : 0} parameter
-                              </span>
-                            )}
-                          </p>
+                          {/* Simplified Progress Line */}
+                          <div className="relative pt-2">
+                            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                              <div 
+                                className={cn("h-full transition-all duration-700 ease-out", config.color.replace('text', 'bg'))}
+                                style={{ width: `${config.progress}%` }}
+                              />
+                            </div>
+                            <div className="flex justify-between mt-2">
+                               {progressSteps.map((step, sIdx) => {
+                                 const jobIdx = progressSteps.findIndex(ps => ps.key === job.status);
+                                 return (
+                                   <div key={step.key} className={cn(
+                                     "h-1.5 w-1.5 rounded-full transition-colors",
+                                     sIdx <= jobIdx ? config.color.replace('text', 'bg') : "bg-slate-200"
+                                   )} />
+                                 );
+                               })}
+                            </div>
+                          </div>
                         </div>
-                        <p className="text-xs font-bold text-emerald-700 shrink-0">
-                          Rp {Number(service.price).toLocaleString("id-ID")}
-                        </p>
                       </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="p-4 bg-slate-50">
-            <Button
-              onClick={() => setIsServiceDialogOpen(false)}
-              className="w-full cursor-pointer"
-            >
-              Tutup
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Job Detail Dialog */}
-      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className="sm:max-w-[500px] rounded-2xl p-0 overflow-hidden">
-          <div className="bg-emerald-950 p-6 text-white">
-            <DialogHeader>
-              <DialogTitle className="text-xl font-bold">
-                {selectedJob?.quotation?.items?.[0]?.service?.name || 'Detail Pekerjaan'}
-              </DialogTitle>
-              <DialogDescription className="text-emerald-400 text-xs font-medium">
-                {selectedJob?.tracking_code}
-              </DialogDescription>
-            </DialogHeader>
-          </div>
-          <div className="p-6 bg-white space-y-6">
-            {/* Customer Info */}
-            <div className="bg-slate-50 p-4 rounded-xl">
-              <h5 className="text-xs font-bold text-slate-500 uppercase mb-2">Informasi Pelanggan</h5>
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-slate-800">
-                  {selectedJob?.quotation?.profile?.full_name}
-                </p>
-                {selectedJob?.quotation?.profile?.company_name && (
-                  <p className="text-xs text-slate-500">
-                    {selectedJob.quotation.profile.company_name}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Timeline */}
-            <div>
-              <h5 className="text-xs font-bold text-slate-500 uppercase mb-4">Status Pekerjaan</h5>
-              
-              {/* Progress Percentage Display */}
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-emerald-900">Progress Keseluruhan</span>
-                  <span className="text-2xl font-bold text-emerald-600">
-                    {statusConfig[selectedJob?.status]?.progress || 0}%
-                  </span>
-                </div>
-                <div className="h-3 bg-emerald-100 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-emerald-600 transition-all duration-500 ease-out"
-                    style={{ width: `${statusConfig[selectedJob?.status]?.progress || 0}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Step by Step Timeline */}
-              <div className="space-y-3">
-                {progressSteps.map((step, idx) => {
-                  const jobIndex = progressSteps.findIndex(s => s.key === selectedJob?.status);
-                  const currentIndex = idx;
-                  const isPast = currentIndex < jobIndex;
-                  const isCurrent = currentIndex === jobIndex;
-                  const Icon = step.icon;
-
-                  return (
-                    <div key={step.key} className="flex items-center gap-3">
-                      <div className={cn(
-                        "h-10 w-10 rounded-xl flex items-center justify-center shrink-0 transition-all",
-                        isPast ? "bg-emerald-500 text-white" :
-                        isCurrent ? "bg-emerald-950 text-white scale-110 shadow-lg" :
-                        "bg-slate-100 text-slate-300"
-                      )}>
-                        <Icon className="h-5 w-5" />
-                      </div>
-                      <div className={cn(
-                        "flex-1",
-                        isPast || isCurrent ? "opacity-100" : "opacity-40"
-                      )}>
-                        <p className={cn(
-                          "text-sm font-bold",
-                          isCurrent ? "text-emerald-950" : "text-slate-700"
-                        )}>
-                          {step.label}
-                        </p>
-                        <p className="text-[10px] text-slate-400">
-                          {isPast ? 'Selesai' : isCurrent ? 'Sedang dikerjakan' : 'Belum dimulai'}
-                        </p>
-                      </div>
-                      {isCurrent && (
-                        <Badge variant="outline" className="bg-emerald-100 text-emerald-700 border-emerald-200">
-                          <Clock className="h-3 w-3 mr-1" />
-                          Aktif
-                        </Badge>
-                      )}
-                      {isPast && (
-                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                          ✓
-                        </Badge>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Notes */}
-            {selectedJob?.notes && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                  <div>
-                    <h5 className="text-xs font-bold text-amber-800 mb-1">Catatan</h5>
-                    <p className="text-xs text-amber-700 italic">{selectedJob.notes}</p>
-                  </div>
-                </div>
-              </div>
+                    </CardContent>
+                  </Card>
+                );
+              })
             )}
           </div>
-          <DialogFooter className="p-4 bg-slate-50 gap-2">
+        </div>
+
+        {/* Right Sidebar: Master Info */}
+        <div className="lg:col-span-4 space-y-8">
+          {/* Quick Services Tooltip */}
+          <div className="bg-emerald-950 rounded-[2rem] p-6 text-white shadow-xl shadow-emerald-900/20 relative overflow-hidden">
+            <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/4 h-48 w-48 bg-emerald-900 rounded-full opacity-50 blur-3xl" />
+            <div className="relative z-10 space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-2xl bg-emerald-900/50 border border-emerald-800">
+                  <LayoutGrid className="h-6 w-6 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black uppercase tracking-tight">Katalog Master</h3>
+                  <p className="text-emerald-400 text-[10px] font-bold uppercase tracking-widest leading-none">WahfaLab Inventory</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex justify-between items-center bg-emerald-900/30 p-4 rounded-2xl border border-emerald-800/50 group hover:bg-emerald-900/50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <FlaskConical className="h-5 w-5 text-emerald-400" />
+                    <div>
+                      <p className="text-sm font-bold">Layanan Lab</p>
+                      <p className="text-[10px] text-emerald-500 font-bold">{services.length} Terdaftar</p>
+                    </div>
+                  </div>
+                  <Link href="/operator/services">
+                    <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg hover:bg-emerald-800 text-emerald-400">
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                </div>
+
+                <div className="flex justify-between items-center bg-emerald-900/30 p-4 rounded-2xl border border-emerald-800/50 group hover:bg-emerald-900/50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <TrendingUp className="h-5 w-5 text-emerald-400" />
+                    <div>
+                      <p className="text-sm font-bold">Kategori</p>
+                      <p className="text-[10px] text-emerald-500 font-bold">{categories.length} Bidang</p>
+                    </div>
+                  </div>
+                  <Link href="/operator/categories">
+                    <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg hover:bg-emerald-800 text-emerald-400">
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+
+              <div className="bg-emerald-900/50 p-4 rounded-2xl border border-dashed border-emerald-700 text-center">
+                 <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-tighter mb-2">Penawaran Cepat?</p>
+                 <Link href="/operator/quotations/create">
+                   <Button className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase h-10 rounded-xl shadow-lg shadow-black/20">
+                     Buat Penawaran
+                   </Button>
+                 </Link>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Activity Info */}
+          <div className="bg-white rounded-[2rem] border border-slate-200 p-6 shadow-sm">
+             <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest flex items-center gap-2 mb-6">
+               <AlertCircle className="h-4 w-4 text-emerald-600" />
+               Informasi Terkini
+             </h3>
+             <div className="space-y-6">
+                <div className="flex gap-4">
+                   <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
+                      <Clock className="h-5 w-5" />
+                   </div>
+                   <div className="space-y-1">
+                      <p className="text-xs font-bold text-slate-800">Antrean Terjadwal</p>
+                      <p className="text-[10px] text-slate-500 leading-snug">Ada <span className="font-bold text-blue-600">{stats.scheduled} pekerjaan</span> yang menunggu penugasan petugas lapangan hari ini.</p>
+                   </div>
+                </div>
+                <div className="flex gap-4">
+                   <div className="h-10 w-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 border border-purple-100">
+                      <TestTube className="h-5 w-5" />
+                   </div>
+                   <div className="space-y-1">
+                      <p className="text-xs font-bold text-slate-800">Status Analisis Lab</p>
+                      <p className="text-[10px] text-slate-500 leading-snug"><span className="font-bold text-purple-600">{stats.analysis} sampel</span> sedang berada di tahap pengujian laboratorium oleh tim analis.</p>
+                   </div>
+                </div>
+             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Job Detail Dialog (Enhanced) */}
+      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
+        <DialogContent className="sm:max-w-[500px] rounded-[2rem] p-0 overflow-hidden border-none shadow-2xl">
+          <div className="bg-emerald-950 p-8 text-white relative overflow-hidden">
+            <div className="absolute top-0 right-0 h-32 w-32 bg-emerald-900 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl opacity-50" />
+            <DialogHeader className="relative z-10">
+              <div className="flex items-center gap-3 mb-2">
+                 <div className="h-8 w-8 rounded-lg bg-emerald-800 flex items-center justify-center border border-emerald-700">
+                    <Briefcase className="h-4 w-4 text-emerald-400" />
+                 </div>
+                 <DialogTitle className="text-xl font-black uppercase tracking-tight leading-none pt-1">Detail Order</DialogTitle>
+              </div>
+              <div className="flex items-center gap-2">
+                 <span className="font-mono text-xs font-black text-emerald-400 tracking-widest">{selectedJob?.tracking_code}</span>
+                 <div className="h-1 w-1 rounded-full bg-emerald-800" />
+                 <span className="text-[10px] text-emerald-500 font-bold uppercase">{statusConfig[selectedJob?.status]?.label || 'General'}</span>
+              </div>
+            </DialogHeader>
+          </div>
+          
+          <div className="p-8 space-y-8 bg-white max-h-[60vh] overflow-y-auto">
+            {/* Info Cards */}
+            <div className="grid grid-cols-1 gap-4">
+               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <p className="text-[9px] font-black text-emerald-600 uppercase tracking-[2px] mb-2">Pelanggan</p>
+                  <p className="font-black text-slate-800 text-sm leading-none">{selectedJob?.quotation?.profile?.full_name}</p>
+                  <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase">{selectedJob?.quotation?.profile?.company_name || 'Personal Customer'}</p>
+               </div>
+               
+               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <p className="text-[9px] font-black text-emerald-600 uppercase tracking-[2px] mb-2">Layanan Utama</p>
+                  <p className="font-black text-slate-800 text-sm">{selectedJob?.quotation?.items?.[0]?.service?.name || 'Uji Analisis Lab'}</p>
+               </div>
+            </div>
+
+            {/* Visual Timeline */}
+            <div className="space-y-6">
+               <div className="flex items-center justify-between">
+                  <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Alur Progres</h5>
+                  <Badge className="bg-emerald-100 text-emerald-700 font-black text-[10px] border-none rounded-lg">{statusConfig[selectedJob?.status]?.progress}% Done</Badge>
+               </div>
+               
+               <div className="space-y-4">
+                  {progressSteps.map((step, idx) => {
+                    const jobIndex = progressSteps.findIndex(s => s.key === selectedJob?.status);
+                    const isPast = idx < jobIndex;
+                    const isCurrent = idx === jobIndex;
+                    const Icon = step.icon;
+
+                    return (
+                      <div key={step.key} className="flex items-center gap-4 group">
+                        <div className={cn(
+                          "h-10 w-10 rounded-xl flex items-center justify-center shrink-0 border transition-all duration-500",
+                          isPast ? "bg-emerald-500 border-emerald-400 text-white shadow-lg shadow-emerald-500/20" :
+                          isCurrent ? "bg-emerald-950 border-emerald-900 text-white scale-110 shadow-xl shadow-emerald-950/20" :
+                          "bg-slate-50 border-slate-100 text-slate-300"
+                        )}>
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <div className="flex-1 border-b border-slate-50 pb-2">
+                          <p className={cn(
+                            "text-xs font-black uppercase tracking-tight",
+                            isPast || isCurrent ? "text-slate-800" : "text-slate-300"
+                          )}>
+                            {step.label}
+                          </p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">
+                            {isPast ? 'Telah Selesai' : isCurrent ? 'Status Saat Ini' : 'Belum Dimulai'}
+                          </p>
+                        </div>
+                        {isCurrent && <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />}
+                      </div>
+                    );
+                  })}
+               </div>
+            </div>
+          </div>
+
+          <DialogFooter className="p-6 bg-slate-50 border-t flex flex-row gap-3">
             <Button
-              variant="outline"
+              variant="ghost"
               onClick={() => setIsDetailOpen(false)}
-              className="flex-1 cursor-pointer"
+              className="flex-1 font-black text-[10px] uppercase tracking-widest text-slate-400 h-12 rounded-2xl"
             >
               Tutup
             </Button>
@@ -767,9 +531,9 @@ export default function OperatorDashboard() {
                 setIsDetailOpen(false);
                 router.push(`/operator/jobs`);
               }}
-              className="flex-1 bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
+              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-widest h-12 rounded-2xl shadow-lg shadow-emerald-900/20"
             >
-              Kelola Pekerjaan
+              Kelola Progres
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -778,41 +542,54 @@ export default function OperatorDashboard() {
   );
 }
 
-// Stat Card Component
+// Sub-component: Stat Card
 function StatCard({
   title,
   value,
   icon: Icon,
   color,
-  onClick
+  onClick,
+  active = false
 }: {
   title: string;
   value: number;
   icon: any;
   color: string;
   onClick: () => void;
+  active?: boolean;
 }) {
-  const colorClasses: Record<string, string> = {
-    amber: "bg-amber-50 text-amber-600 border-amber-200",
-    blue: "bg-blue-50 text-blue-600 border-blue-200",
-    purple: "bg-purple-50 text-purple-600 border-purple-200",
-    indigo: "bg-indigo-50 text-indigo-600 border-indigo-200",
-    emerald: "bg-emerald-50 text-emerald-600 border-emerald-200"
+  const colorClasses: Record<string, { bg: string; text: string; ring: string }> = {
+    amber: { bg: "bg-amber-50", text: "text-amber-600", ring: "ring-amber-200" },
+    blue: { bg: "bg-blue-50", text: "text-blue-600", ring: "ring-blue-200" },
+    purple: { bg: "bg-purple-50", text: "text-purple-600", ring: "ring-purple-200" },
+    indigo: { bg: "bg-indigo-50", text: "text-indigo-600", ring: "ring-indigo-200" },
+    emerald: { bg: "bg-emerald-50", text: "text-emerald-600", ring: "ring-emerald-200" }
   };
+
+  const style = colorClasses[color] || colorClasses.blue;
 
   return (
     <div
       onClick={onClick}
-      className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 cursor-pointer hover:shadow-md transition-all"
+      className={cn(
+        "relative p-5 rounded-[1.5rem] bg-white border-2 transition-all duration-300 cursor-pointer overflow-hidden",
+        active 
+          ? cn("border-emerald-600 shadow-xl shadow-emerald-900/10 scale-[1.02]", style.ring) 
+          : "border-slate-100 hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-900/5 shadow-sm"
+      )}
     >
-      <div className="flex items-center justify-between mb-2">
-        <div className={cn("p-2 rounded-lg", colorClasses[color])}>
-          <Icon className="h-4 w-4" />
+      <div className="relative z-10 flex flex-col gap-3">
+        <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center shrink-0", style.bg, style.text)}>
+          <Icon className="h-5 w-5" />
         </div>
-        <ChevronRight className="h-4 w-4 text-slate-300" />
+        <div>
+          <p className="text-2xl font-black text-slate-800 leading-none mb-1">{value}</p>
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{title}</p>
+        </div>
       </div>
-      <p className="text-2xl font-bold text-slate-800">{value}</p>
-      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{title}</p>
+      {active && (
+        <div className="absolute top-2 right-2 h-2 w-2 rounded-full bg-emerald-600" />
+      )}
     </div>
   );
 }

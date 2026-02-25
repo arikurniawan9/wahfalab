@@ -6,11 +6,117 @@ import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { logAudit } from "@/lib/audit-log";
 import { cache } from "react";
+import { createNotification } from "@/lib/actions/notifications";
+import { serializeData } from "@/lib/utils/serialize";
 
 /**
  * Server Actions untuk Reporting Staff
  * Mengelola penerbitan Laporan Hasil Uji (LHU)
  */
+
+/**
+ * Auto-generate LHU dengan data dari job order
+ */
+export async function generateLHU(jobOrderId: string) {
+  try {
+    const { profile } = await getCurrentUser();
+
+    if (profile.role !== "reporting") {
+      throw new Error("Only reporting staff can generate LHU");
+    }
+
+    const jobOrder = await prisma.jobOrder.findUnique({
+      where: { id: jobOrderId },
+      include: {
+        quotation: {
+          include: {
+            profile: true,
+            items: {
+              include: {
+                service: true,
+              },
+            },
+          },
+        },
+        lab_analysis: {
+          include: {
+            analyst: true,
+          },
+        },
+        sampling_assignment: {
+          include: {
+            field_officer: true,
+          },
+        },
+      },
+    });
+
+    if (!jobOrder) {
+      throw new Error("Job order not found");
+    }
+
+    if (jobOrder.status !== "analysis_done" && jobOrder.status !== "reporting") {
+      throw new Error("Job order not ready for LHU generation");
+    }
+
+    // Generate LHU number
+    const lhuNumber = await generateLHUNumber();
+
+    // Prepare LHU data
+    const lhuData = {
+      lhu_number: lhuNumber,
+      tracking_code: jobOrder.tracking_code,
+      quotation_number: jobOrder.quotation?.quotation_number || '-',
+      issue_date: new Date(),
+      customer: {
+        full_name: jobOrder.quotation?.profile?.full_name || '-',
+        company_name: jobOrder.quotation?.profile?.company_name,
+        address: jobOrder.quotation?.profile?.address,
+        phone: jobOrder.quotation?.profile?.phone,
+        email: jobOrder.quotation?.profile?.email,
+      },
+      sampling: {
+        location: jobOrder.sampling_assignment?.location || '-',
+        date: jobOrder.sampling_assignment?.scheduled_date || jobOrder.created_at,
+        field_officer: jobOrder.sampling_assignment?.field_officer?.full_name || '-',
+      },
+      analysis: {
+        analyst_name: jobOrder.lab_analysis?.analyst?.full_name || jobOrder.analyst_id || '-',
+        start_date: jobOrder.analysis_started_at || jobOrder.created_at,
+        end_date: jobOrder.analysis_done_at || new Date(),
+        test_results: Array.isArray(jobOrder.lab_analysis?.test_results) 
+          ? jobOrder.lab_analysis.test_results 
+          : [],
+        equipment_used: Array.isArray(jobOrder.lab_analysis?.equipment_used) 
+          ? jobOrder.lab_analysis.equipment_used 
+          : [],
+        sample_condition: jobOrder.lab_analysis?.sample_condition || '-',
+        notes: jobOrder.lab_analysis?.analysis_notes || '',
+      },
+      company: {
+        company_name: 'WahfaLab',
+        address: 'Jl. Laboratorium No. 123, Jakarta',
+        phone: '+62 812-3456-7890',
+        email: 'info@wahfalab.com',
+        logo_url: '/logo-wahfalab.png',
+        npwp: '01.234.567.8-901.000',
+      },
+    };
+
+    return {
+      success: true,
+      lhuNumber,
+      lhuData: serializeData(lhuData),
+      message: "LHU berhasil di-generate. Silakan preview dan terbitkan."
+    };
+  } catch (error: any) {
+    console.error("Error generating LHU:", error);
+    return {
+      success: false,
+      error: error.message || "Gagal generate LHU",
+    };
+  }
+}
 
 /**
  * Get profile user yang sedang login
@@ -435,6 +541,95 @@ export async function publishLabReport(jobOrderId: string) {
 }
 
 /**
+ * Publish LHU dengan URL dan nomor LHU yang sudah di-generate
+ */
+export async function publishLabReportWithLHU(
+  jobOrderId: string,
+  certificateUrl: string,
+  lhuNumber: string
+) {
+  try {
+    const { profile } = await getCurrentUser();
+
+    if (!["admin", "operator", "reporting"].includes(profile.role)) {
+      throw new Error("Unauthorized");
+    }
+
+    const jobOrder = await prisma.jobOrder.findUnique({
+      where: { id: jobOrderId },
+      include: {
+        quotation: {
+          include: {
+            profile: true
+          }
+        }
+      },
+    });
+
+    if (!jobOrder) {
+      throw new Error("Job order not found");
+    }
+
+    // Update job order status
+    const updated = await prisma.jobOrder.update({
+      where: { id: jobOrderId },
+      data: {
+        status: "completed",
+        reporting_done_at: new Date(),
+        certificate_url: certificateUrl,
+        notes: `LHU Published: ${lhuNumber}`,
+      },
+    });
+
+    await logAudit({
+      action: "lhu_published",
+      entity_type: "job_order",
+      entity_id: jobOrderId,
+      user_id: profile.id!,
+      user_email: profile.email!,
+      user_role: profile.role,
+      new_data: {
+        status: "completed",
+        reporting_done_at: new Date(),
+        lhu_number: lhuNumber,
+      },
+    });
+
+    // Send notification to operator
+    const operatorStaff = await prisma.profile.findFirst({
+      where: { role: 'operator' }
+    });
+
+    if (operatorStaff) {
+      await createNotification({
+        user_id: operatorStaff.id!,
+        type: 'reporting_completed',
+        title: 'LHU Telah Diterbitkan',
+        message: `Job Order ${jobOrder.tracking_code} telah selesai. LHU ${lhuNumber} telah diterbitkan.`,
+        link: `/operator/jobs/${jobOrderId}`,
+        metadata: {
+          job_order_id: jobOrderId,
+          tracking_code: jobOrder.tracking_code,
+          lhu_number: lhuNumber,
+          customer_name: jobOrder.quotation?.profile?.full_name
+        }
+      });
+    }
+
+    revalidatePath("/reporting");
+    revalidatePath("/operator/jobs");
+
+    return { success: true, jobOrder: updated, lhuNumber };
+  } catch (error) {
+    console.error("Error publishing lab report:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to publish lab report",
+    };
+  }
+}
+
+/**
  * Get semua job orders untuk reporting yang sedang login
  */
 export async function getMyReportingJobs(
@@ -641,11 +836,26 @@ export const getReportingJobById = cache(async (jobOrderId: string) => {
       throw new Error("Unauthorized");
     }
 
-    if (profile!.role === "reporting" && jobOrder.reporting_id !== profile!.id) {
-      throw new Error("You are not assigned to this job order");
+    // Reporting staff can access jobs assigned to them OR jobs ready for reporting (analysis_done)
+    if (profile!.role === "reporting") {
+      const isAssigned = jobOrder.reporting_id === profile!.id;
+      const isReadyForReporting = jobOrder.status === 'analysis_done';
+      
+      if (!isAssigned && !isReadyForReporting) {
+        throw new Error("You are not assigned to this job order");
+      }
     }
 
-    return { jobOrder, success: true };
+    // Return with serialized data
+    return { 
+      jobOrder: {
+        ...jobOrder,
+        lab_analysis: jobOrder.lab_analysis,
+        quotation: jobOrder.quotation,
+        sampling_assignment: jobOrder.sampling_assignment,
+      }, 
+      success: true 
+    };
   } catch (error) {
     console.error("Error getting reporting job:", error);
     return {

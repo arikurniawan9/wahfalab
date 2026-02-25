@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getMySamplingAssignments } from "@/lib/actions/sampling";
+import { PageSkeleton } from "@/components/ui";
 
 export default function AssignmentsPage() {
   const [assignments, setAssignments] = useState<any[]>([]);
@@ -119,11 +120,7 @@ export default function AssignmentsPage() {
 
       <div className="space-y-4">
         {loading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-24 bg-slate-100 rounded-2xl animate-pulse" />
-            ))}
-          </div>
+          <PageSkeleton />
         ) : filteredAssignments.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">

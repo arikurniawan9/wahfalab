@@ -20,6 +20,8 @@ import {
   FileDown,
   ArrowRight,
   FlaskConical,
+  MapPin,
+  ClipboardCheck,
   Truck,
   Beaker,
   FileText,
@@ -103,9 +105,26 @@ export default function ClientDashboard() {
 
       setProfile(prof);
       const { data: { user } } = await supabase.auth.getUser();
+      
+      console.log('Profile:', prof);
+      console.log('User:', user);
+      console.log('Jobs data:', jobsData);
+      
+      // Filter jobs by customer profile (match with quotation profile)
       const filteredJobs = (jobsData.items || []).filter(
-        (j: any) => j.quotation?.user_id === user?.id
+        (j: any) => {
+          // Match by profile_id from quotation
+          const matchByProfileId = j.quotation?.profile?.id === prof?.id;
+          // Also match by user email as fallback
+          const matchByEmail = j.quotation?.profile?.email === user?.email;
+          // Also match by user_id if exists
+          const matchByUserId = j.quotation?.user_id === user?.id;
+          
+          return matchByProfileId || matchByEmail || matchByUserId;
+        }
       );
+      
+      console.log('Filtered jobs:', filteredJobs);
       setActiveJobs(filteredJobs);
 
       if (showRefreshToast) {
@@ -114,6 +133,7 @@ export default function ClientDashboard() {
         });
       }
     } catch (error: any) {
+      console.error('Load data error:', error);
       toast.error("Gagal memuat data", {
         description: error?.message || "Silakan coba lagi"
       });
@@ -332,14 +352,14 @@ export default function ClientDashboard() {
                       JOB
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">
                           {job.tracking_code}
                         </span>
                         <Badge
-                          variant="secondary"
+                          variant="outline"
                           className={cn(
-                            "text-[8px] h-4 px-1.5 font-bold uppercase",
+                            "text-[8px] h-5 px-2 font-bold uppercase border-2",
                             statusColors[job.status] || "bg-slate-100"
                           )}
                         >
@@ -354,10 +374,12 @@ export default function ClientDashboard() {
                           })}
                         </span>
                       </div>
-                      <h4 className="font-bold text-slate-800 text-sm truncate">
+                      <h4 className="font-bold text-slate-800 text-sm truncate mb-2">
                         {job.quotation?.items?.[0]?.service?.name || 'Uji Analisis Lab'}
                       </h4>
-                      <div className="flex items-center gap-1 mt-1">
+                      {/* Visual Workflow Timeline */}
+                      <WorkflowTimeline status={job.status} />
+                      <div className="flex items-center gap-1 mt-2">
                         <span className="text-[10px] text-slate-500">
                           Total:{" "}
                           <span className="font-bold text-emerald-700">
@@ -384,7 +406,7 @@ export default function ClientDashboard() {
                       <Button
                         onClick={() => handleDownloadCertificate(job)}
                         size="sm"
-                        className="flex-1 md:flex-none h-9 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 cursor-pointer"
+                        className="flex-1 md:flex-none h-9 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
                       >
                         <Download className="h-3 w-3 mr-1" />
                         Sertifikat
@@ -436,51 +458,17 @@ export default function ClientDashboard() {
             {/* Progress Timeline */}
             <div>
               <h5 className="text-xs font-bold text-slate-500 uppercase mb-4">Progress Pengujian</h5>
-              <div className="relative">
-                {/* Connection Line */}
-                <div className="absolute left-4 top-4 bottom-4 w-0.5 bg-slate-100" />
-                
-                <div className="space-y-4">
-                  {steps.map((step, idx) => {
-                    const currentIdx = getCurrentStepIndex(selectedJob?.status || '');
-                    const isPast = idx < currentIdx;
-                    const isCurrent = idx === currentIdx;
-                    const Icon = step.icon;
-
-                    return (
-                      <div key={step.id} className="relative pl-10">
-                        <div className={cn(
-                          "absolute left-0 top-0 h-8 w-8 rounded-lg flex items-center justify-center transition-all shadow-sm z-10",
-                          isPast ? "bg-emerald-500 text-white" :
-                          isCurrent ? "bg-emerald-900 text-white scale-110 shadow-lg" :
-                          "bg-slate-100 text-slate-300"
-                        )}>
-                          <Icon className="h-4 w-4" />
-                        </div>
-                        <div className={cn(
-                          isPast || isCurrent ? "opacity-100" : "opacity-40"
-                        )}>
-                          <h5 className={cn(
-                            "text-sm font-bold",
-                            isCurrent ? "text-emerald-900" : "text-slate-700"
-                          )}>
-                            {step.label}
-                          </h5>
-                          <p className="text-[10px] text-slate-500 leading-tight">{step.desc}</p>
-                          {isCurrent && selectedJob?.notes && (
-                            <div className="mt-2 p-3 bg-amber-50 rounded-xl border border-amber-100">
-                              <div className="flex items-start gap-2">
-                                <AlertCircle className="h-3 w-3 text-amber-600 shrink-0 mt-0.5" />
-                                <p className="text-[10px] text-amber-700 italic">"{selectedJob.notes}"</p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <WorkflowTimeline status={selectedJob?.status || ''} />
               </div>
+              {selectedJob?.notes && (
+                <div className="mt-3 p-3 bg-amber-50 rounded-xl border border-amber-100">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                    <p className="text-[10px] text-amber-700 italic">"{selectedJob.notes}"</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Certificate Available */}
@@ -551,11 +539,12 @@ function StatCard({
     emerald: "bg-emerald-50 text-emerald-600",
     purple: "bg-purple-50 text-purple-600",
     blue: "bg-blue-50 text-blue-600",
-    slate: "bg-slate-50 text-slate-600"
+    slate: "bg-slate-50 text-slate-600",
+    amber: "bg-amber-50 text-amber-600"
   };
 
   return (
-    <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+    <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-all">
       <div className="flex items-center justify-between mb-2">
         <div className={cn("p-2 rounded-lg", colorClasses[color])}>
           <Icon className="h-4 w-4" />
@@ -564,6 +553,53 @@ function StatCard({
       <p className="text-2xl font-bold text-slate-800">{value}</p>
       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{title}</p>
       <p className="text-[9px] text-slate-400 mt-0.5">{description}</p>
+    </div>
+  );
+}
+
+// Workflow Timeline Component (Same as Operator Page)
+function WorkflowTimeline({ status }: { status: string }) {
+  const stages = [
+    { id: 1, name: "Order", icon: FileText, complete: true },
+    { id: 2, name: "Sampling", icon: MapPin, complete: ["sampling", "analysis_ready", "analysis", "analysis_done", "reporting", "completed"].includes(status) },
+    { id: 3, name: "Handover", icon: ClipboardCheck, complete: ["analysis_ready", "analysis", "analysis_done", "reporting", "completed"].includes(status) },
+    { id: 4, name: "Analisis", icon: FlaskConical, complete: ["analysis", "analysis_done", "reporting", "completed"].includes(status) },
+    { id: 5, name: "Reporting", icon: FileText, complete: ["reporting", "completed"].includes(status) },
+    { id: 6, name: "Selesai", icon: CheckCircle, complete: status === "completed" },
+  ];
+
+  const getStatusColor = (stage: any) => {
+    if (stage.complete) return "bg-emerald-500 text-white border-emerald-600";
+    if (stage.id === stages.findIndex(s => !s.complete) + 1) return "bg-amber-500 text-white border-amber-600 animate-pulse";
+    return "bg-slate-100 text-slate-400 border-slate-200";
+  };
+
+  return (
+    <div className="flex items-center gap-1 min-w-[200px]">
+      {stages.map((stage, index) => (
+        <React.Fragment key={stage.id}>
+          <div className="flex flex-col items-center gap-1">
+            <div className={cn(
+              "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-300",
+              getStatusColor(stage)
+            )}>
+              <stage.icon className="h-3 w-3" />
+            </div>
+            <span className={cn(
+              "text-[8px] font-bold uppercase tracking-tighter",
+              stage.complete ? "text-emerald-600" : stage.id === stages.findIndex(s => !s.complete) + 1 ? "text-amber-600" : "text-slate-400"
+            )}>
+              {stage.name}
+            </span>
+          </div>
+          {index < stages.length - 1 && (
+            <div className={cn(
+              "w-4 h-0.5 transition-all duration-300",
+              stage.complete ? "bg-emerald-500" : "bg-slate-200"
+            )} />
+          )}
+        </React.Fragment>
+      ))}
     </div>
   );
 }

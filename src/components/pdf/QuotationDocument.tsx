@@ -205,8 +205,9 @@ export const QuotationDocument = ({ data }: any) => {
             const itemName = item.name || item.service?.name || item.equipment?.name || "Item Layanan/Alat";
             const categoryName = item.service?.category_ref?.name || item.service?.category || (item.equipment ? "ALAT LAB" : "Layanan Lab");
             
-            let parameterList = "";
-            if (item.service?.parameters) {
+            // Prioritize parameter_snapshot from QuotationItem, fallback to Service parameters
+            let parameterList = item.parameter_snapshot || "";
+            if (!parameterList && item.service?.parameters) {
               try {
                 const params = typeof item.service.parameters === 'string' ? JSON.parse(item.service.parameters) : item.service.parameters;
                 parameterList = Array.isArray(params) ? params.map((p: any) => p.name).join(", ") : "";
