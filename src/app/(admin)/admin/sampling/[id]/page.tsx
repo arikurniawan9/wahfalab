@@ -18,7 +18,12 @@ import {
   FileText,
   Package,
   AlertTriangle,
-  X
+  X,
+  History,
+  ShieldCheck,
+  Zap,
+  Clock,
+  Briefcase
 } from "lucide-react";
 import Link from "next/link";
 import { getAssignmentById } from "@/lib/actions/sampling";
@@ -33,6 +38,7 @@ import {
   DialogDescription,
   DialogFooter
 } from "@/components/ui/dialog";
+import { ChemicalLoader, LoadingOverlay, LoadingButton } from "@/components/ui";
 
 export default function AdminSamplingDetailPage() {
   const params = useParams();
@@ -40,6 +46,7 @@ export default function AdminSamplingDetailPage() {
   const [assignment, setAssignment] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   
   // Modal states
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -56,7 +63,7 @@ export default function AdminSamplingDetailPage() {
       setAssignment(data);
     } catch (error) {
       console.error('Failed to load assignment:', error);
-      toast.error("Gagal memuat data assignment");
+      toast.error("Gagal memuat data sampling");
     } finally {
       setLoading(false);
     }
@@ -64,7 +71,6 @@ export default function AdminSamplingDetailPage() {
 
   const handleDeleteJobOrder = async () => {
     if (!assignment) return;
-    
     setIsDeleteModalOpen(true);
   };
 
@@ -72,19 +78,21 @@ export default function AdminSamplingDetailPage() {
     if (!assignment) return;
     
     setDeleting(true);
+    setIsProcessing(true);
     try {
       const result = await deleteJobOrderWithPhotos(assignment.job_order_id);
       
       if (result.error) throw new Error(result.error);
       
-      toast.success('Job Order dan foto dokumentasi berhasil dihapus');
+      toast.success('Job Order dan dokumentasi berhasil dihapus');
       setIsDeleteModalOpen(false);
       router.push('/admin/sampling');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Delete error:', error);
-      toast.error('Gagal menghapus Job Order');
+      toast.error(error.message || 'Gagal menghapus Job Order');
     } finally {
       setDeleting(false);
+      setIsProcessing(false);
     }
   };
 
@@ -96,6 +104,7 @@ export default function AdminSamplingDetailPage() {
   const confirmDeletePhoto = async () => {
     if (!photoToDelete || !assignment) return;
 
+    setIsProcessing(true);
     try {
       const supabase = createClient();
       const fileName = photoToDelete.url.split('/').pop()?.split('?')[0];
@@ -131,16 +140,16 @@ export default function AdminSamplingDetailPage() {
       console.error('Delete photo error:', error);
       toast.error('Gagal menghapus foto');
       loadAssignment();
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   if (loading) {
     return (
-      <div className="p-4 md:p-8 max-w-7xl mx-auto">
-        <div className="animate-pulse space-y-4">
-          <div className="h-4 w-24" />
-          <div className="h-8 w-64" />
-        </div>
+      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+        <ChemicalLoader />
+        <p className="mt-4 text-emerald-800 font-bold uppercase tracking-widest text-[10px] animate-pulse">Memuat Data Sampling...</p>
       </div>
     );
   }
@@ -148,12 +157,17 @@ export default function AdminSamplingDetailPage() {
   if (!assignment) {
     return (
       <div className="p-4 md:p-8 max-w-7xl mx-auto">
-        <Card>
-          <CardContent className="py-8 text-center">
-            <FileText className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-            <h2 className="text-xl font-semibold text-slate-600">Assignment tidak ditemukan</h2>
+        <Card className="rounded-[2rem] border-none shadow-2xl">
+          <CardContent className="py-20 text-center">
+            <div className="h-20 w-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <FileText className="h-10 w-10 text-slate-300" />
+            </div>
+            <h2 className="text-2xl font-black text-slate-600 uppercase tracking-tight">Data Tidak Ditemukan</h2>
+            <p className="text-slate-400 mt-2 font-medium">ID Record: {params.id}</p>
             <Link href="/admin/sampling">
-              <Button className="mt-4">Kembali</Button>
+              <Button className="mt-8 rounded-2xl h-12 px-8 bg-slate-900 font-bold text-xs uppercase tracking-widest shadow-xl">
+                Kembali ke Daftar
+              </Button>
             </Link>
           </CardContent>
         </Card>
@@ -170,91 +184,95 @@ export default function AdminSamplingDetailPage() {
 
   const statusLabels: Record<string, string> = {
     pending: "Menunggu",
-    in_progress: "Sedang Dilaksanakan",
+    in_progress: "Dalam Proses",
     completed: "Selesai",
     cancelled: "Dibatalkan"
   };
 
   return (
-    <div className="p-4 md:p-8 max-w-7xl mx-auto">
+    <div className="p-4 md:p-10 max-w-7xl mx-auto space-y-10">
+      <LoadingOverlay isOpen={isProcessing} title="Memproses..." description="Mohon tunggu sebentar, sistem sedang memproses permintaan Anda" />
+      
       {/* Header */}
-      <div className="mb-6">
+      <div className="relative">
         <Link 
           href="/admin/sampling" 
-          className="inline-flex items-center gap-2 text-slate-500 hover:text-emerald-600 transition-colors mb-4 text-sm"
+          className="inline-flex items-center gap-2 text-slate-400 hover:text-emerald-600 transition-all mb-8 text-xs font-black uppercase tracking-widest group"
         >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Kembali ke Sampling</span>
+          <div className="h-8 w-8 rounded-full border border-slate-200 flex items-center justify-center group-hover:border-emerald-200 group-hover:bg-emerald-50">
+            <ArrowLeft className="h-4 w-4" />
+          </div>
+          <span>KEMBALI KE SAMPLING</span>
         </Link>
         
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <h1 className="text-2xl font-bold text-emerald-900 uppercase">
-                Detail Sampling
-              </h1>
-              <Badge className={cn(
-                "text-[10px] h-6 px-3 font-bold uppercase tracking-wide", 
-                statusColors[assignment.status] || statusColors.pending
-              )}>
-                {statusLabels[assignment.status] || assignment.status}
-              </Badge>
-            </div>
-            <div className="flex items-center gap-2 text-slate-500 text-sm">
-              <Package className="h-4 w-4" />
-              <span className="font-mono">{assignment.job_order.tracking_code}</span>
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="h-14 w-14 rounded-2xl bg-emerald-600 flex items-center justify-center shadow-xl shadow-emerald-600/20 transform -rotate-3">
+                <ShieldCheck className="h-8 w-8 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-black text-emerald-900 tracking-tight flex items-center gap-3">
+                    DETAIL SAMPLING
+                </h1>
+                <div className="flex items-center gap-3 mt-1">
+                    <Badge className={cn(
+                        "text-[10px] h-6 px-4 font-black uppercase tracking-[0.1em] border-2", 
+                        statusColors[assignment.status] || statusColors.pending
+                    )}>
+                        {statusLabels[assignment.status] || assignment.status}
+                    </Badge>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ID Record: {assignment.id.split('-')[0]}</span>
+                </div>
+              </div>
             </div>
           </div>
           
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             <Button
               variant="destructive"
               onClick={handleDeleteJobOrder}
               disabled={deleting}
-              className="shadow-sm"
+              className="rounded-2xl h-14 px-8 font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-red-900/20 border-none"
             >
-              <Trash2 className="h-4 w-4 mr-2" />
-              {deleting ? 'Menghapus...' : 'Hapus Job Order'}
+              <Trash2 className="h-4 w-4 mr-3" />
+              HAPUS JOB ORDER
             </Button>
           </div>
         </div>
       </div>
 
-      {/* Info Cards */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-6">
-        {/* Location Card */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-700">
+      {/* Primary Analytics Grid */}
+      <div className="grid gap-6 md:grid-cols-3">
+        {/* Location Info */}
+        <Card className="rounded-[2.5rem] border-none shadow-xl shadow-slate-200/50 overflow-hidden group">
+          <CardHeader className="pb-3 bg-slate-50/50 border-b border-slate-100">
+            <CardTitle className="text-[10px] font-black flex items-center gap-2 text-slate-400 uppercase tracking-widest">
               <MapPin className="h-4 w-4 text-emerald-600" />
               Lokasi Sampling
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-slate-800 font-medium leading-relaxed">{assignment.location}</p>
-            <div className="pt-2 border-t border-slate-100 mt-3">
-              <div className="flex items-center gap-2 text-sm">
-                <Calendar className="h-4 w-4 text-slate-400" />
-                <span className="text-slate-600">Rencana:</span>
-                <span className="font-medium">
+          <CardContent className="pt-6 space-y-6">
+            <p className="text-slate-800 font-black text-lg leading-tight tracking-tight">{assignment.location}</p>
+            <div className="pt-4 border-t border-slate-100 flex flex-col gap-3">
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 text-slate-400 font-bold uppercase tracking-tighter">
+                    <Clock className="h-3.5 w-3.5" /> Jadwal
+                </div>
+                <span className="font-black text-slate-700">
                   {new Date(assignment.scheduled_date).toLocaleDateString('id-ID', {
-                    weekday: 'short',
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric'
+                    day: 'numeric', month: 'long', year: 'numeric'
                   })}
                 </span>
               </div>
               {assignment.actual_date && (
-                <div className="flex items-center gap-2 text-sm mt-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  <span className="text-slate-600">Aktual:</span>
-                  <span className="font-medium text-emerald-600">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 text-emerald-600 font-bold uppercase tracking-tighter">
+                      <Zap className="h-3.5 w-3.5" /> Aktual
+                  </div>
+                  <span className="font-black text-emerald-600">
                     {new Date(assignment.actual_date).toLocaleDateString('id-ID', {
-                      weekday: 'short',
-                      day: 'numeric',
-                      month: 'long',
-                      year: 'numeric'
+                      day: 'numeric', month: 'long', year: 'numeric'
                     })}
                   </span>
                 </div>
@@ -263,122 +281,129 @@ export default function AdminSamplingDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Job Order Card */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-700">
-              <FileText className="h-4 w-4 text-emerald-600" />
-              Job Order
+        {/* Transaction Trace */}
+        <Card className="rounded-[2.5rem] border-none shadow-xl shadow-slate-200/50 overflow-hidden">
+          <CardHeader className="pb-3 bg-slate-50/50 border-b border-slate-100">
+            <CardTitle className="text-[10px] font-black flex items-center gap-2 text-slate-400 uppercase tracking-widest">
+              <Briefcase className="h-4 w-4 text-emerald-600" />
+              Informasi Pekerjaan
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div>
-              <p className="text-xs text-slate-500 mb-1">Tracking Code</p>
-              <p className="font-mono text-sm font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded inline-block">
+          <CardContent className="pt-6 space-y-4">
+            <div className="flex justify-between items-end border-b border-slate-100 pb-2">
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Tracking Code</p>
+              <p className="font-mono text-xs font-black text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg">
                 {assignment.job_order.tracking_code}
               </p>
             </div>
-            <div>
-              <p className="text-xs text-slate-500 mb-1">Layanan</p>
-              <p className="text-sm font-medium text-slate-800">
+            <div className="flex justify-between items-end border-b border-slate-100 pb-2">
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Layanan</p>
+              <p className="text-xs font-black text-slate-800 text-right truncate max-w-[150px]">
                 {assignment.job_order.quotation.items?.[0]?.service?.name || 
-                 assignment.job_order.quotation.items?.[0]?.equipment?.name || 'N/A'}
+                 assignment.job_order.quotation.items?.[0]?.equipment?.name || 'MULTIPLE SERVICES'}
               </p>
             </div>
-            <div>
-              <p className="text-xs text-slate-500 mb-1">Customer</p>
-              <p className="text-sm font-medium text-slate-800">
-                {assignment.job_order.quotation.profile?.full_name || 
-                 assignment.job_order.quotation.profile?.company_name || 'N/A'}
+            <div className="flex justify-between items-end">
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Klien</p>
+              <p className="text-xs font-black text-slate-800 text-right">
+                {assignment.job_order.quotation.profile?.company_name || 
+                 assignment.job_order.quotation.profile?.full_name || 'N/A'}
               </p>
             </div>
           </CardContent>
         </Card>
 
-        {/* Field Officer Card */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-700">
+        {/* Resource Info */}
+        <Card className="rounded-[2.5rem] border-none shadow-xl shadow-slate-200/50 overflow-hidden">
+          <CardHeader className="pb-3 bg-slate-50/50 border-b border-slate-100">
+            <CardTitle className="text-[10px] font-black flex items-center gap-2 text-slate-400 uppercase tracking-widest">
               <User className="h-4 w-4 text-emerald-600" />
-              Petugas Lapangan
+              Personel
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4 bg-emerald-50/50 p-4 rounded-[1.5rem] border border-emerald-100">
+              <div className="h-14 w-14 bg-emerald-600 rounded-2xl flex items-center justify-center text-white font-black text-lg shadow-lg shadow-emerald-900/20">
                 {assignment.field_officer?.full_name?.charAt(0).toUpperCase() || 'F'}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-slate-800 text-sm truncate">
+                <p className="font-black text-slate-800 text-sm tracking-tight truncate uppercase">
                   {assignment.field_officer?.full_name || 'N/A'}
                 </p>
-                <p className="text-xs text-slate-500 truncate">
-                  {assignment.field_officer?.email || 'N/A'}
+                <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">
+                  Field Officer
                 </p>
               </div>
+            </div>
+            <div className="mt-4 flex items-center gap-2 text-[9px] font-bold text-slate-400 uppercase tracking-widest px-2">
+                <History className="h-3 w-3" /> Data Penugasan Terverifikasi
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Photo Documentation */}
-      <Card className="border-emerald-200/50 shadow-md">
-        <CardHeader className="pb-3 bg-gradient-to-r from-emerald-50 to-white border-b border-emerald-100">
+      {/* Visual Documentation */}
+      <Card className="rounded-[3rem] border-none shadow-2xl overflow-hidden">
+        <CardHeader className="pb-6 bg-slate-900 text-white border-b border-slate-800 p-8">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 bg-emerald-100 rounded-full flex items-center justify-center">
-                <ImageIcon className="h-4 w-4 text-emerald-600" />
+            <div className="flex items-center gap-4">
+              <div className="h-12 w-12 bg-white/10 rounded-2xl flex items-center justify-center border border-white/10">
+                <ImageIcon className="h-6 w-6 text-emerald-400" />
               </div>
               <div>
-                <CardTitle className="text-sm font-semibold text-emerald-900">
-                  Bukti Dokumentasi Foto
+                <CardTitle className="text-lg font-black uppercase tracking-tight">
+                  DOKUMENTASI FOTO
                 </CardTitle>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {assignment.photos?.length || 0} foto terupload
-                </p>
+                <div className="flex items-center gap-2 mt-1">
+                    <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[9px] font-black uppercase tracking-widest">
+                        {assignment.photos?.length || 0} FOTO TERUPLOAD
+                    </Badge>
+                </div>
               </div>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="pt-4">
+        <CardContent className="p-8 bg-white">
           {assignment.photos && assignment.photos.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
               {assignment.photos.map((photo: { url: string; name: string } | string, idx: number) => {
                 const photoUrl = typeof photo === 'string' ? photo : photo.url;
-                const photoName = typeof photo === 'string' ? `Foto ${idx + 1}` : (photo.name || `Foto ${idx + 1}`);
+                const photoName = typeof photo === 'string' ? `FOTO_${idx + 1}` : (photo.name || `FOTO_${idx + 1}`);
                 
                 return (
                   <div key={idx} className="group relative">
-                    <div className="relative aspect-square rounded-xl overflow-hidden border-2 border-slate-200 shadow-sm group-hover:shadow-lg group-hover:border-emerald-400 transition-all duration-300 mb-2 bg-slate-50">
+                    <div className="relative aspect-square rounded-[2rem] overflow-hidden border-2 border-slate-100 shadow-sm group-hover:shadow-2xl group-hover:border-emerald-500 transition-all duration-500 mb-3 bg-slate-50 cursor-pointer">
                       <img 
                         src={photoUrl} 
                         alt={photoName} 
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" 
                       />
                       
-                      {/* Overlay with actions */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                        <div className="absolute bottom-0 left-0 right-0 p-2 flex items-center justify-between gap-2">
-                          <a
-                            href={photoUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="h-8 w-8 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-colors shadow-lg"
-                            title="Buka foto"
+                      {/* Control Overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 flex flex-col justify-end p-4">
+                        <div className="flex items-center justify-between gap-3 transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
+                          <Button
+                            asChild
+                            variant="secondary"
+                            size="icon"
+                            className="h-10 w-10 rounded-xl bg-white/20 backdrop-blur-md border border-white/20 text-white hover:bg-white/40 shadow-xl"
                           >
-                            <ExternalLink className="h-4 w-4 text-slate-700" />
-                          </a>
-                          <button
+                            <a href={photoUrl} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="h-4 w-4" />
+                            </a>
+                          </Button>
+                          <Button
                             onClick={() => handleDeletePhoto(photoUrl, photoName)}
-                            className="h-8 w-8 bg-red-500/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
-                            title="Hapus foto"
+                            variant="destructive"
+                            size="icon"
+                            className="h-10 w-10 rounded-xl bg-red-600 shadow-xl"
                           >
-                            <Trash2 className="h-4 w-4 text-white" />
-                          </button>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
                     </div>
-                    <p className="text-xs font-medium text-slate-700 text-center truncate px-1" title={photoName}>
+                    <p className="text-[10px] font-black text-slate-500 text-center uppercase tracking-widest truncate px-2" title={photoName}>
                       {photoName}
                     </p>
                   </div>
@@ -386,89 +411,68 @@ export default function AdminSamplingDetailPage() {
               })}
             </div>
           ) : (
-            <div className="text-center py-12">
-              <div className="h-16 w-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <ImageIcon className="h-8 w-8 text-slate-400" />
+            <div className="text-center py-24 bg-slate-50/50 rounded-[2.5rem] border-2 border-dashed border-slate-200">
+              <div className="h-20 w-20 bg-white rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl border border-slate-100">
+                <ImageIcon className="h-10 w-10 text-slate-300" />
               </div>
-              <p className="text-slate-500 text-sm font-medium">Belum ada foto dokumentasi</p>
-              <p className="text-slate-400 text-xs mt-1">
-                Petugas lapangan belum mengupload foto
+              <p className="text-slate-500 font-black uppercase tracking-widest text-sm">BELUM ADA FOTO</p>
+              <p className="text-slate-400 text-[10px] font-bold mt-2 uppercase tracking-tight">
+                FIELD OFFICER BELUM MENGUNGGAH FOTO DOKUMENTASI
               </p>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Delete Job Order Confirmation Modal */}
+      {/* Delete Confirmation Modal */}
       <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <div className="flex flex-col gap-4">
-            {/* Icon */}
-            <div className="mx-auto h-16 w-16 rounded-full bg-red-100 flex items-center justify-center">
-              <AlertTriangle className="h-8 w-8 text-red-600" />
+        <DialogContent className="sm:max-w-md p-0 border-none shadow-2xl rounded-[2.5rem] overflow-hidden">
+          <div className="bg-red-600 p-8 text-white text-center">
+            <div className="mx-auto h-20 w-20 rounded-3xl bg-white/20 border border-white/20 flex items-center justify-center mb-4">
+              <AlertTriangle className="h-10 w-10 text-white" />
             </div>
+            <DialogTitle className="text-2xl font-black uppercase tracking-tight">HAPUS DATA</DialogTitle>
+            <DialogDescription className="text-red-100 text-[10px] font-bold uppercase tracking-widest mt-2 opacity-80">
+              TINDAKAN INI TIDAK DAPAT DIBATALKAN
+            </DialogDescription>
+          </div>
 
-            {/* Header */}
-            <DialogHeader>
-              <DialogTitle className="text-center text-lg font-bold text-red-600">
-                Hapus Job Order?
-              </DialogTitle>
-              <DialogDescription className="text-center text-sm">
-                Tindakan ini tidak dapat dibatalkan
-              </DialogDescription>
-            </DialogHeader>
-
-            {/* Content */}
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-red-900">
-                  <p className="font-semibold mb-1">Yang akan dihapus:</p>
-                  <ul className="list-disc list-inside space-y-1 text-red-700">
-                    <li>Job Order {assignment?.job_order.tracking_code}</li>
-                    <li>{assignment?.photos?.length || 0} foto dokumentasi</li>
-                    <li>Data sampling assignment</li>
+          <div className="p-8 space-y-6 bg-white">
+            <div className="bg-red-50 border border-red-100 rounded-2xl p-5 space-y-4">
+              <div className="flex items-start gap-4">
+                <AlertTriangle className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="text-xs text-red-900">
+                  <p className="font-black uppercase tracking-wider mb-2">DATA YANG AKAN DIHAPUS:</p>
+                  <ul className="space-y-2 font-bold uppercase tracking-tight opacity-80">
+                    <li className="flex items-center gap-2">• JOB ORDER: {assignment?.job_order.tracking_code}</li>
+                    <li className="flex items-center gap-2">• DOKUMENTASI: {assignment?.photos?.length || 0} FOTO</li>
+                    <li className="flex items-center gap-2">• DATA SAMPLING TERKAIT</li>
                   </ul>
                 </div>
               </div>
             </div>
 
-            {/* Warning */}
-            <p className="text-xs text-center text-slate-600">
-              Semua foto akan dihapus dari penyimpanan secara permanen
+            <p className="text-[9px] font-black text-center text-slate-400 uppercase tracking-widest">
+              SEMUA DATA AKAN DIHAPUS SECARA PERMANEN DARI SISTEM
             </p>
 
-            {/* Actions */}
-            <DialogFooter className="gap-2 sm:gap-0">
+            <DialogFooter className="flex gap-3">
               <Button
-                variant="outline"
+                variant="ghost"
                 onClick={() => setIsDeleteModalOpen(false)}
                 disabled={deleting}
-                className="flex-1"
+                className="flex-1 rounded-2xl h-12 font-black text-[10px] uppercase text-slate-400"
               >
-                Batal
+                BATAL
               </Button>
-              <Button
+              <LoadingButton
                 variant="destructive"
                 onClick={confirmDeleteJobOrder}
-                disabled={deleting}
-                className="flex-1"
+                loading={deleting}
+                className="flex-1 rounded-2xl h-12 font-black text-[10px] uppercase shadow-lg shadow-red-900/20"
               >
-                {deleting ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Menghapus...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Ya, Hapus
-                  </>
-                )}
-              </Button>
+                YA, HAPUS
+              </LoadingButton>
             </DialogFooter>
           </div>
         </DialogContent>
@@ -476,57 +480,49 @@ export default function AdminSamplingDetailPage() {
 
       {/* Delete Photo Confirmation Modal */}
       <Dialog open={deletePhotoModalOpen} onOpenChange={setDeletePhotoModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <div className="flex flex-col gap-4">
-            {/* Icon */}
-            <div className="mx-auto h-16 w-16 rounded-full bg-amber-100 flex items-center justify-center">
-              <Trash2 className="h-8 w-8 text-amber-600" />
-            </div>
-
-            {/* Header */}
-            <DialogHeader>
-              <DialogTitle className="text-center text-lg font-bold text-amber-600">
-                Hapus Foto?
-              </DialogTitle>
-            </DialogHeader>
-
-            {/* Content */}
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <Trash2 className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-amber-900">
-                  <p className="font-semibold mb-1">Foto yang akan dihapus:</p>
-                  <p className="text-amber-700 font-medium">
-                    {photoToDelete?.name || 'Foto'}
-                  </p>
+        <DialogContent className="sm:max-w-md p-0 border-none shadow-2xl rounded-[2.5rem] overflow-hidden">
+            <div className="bg-amber-500 p-8 text-white text-center">
+                <div className="mx-auto h-20 w-20 rounded-3xl bg-white/20 border border-white/20 flex items-center justify-center mb-4">
+                    <Trash2 className="h-10 w-10 text-white" />
                 </div>
-              </div>
+                <DialogTitle className="text-2xl font-black uppercase tracking-tight">HAPUS FOTO</DialogTitle>
+                <DialogDescription className="text-amber-50 text-[10px] font-bold uppercase tracking-widest mt-2 opacity-80">KONFIRMASI PENGHAPUSAN FOTO</DialogDescription>
             </div>
+            
+            <div className="p-8 bg-white space-y-6">
+                <div className="bg-amber-50 border border-amber-100 rounded-2xl p-5">
+                    <div className="flex items-start gap-4">
+                        <Trash2 className="h-6 w-6 text-amber-600 flex-shrink-0 mt-0.5" />
+                        <div className="text-xs text-amber-900">
+                            <p className="font-black uppercase tracking-wider mb-1">FOTO TERIDENTIFIKASI:</p>
+                            <p className="font-bold">
+                                {photoToDelete?.name || 'FOTO_SAMPLING'}
+                            </p>
+                        </div>
+                    </div>
+                </div>
 
-            {/* Warning */}
-            <p className="text-xs text-center text-slate-600">
-              Foto akan dihapus dari penyimpanan secara permanen
-            </p>
+                <p className="text-[9px] font-black text-center text-slate-400 uppercase tracking-widest">
+                    FOTO AKAN DIHAPUS DARI CLOUD STORAGE
+                </p>
 
-            {/* Actions */}
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button
-                variant="outline"
-                onClick={() => setDeletePhotoModalOpen(false)}
-                className="flex-1"
-              >
-                Batal
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={confirmDeletePhoto}
-                className="flex-1"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Ya, Hapus
-              </Button>
-            </DialogFooter>
-          </div>
+                <DialogFooter className="flex gap-3">
+                    <Button
+                        variant="ghost"
+                        onClick={() => setDeletePhotoModalOpen(false)}
+                        className="flex-1 rounded-2xl h-12 font-black text-[10px] uppercase text-slate-400"
+                    >
+                        BATAL
+                    </Button>
+                    <Button
+                        variant="destructive"
+                        onClick={confirmDeletePhoto}
+                        className="flex-1 rounded-2xl h-12 font-black text-[10px] uppercase bg-amber-600 hover:bg-amber-700 shadow-lg shadow-amber-900/20"
+                    >
+                        YA, HAPUS
+                    </Button>
+                </DialogFooter>
+            </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -1,5 +1,6 @@
 import { Sidebar } from "@/components/layout/Sidebar";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { Header } from "@/components/layout/Header";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
@@ -19,7 +20,7 @@ export default async function OperatorLayout({
   // Double Check Role di level Server Component (Double Lock Security)
   const profile = await prisma.profile.findUnique({
     where: { id: user.id },
-    select: { role: true }
+    select: { role: true, full_name: true, email: true }
   });
 
   if (profile?.role !== "operator") {
@@ -30,6 +31,15 @@ export default async function OperatorLayout({
     <div className="flex min-h-screen bg-slate-50">
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <Header 
+          title="Dashboard Operator" 
+          subtitle="Manajemen operasional harian"
+          profile={{ 
+            full_name: profile.full_name, 
+            email: profile.email, 
+            role: profile.role 
+          }} 
+        />
         <main className="flex-1 overflow-y-auto bg-slate-50/50 pb-24 md:pb-0">
           <div className="mx-auto max-w-7xl">
             {children}

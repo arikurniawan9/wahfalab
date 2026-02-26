@@ -10,57 +10,72 @@ import {
   FlaskConical,
   MapPin,
   Settings,
-  Wrench
+  Wrench,
+  CreditCard
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { getProfile } from "@/lib/actions/auth";
 
-const adminNavItems = [
-  { icon: LayoutDashboard, label: "Beranda", href: "/admin" },
-  { icon: FileText, label: "Penawaran", href: "/admin/quotations" },
-  { icon: MapPin, label: "Sampling", href: "/admin/sampling" },
-  { icon: Wrench, label: "Sewa Alat", href: "/admin/equipment" },
-  { icon: Settings, label: "Pengaturan", href: "/admin/settings/company" },
-];
-
-const operatorNavItems = [
-  { icon: LayoutDashboard, label: "Beranda", href: "/operator" },
-  { icon: FileText, label: "Penawaran", href: "/operator/quotations" },
-  { icon: FileText, label: "Progress", href: "/operator/jobs" },
-];
-
 const clientNavItems = [
   { icon: LayoutDashboard, label: "Beranda", href: "/dashboard" },
   { icon: FileText, label: "Pesanan", href: "/dashboard/orders" },
+  { icon: Settings, label: "Pengaturan", href: "/dashboard/settings" },
 ];
 
 const fieldOfficerNavItems = [
   { icon: LayoutDashboard, label: "Beranda", href: "/field" },
-  { icon: FileText, label: "Assignment", href: "/field/assignments" },
+  { icon: FileText, label: "Tugas", href: "/field/assignments" },
+];
+
+const analystNavItems = [
+  { icon: LayoutDashboard, label: "Beranda", href: "/analyst" },
+  { icon: FlaskConical, label: "Analisis", href: "/analyst/jobs" },
+];
+
+const reportingNavItems = [
+  { icon: LayoutDashboard, label: "Beranda", href: "/reporting" },
+  { icon: FileText, label: "LHU", href: "/reporting/jobs" },
+];
+
+const financeNavItems = [
+  { icon: LayoutDashboard, label: "Beranda", href: "/finance" },
+  { icon: CreditCard, label: "Invoice", href: "/finance/payments" },
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
   const [role, setRole] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function fetchRole() {
-      const profile = await getProfile();
-      setRole(profile?.role || null);
+      try {
+        const profile = await getProfile();
+        setRole(profile?.role || null);
+      } finally {
+        setIsLoading(false);
+      }
     }
     fetchRole();
   }, []);
 
-  const navItems = role === 'admin'
-    ? adminNavItems
-    : role === 'operator'
-      ? operatorNavItems
-      : role === 'field_officer'
-        ? fieldOfficerNavItems
-        : role === 'client'
-          ? clientNavItems
-          : []; // Don't show any menu if role is null/unknown
+  // Don't show BottomNav for admin and operator
+  if (isLoading || role === 'admin' || role === 'operator') return null;
+
+  const navItems = role === 'field_officer'
+    ? fieldOfficerNavItems
+    : role === 'client'
+      ? clientNavItems
+      : role === 'analyst'
+        ? analystNavItems
+        : role === 'reporting'
+          ? reportingNavItems
+          : role === 'finance'
+            ? financeNavItems
+            : [];
+
+  if (navItems.length === 0) return null;
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 px-4 pb-4">

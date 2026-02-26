@@ -31,13 +31,12 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { logout, getProfile } from "@/lib/actions/auth";
 import { createClient } from "@/lib/supabase/client";
 import { getPendingApprovalCount } from "@/lib/actions/approval";
 import Image from "next/image";
 
-const adminMenuItems = (pendingApprovals: number = 0) => [
+export const adminMenuItems = (pendingApprovals: number = 0) => [
   {
     group: "Dashboard",
     icon: LayoutDashboard,
@@ -92,7 +91,7 @@ const adminMenuItems = (pendingApprovals: number = 0) => [
   },
 ];
 
-const operatorMenuItems = [
+export const operatorMenuItems = [
   {
     group: "Dashboard",
     icon: LayoutDashboard,
@@ -197,7 +196,6 @@ export function Sidebar({ className }: { className?: string }) {
   const [companyName, setCompanyName] = useState("WahfaLab");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [pendingApprovals, setPendingApprovals] = useState(0);
-  const supabase = createClient();
 
   useEffect(() => {
     async function fetchRole() {
@@ -235,8 +233,6 @@ export function Sidebar({ className }: { className?: string }) {
       }
     }
     fetchPendingApprovals();
-    
-    // Poll every 30 seconds for new approvals
     const interval = setInterval(fetchPendingApprovals, 30000);
     return () => clearInterval(interval);
   }, [role]);
@@ -255,40 +251,36 @@ export function Sidebar({ className }: { className?: string }) {
               ? financeMenuItems
               : role === 'client'
                 ? clientMenuItems
-                : []; // Don't show any menu if role is null/unknown
+                : [];
 
   return (
-    <>
-      {/* Desktop Sidebar */}
-      <aside
-        className={cn(
-          "hidden md:flex flex-col bg-emerald-950 text-white transition-all duration-300 border-r border-emerald-900 sticky top-0 h-screen",
-          isCollapsed ? "w-20" : "w-64",
-          className
-        )}
+    <aside
+      className={cn(
+        "hidden md:flex flex-col bg-emerald-950 text-white transition-all duration-300 border-r border-emerald-900 sticky top-0 h-screen",
+        isCollapsed ? "w-20" : "w-64",
+        className
+      )}
+    >
+      <Button
+        variant="ghost"
+        size="icon"
+        className="absolute -right-3 top-20 h-6 w-6 rounded-full bg-emerald-600 text-white hover:bg-emerald-500 border border-emerald-900 z-50 shadow-md"
+        onClick={() => setIsCollapsed(!isCollapsed)}
       >
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute -right-3 top-20 h-6 w-6 rounded-full bg-emerald-600 text-white hover:bg-emerald-500 border border-emerald-900 z-50 shadow-md"
-          onClick={() => setIsCollapsed(!isCollapsed)}
-        >
-          <ChevronLeft className={cn("h-4 w-4 transition-transform", isCollapsed && "rotate-180")} />
-        </Button>
-        <NavContent 
-          isCollapsed={isCollapsed} 
-          menuItems={menuItems} 
-          pathname={pathname} 
-          companyName={companyName} 
-          logoUrl={logoUrl} 
-          logout={logout} 
-        />
-      </aside>
-    </>
+        <ChevronLeft className={cn("h-4 w-4 transition-transform", isCollapsed && "rotate-180")} />
+      </Button>
+      <NavContent 
+        isCollapsed={isCollapsed} 
+        menuItems={menuItems} 
+        pathname={pathname} 
+        companyName={companyName} 
+        logoUrl={logoUrl} 
+        logout={logout} 
+      />
+    </aside>
   );
 }
 
-// Move NavContent outside of Sidebar component
 interface NavContentProps {
   isCollapsed: boolean;
   menuItems: any[];
@@ -296,9 +288,10 @@ interface NavContentProps {
   companyName: string;
   logoUrl: string | null;
   logout: () => Promise<void>;
+  onItemClick?: () => void;
 }
 
-function NavContent({ isCollapsed, menuItems, pathname, companyName, logoUrl, logout }: NavContentProps) {
+export function NavContent({ isCollapsed, menuItems, pathname, companyName, logoUrl, logout, onItemClick }: NavContentProps) {
   return (
     <div className="flex flex-col h-full py-4">
       <div className={cn("px-6 mb-8 flex items-center gap-3", isCollapsed && "px-4 justify-center")}>
@@ -337,8 +330,9 @@ function NavContent({ isCollapsed, menuItems, pathname, companyName, logoUrl, lo
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={onItemClick}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group",
+                    "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group relative",
                     pathname === item.href
                       ? "bg-emerald-600 text-white shadow-lg shadow-emerald-900/20"
                       : "text-emerald-100 hover:bg-emerald-800/50 hover:text-white",

@@ -1,18 +1,12 @@
 // ============================================================================
-// OPTIMIZED SAMPLING PAGE - v2.0
-// Fitur Optimasi:
-// 1. ✅ Loading Modal saat action
-// 2. ✅ Export CSV
-// 3. ✅ Empty state yang lebih menarik
-// 4. ✅ Filter by status
-// 5. ✅ Sort by tanggal/status
-// 6. ✅ Quick stats di header table
-// 7. ✅ Badge status dengan warna
+// ADMIN SAMPLING MONITORING DASHBOARD - Super Admin v3.0
+// Pusat kendali pengawasan sampling dengan pelacakan petugas lapangan,
+// penjadwalan, dan integrasi Surat Tugas (Travel Order).
 // ============================================================================
 
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import {
   Table,
@@ -25,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Plus,
   Search,
@@ -40,12 +35,17 @@ import {
   Clock,
   XCircle,
   AlertCircle,
-  X
+  X,
+  History,
+  ShieldCheck,
+  Filter,
+  PlusCircle,
+  TrendingUp,
+  Briefcase
 } from "lucide-react";
 import { ChemicalLoader, LoadingOverlay, LoadingButton } from "@/components/ui";
 import { getAllSamplingAssignments, createSamplingAssignment } from "@/lib/actions/sampling";
-import { getUsers } from "@/lib/actions/users";
-import { getJobOrders } from "@/lib/actions/jobs";
+import { getFieldOfficers, getCustomers, getJobOrders } from "@/lib/actions/jobs";
 import { toast } from "sonner";
 import {
   Select,
@@ -66,29 +66,70 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
+// Stat Card Component (Vertical Layout for better visibility)
+function StatCard({ title, value, icon: Icon, color, onClick, active }: any) {
+  const colors: any = {
+    blue: "bg-blue-50 text-blue-600 border-blue-100",
+    amber: "bg-amber-50 text-amber-600 border-amber-100",
+    indigo: "bg-indigo-50 text-indigo-600 border-indigo-100",
+    purple: "bg-purple-50 text-purple-600 border-purple-100",
+    emerald: "bg-emerald-50 text-emerald-600 border-emerald-100",
+    slate: "bg-slate-50 text-slate-600 border-slate-100",
+    red: "bg-red-50 text-red-600 border-red-100",
+    violet: "bg-violet-50 text-violet-600 border-violet-100",
+  };
+
+  return (
+    <Card
+      className={cn(
+        "border-2 transition-all duration-300 cursor-pointer overflow-hidden min-h-[110px] flex flex-col justify-center",
+        active ? "border-emerald-500 shadow-lg scale-[1.05]" : "border-transparent shadow-sm hover:shadow-md",
+        colors[color]
+      )}
+      onClick={onClick}
+    >
+      <CardContent className="p-3 flex flex-col items-center text-center gap-2">
+        <div className={cn("p-2 rounded-xl bg-white shadow-sm shrink-0 mb-1")}>
+          <Icon className="h-5 w-5" />
+        </div>
+        <div className="w-full min-w-0 space-y-1">
+          <p className="text-[9px] font-black uppercase opacity-70 tracking-tight leading-none truncate">{title}</p>
+          <p className="text-lg font-black tracking-tighter leading-none">{value}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 const statusOptions = [
-  { value: "all", label: "Semua Status", color: "bg-slate-100 text-slate-700" },
-  { value: "pending", label: "Pending", color: "bg-slate-100 text-slate-700", icon: Clock },
-  { value: "in_progress", label: "Sedang Berlangsung", color: "bg-blue-100 text-blue-700", icon: AlertCircle },
-  { value: "completed", label: "Selesai", color: "bg-emerald-100 text-emerald-700", icon: CheckCircle },
-  { value: "cancelled", label: "Dibatalkan", color: "bg-red-100 text-red-700", icon: XCircle }
+  { value: "all", label: "SEMUA STATUS", color: "bg-slate-100 text-slate-700", icon: Briefcase },
+  { value: "pending", label: "MENUNGGU", color: "bg-slate-100 text-slate-700", icon: Clock },
+  { value: "in_progress", label: "PROSES", color: "bg-blue-100 text-blue-700", icon: AlertCircle },
+  { value: "completed", label: "SELESAI", color: "bg-emerald-100 text-emerald-700", icon: CheckCircle },
+  { value: "cancelled", label: "DIBATALKAN", color: "bg-red-100 text-red-700", icon: XCircle }
 ];
 
-export default function SamplingAssignmentListPage() {
+export default function AdminSamplingMonitoringPage() {
   const [data, setData] = useState<any>({ items: [], total: 0, pages: 1 });
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(10);
+  const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<string>("date");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [filters, setFilters] = useState<any>({
+    dateFrom: "",
+    dateTo: "",
+    fieldOfficerId: "",
+    customerId: "",
+  });
+  const [fieldOfficers, setFieldOfficers] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [availableJobs, setAvailableJobs] = useState<any[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
   
   // Create Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [fieldOfficers, setFieldOfficers] = useState<any[]>([]);
-  const [jobOrders, setJobOrders] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     job_order_id: "",
     field_officer_id: "",
@@ -97,44 +138,57 @@ export default function SamplingAssignmentListPage() {
     notes: ""
   });
 
-  const loadData = async () => {
+  // Debounced search
+  const useDebounce = (value: string, delay: number) => {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+    useEffect(() => {
+      const handler = setTimeout(() => { setDebouncedValue(value); }, delay);
+      return () => { clearTimeout(handler); };
+    }, [value, delay]);
+    return debouncedValue;
+  };
+
+  const debouncedSearch = useDebounce(search, 700);
+
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await getAllSamplingAssignments(page, limit, search);
+      const result = await getAllSamplingAssignments(page, limit, debouncedSearch);
       setData(result);
     } catch (error: any) {
-      toast.error("Gagal memuat data assignment", {
-        description: error?.message || "Silakan refresh halaman"
-      });
+      toast.error("Gagal memuat data sampling");
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, limit, debouncedSearch]);
 
-  const loadModalData = async () => {
+  const loadFilterOptions = useCallback(async () => {
     try {
-      // Load field officers
-      const usersData = await getUsers(1, 100, "");
-      const officers = usersData.users.filter((u: any) => u.role === 'field_officer');
-      setFieldOfficers(officers);
-
-      // Load available job orders
-      const jobsData = await getJobOrders(1, 100, "");
-      const availableJobs = jobsData.items.filter((j: any) => {
+      const [officers, clientList, jobsData] = await Promise.all([
+        getFieldOfficers(),
+        getCustomers(),
+        getJobOrders(1, 100, "")
+      ]);
+      setFieldOfficers(officers || []);
+      setCustomers(clientList || []);
+      
+      // Filter jobs yang belum ditugaskan
+      const jobsForAssignment = jobsData.items.filter((j: any) => {
         return ['scheduled', 'sampling'].includes(j.status) && !j.sampling_assignment;
       });
-      setJobOrders(availableJobs);
-    } catch (error: any) {
-      toast.error("Gagal memuat data", {
-        description: error?.message
-      });
+      setAvailableJobs(jobsForAssignment);
+    } catch (error) {
+      console.error('Failed to load filter options:', error);
     }
-  };
+  }, []);
 
-  const handleOpenCreateModal = async () => {
-    await loadModalData();
-    setIsCreateModalOpen(true);
-  };
+  useEffect(() => {
+    loadFilterOptions();
+  }, [loadFilterOptions]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -145,12 +199,11 @@ export default function SamplingAssignmentListPage() {
 
       if (result.error) {
         toast.error(result.error);
-        setSubmitting(false);
         return;
       }
 
       toast.success("Penugasan berhasil dibuat", {
-        description: `Job Order ${formData.job_order_id} telah ditugaskan`
+        description: `Job Order telah ditugaskan ke personel terkait`
       });
 
       setIsCreateModalOpen(false);
@@ -163,7 +216,7 @@ export default function SamplingAssignmentListPage() {
       });
       loadData();
 
-      // Redirect ke travel order setelah delay
+      // Redirect ke travel order setelah delay jika diperlukan
       const assignmentId = result.assignment?.id;
       if (assignmentId) {
         setTimeout(() => {
@@ -171,7 +224,6 @@ export default function SamplingAssignmentListPage() {
         }, 1500);
       }
     } catch (error: any) {
-      console.error('Error creating assignment:', error);
       toast.error(error.message || "Gagal membuat penugasan");
     } finally {
       setSubmitting(false);
@@ -182,595 +234,327 @@ export default function SamplingAssignmentListPage() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      loadData();
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [page, limit, search]);
+  const handleExport = () => {
+    if (data.items.length === 0) return;
+    
+    const headers = ["Kode Tracking", "Klien", "Perusahaan", "Petugas", "Lokasi", "Tanggal Rencana", "Status"];
+    const rows = data.items.map((item: any) => [
+      item.job_order.tracking_code,
+      item.job_order.quotation.profile.full_name,
+      item.job_order.quotation.profile.company_name || "-",
+      item.field_officer.full_name,
+      item.location,
+      new Date(item.scheduled_date).toLocaleDateString('id-ID'),
+      item.status
+    ]);
 
-  // Filter & Sort
-  const getFilteredAndSortedData = () => {
-    let filtered = [...data.items];
-    
-    // Search
-    if (search) {
-      filtered = filtered.filter(item => 
-        item.location.toLowerCase().includes(search.toLowerCase()) ||
-        item.field_officer.full_name.toLowerCase().includes(search.toLowerCase()) ||
-        item.job_order.tracking_code.toLowerCase().includes(search.toLowerCase())
-      );
-    }
-    
-    // Filter by status
-    if (filterStatus !== "all") {
-      filtered = filtered.filter(item => item.status === filterStatus);
-    }
-    
-    // Sort
-    filtered.sort((a, b) => {
-      let comparison = 0;
-      if (sortBy === "date") {
-        comparison = new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime();
-      } else if (sortBy === "status") {
-        const statusOrder: Record<string, number> = { pending: 0, in_progress: 1, completed: 2, cancelled: 3 };
-        comparison = statusOrder[a.status] - statusOrder[b.status];
-      }
-      return sortOrder === "asc" ? comparison : -comparison;
-    });
-    
-    return filtered;
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + headers.join(",") + "\n"
+      + rows.map((e: any) => e.join(",")).join("\n");
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `laporan_sampling_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("Data sampling berhasil diekspor");
   };
 
-  const filteredItems = getFilteredAndSortedData();
-
-  // Stats
-  const stats = {
+  // Stats calculation
+  const stats = useMemo(() => ({
     total: data.items.length,
     pending: data.items.filter((i: any) => i.status === "pending").length,
     in_progress: data.items.filter((i: any) => i.status === "in_progress").length,
     completed: data.items.filter((i: any) => i.status === "completed").length,
     cancelled: data.items.filter((i: any) => i.status === "cancelled").length
-  };
+  }), [data.items]);
 
-  // Export CSV
-  const handleExport = () => {
-    const headers = ["Tracking Code", "Pelanggan", "Perusahaan", "Petugas", "Lokasi", "Tanggal", "Status", "Deskripsi"];
-    const csvData = data.items.map((item: any) => [
-      item.job_order.tracking_code,
-      item.job_order.quotation.profile.full_name,
-      item.job_order.quotation.profile.company_name || "Personal",
-      item.field_officer.full_name,
-      item.location,
-      new Date(item.scheduled_date).toISOString(),
-      item.status,
-      item.notes || ""
-    ]);
-    
-    const csv = [
-      headers.join(","),
-      ...csvData.map((row: string[]) => row.map(cell => `"${cell}"`).join(","))
-    ].join("\n");
-    
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `sampling-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    
-    toast.success("Data berhasil diexport", {
-      description: "File CSV telah diunduh"
-    });
-  };
-
-  const getStatusColor = (status: string) => {
-    const option = statusOptions.find(opt => opt.value === status);
-    return option?.color || "bg-slate-100 text-slate-700 border-slate-200";
-  };
-
-  const getStatusIcon = (status: string) => {
-    const option = statusOptions.find(opt => opt.value === status);
-    const Icon = option?.icon || Clock;
-    return <Icon className="h-3 w-3 mr-1" />;
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'in_progress': return 'SEDANG BERLANGSUNG';
-      case 'completed': return 'SELESAI';
-      case 'cancelled': return 'DIBATALKAN';
-      default: return 'PENDING';
+  const filteredItems = useMemo(() => {
+    let result = [...data.items];
+    if (filterStatus !== "all") {
+      result = result.filter(item => item.status === filterStatus);
     }
-  };
+    return result;
+  }, [data.items, filterStatus]);
 
   return (
     <div className="p-4 md:p-10 pb-24 md:pb-10">
-      {/* Header dengan Actions */}
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold text-emerald-900 tracking-tight">Penugasan Sampling</h1>
-          <p className="text-slate-500 text-sm">Kelola penugasan pengambilan sampel di lapangan.</p>
+          <h1 className="text-2xl font-black text-emerald-900 tracking-tight flex items-center gap-3">
+            <ShieldCheck className="h-8 w-8 text-emerald-600" />
+            MONITORING PENUGASAN SAMPLING
+          </h1>
+          <p className="text-slate-500 text-xs font-bold uppercase tracking-[0.2em] opacity-80">Pengawasan Personel Lapangan & Jadwal Pengambilan Sampel</p>
         </div>
-
-        <div className="flex gap-2 flex-wrap w-full md:w-auto">
+        <div className="flex gap-2">
+            <Button variant="outline" className="rounded-2xl border-slate-200 font-bold text-xs gap-2 h-11 px-6 shadow-sm bg-white" onClick={handleExport}>
+                <Download className="h-4 w-4 text-emerald-600" />
+                Ekspor Data
+            </Button>
+            <Button className="rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-2 h-11 px-6 shadow-lg shadow-emerald-900/20" onClick={() => setIsCreateModalOpen(true)}>
+                <PlusCircle className="h-4 w-4" />
+                Tambah Penugasan
+            </Button>
         </div>
       </div>
 
-      {/* Stats Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <FileText className="h-4 w-4 text-slate-400" />
-            <span className="text-xs font-medium text-slate-500">Total</span>
-          </div>
-          <p className="text-2xl font-bold text-slate-800">{stats.total}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <Clock className="h-4 w-4 text-slate-400" />
-            <span className="text-xs font-medium text-slate-500">Pending</span>
-          </div>
-          <p className="text-2xl font-bold text-slate-700">{stats.pending}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-blue-200 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <AlertCircle className="h-4 w-4 text-blue-400" />
-            <span className="text-xs font-medium text-blue-500">Berlangsung</span>
-          </div>
-          <p className="text-2xl font-bold text-blue-700">{stats.in_progress}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-emerald-200 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <CheckCircle className="h-4 w-4 text-emerald-400" />
-            <span className="text-xs font-medium text-emerald-500">Selesai</span>
-          </div>
-          <p className="text-2xl font-bold text-emerald-700">{stats.completed}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-red-200 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <XCircle className="h-4 w-4 text-red-400" />
-            <span className="text-xs font-medium text-red-500">Batal</span>
-          </div>
-          <p className="text-2xl font-bold text-red-700">{stats.cancelled}</p>
-        </div>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+        <StatCard title="Total Penugasan" value={stats.total} icon={Briefcase} color="slate" onClick={() => setFilterStatus("all")} active={filterStatus === "all"} />
+        <StatCard title="Menunggu" value={stats.pending} icon={Clock} color="amber" onClick={() => setFilterStatus("pending")} active={filterStatus === "pending"} />
+        <StatCard title="Dalam Proses" value={stats.in_progress} icon={AlertCircle} color="blue" onClick={() => setFilterStatus("in_progress")} active={filterStatus === "in_progress"} />
+        <StatCard title="Berhasil Selesai" value={stats.completed} icon={CheckCircle} color="emerald" onClick={() => setFilterStatus("completed")} active={filterStatus === "completed"} />
+        <StatCard title="Dibatalkan" value={stats.cancelled} icon={XCircle} color="red" onClick={() => setFilterStatus("cancelled")} active={filterStatus === "cancelled"} />
       </div>
 
-      {/* Table Container */}
-      <div className="bg-white rounded-3xl shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
-        <div className="p-5 border-b bg-emerald-50/10 flex flex-col md:flex-row gap-4 items-center">
-          <div className="relative flex-1 w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
-            <Input
-              placeholder="Cari lokasi, petugas, atau tracking code..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="pl-10 h-11 focus-visible:ring-emerald-500 rounded-xl"
-            />
-          </div>
-          <div className="flex gap-2 w-full md:w-auto justify-end">
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-full md:w-40 h-11 rounded-xl border-slate-200 bg-white">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                {statusOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-
-            <Button variant="outline" size="icon" onClick={handleExport} className="h-11 w-11 rounded-xl" title="Export CSV">
-              <Download className="h-5 w-5" />
-            </Button>
-
-            <Button onClick={handleOpenCreateModal} size="icon" className="bg-emerald-600 hover:bg-emerald-700 shadow-lg cursor-pointer h-11 w-11 shrink-0" title="Buat Penugasan Baru">
-              <Plus className="h-5 w-5" />
-            </Button>
+      {/* Main Table Container */}
+      <div className="bg-white rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-slate-200 overflow-hidden">
+        <div className="p-8 border-b bg-gradient-to-br from-slate-50 to-white flex flex-col gap-6">
+          <div className="flex flex-col md:flex-row gap-4 items-center">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
+              <Input
+                placeholder="Cari lokasi, nama petugas, atau kode tracking..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                className="pl-12 h-14 rounded-2xl border-slate-200 bg-white shadow-inner focus-visible:ring-emerald-500 font-medium"
+              />
+            </div>
+            <div className="flex gap-3 w-full md:w-auto">
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="w-full md:w-56 h-14 rounded-2xl border-slate-200 bg-white font-black text-xs uppercase tracking-wider text-slate-700">
+                  <div className="flex items-center gap-2"><Filter className="h-4 w-4 text-emerald-600" /><SelectValue placeholder="Status" /></div>
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl">
+                    {statusOptions.map(opt => <SelectItem key={opt.value} value={opt.value} className="text-xs font-bold py-3 cursor-pointer">{opt.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
 
-        {/* Desktop View */}
-        <div className="hidden md:block">
+        <div className="overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50/50">
-                <TableHead className="font-bold text-emerald-900 px-4">Tracking Code</TableHead>
-                <TableHead className="font-bold text-emerald-900 px-4">Pelanggan</TableHead>
-                <TableHead className="font-bold text-emerald-900 px-4">Petugas Lapangan</TableHead>
-                <TableHead className="font-bold text-emerald-900 px-4">Lokasi</TableHead>
-                <TableHead className="font-bold text-emerald-900 px-4">Tanggal Rencana</TableHead>
-                <TableHead className="font-bold text-emerald-900 px-4">Status</TableHead>
-                <TableHead className="text-center font-bold text-emerald-900 px-6">Aksi</TableHead>
+              <TableRow className="bg-slate-50/50 hover:bg-slate-50/50 border-none">
+                <TableHead className="px-8 py-5 font-black text-slate-900 uppercase text-[10px] tracking-[0.2em]">Data Penugasan</TableHead>
+                <TableHead className="px-4 py-5 font-black text-slate-900 uppercase text-[10px] tracking-[0.2em]">Entitas Klien</TableHead>
+                <TableHead className="px-4 py-5 font-black text-slate-900 uppercase text-[10px] tracking-[0.2em]">Petugas & Lokasi</TableHead>
+                <TableHead className="px-4 py-5 font-black text-slate-900 uppercase text-[10px] tracking-[0.2em]">Jadwal Rencana</TableHead>
+                <TableHead className="px-8 py-5 font-black text-slate-900 uppercase text-[10px] tracking-[0.2em] text-right">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-20">
-                    <div className="flex justify-center">
-                      <ChemicalLoader />
-                    </div>
-                    <p className="mt-4 text-sm text-slate-500">Memuat data...</p>
-                  </TableCell>
-                </TableRow>
-              ) : filteredItems.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-20">
-                    <div className="flex flex-col items-center gap-4">
-                      <div className="h-20 w-20 rounded-full bg-emerald-50 flex items-center justify-center">
-                        <MapPin className="h-10 w-10 text-emerald-300" />
-                      </div>
-                      <div className="text-center">
-                        <p className="text-lg font-semibold text-slate-700">Belum ada penugasan</p>
-                        <p className="text-sm text-slate-500 mt-1">Mulai dengan membuat penugasan sampling pertama</p>
-                      </div>
-                      <Link href="/admin/sampling/create">
-                        <Button className="bg-emerald-600 hover:bg-emerald-700 cursor-pointer">
-                          <Plus className="mr-2 h-4 w-4" /> Buat Penugasan
-                        </Button>
-                      </Link>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredItems.map((item: any) => (
-                  <TableRow key={item.id} className="hover:bg-emerald-50/10 transition-colors">
-                    <TableCell className="font-medium text-slate-800 px-4">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-emerald-600" />
-                        {item.job_order.tracking_code}
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-4">
-                      <div className="flex flex-col">
-                        <span className="font-medium text-slate-800">{item.job_order.quotation.profile.full_name}</span>
-                        <span className="text-xs text-slate-400">{item.job_order.quotation.profile.company_name || "Personal"}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-4">
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-slate-400" />
-                        <span className="text-slate-700">{item.field_officer.full_name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-4">
-                      <div className="flex items-center gap-2">
-                        <MapPin className="h-4 w-4 text-slate-400" />
-                        <span className="text-slate-700 max-w-xs truncate">{item.location}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-4">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-slate-400" />
-                        <span className="text-slate-700 text-sm">
-                          {new Date(item.scheduled_date).toLocaleDateString("id-ID", {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-4">
-                      <Badge variant="outline" className={cn("capitalize", getStatusColor(item.status))}>
-                        {getStatusIcon(item.status)}
-                        {getStatusLabel(item.status)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-center px-6">
-                      <Link href={`/admin/sampling/${item.id}`}>
-                        <Button variant="ghost" size="sm" className="text-emerald-600 hover:bg-emerald-50 cursor-pointer">
-                          <Eye className="h-4 w-4 mr-1" />
-                          Detail
-                        </Button>
-                      </Link>
-                    </TableCell>
-                  </TableRow>
+                Array.from({ length: 5 }).map((_, i) => (
+                  <TableRow key={i}><TableCell colSpan={5} className="py-10 px-8"><div className="h-14 bg-slate-50 animate-pulse rounded-2xl" /></TableCell></TableRow>
                 ))
+              ) : filteredItems.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center py-32"><div className="flex flex-col items-center gap-6"><div className="h-24 w-24 rounded-full bg-slate-50 flex items-center justify-center border-4 border-white shadow-lg"><MapPin className="h-10 w-10 text-slate-200" /></div><div className="space-y-1"><p className="font-black text-slate-800 text-lg uppercase tracking-widest">Belum ada penugasan</p><p className="text-xs text-slate-400 font-bold uppercase tracking-tighter">Silakan buat penugasan baru untuk memulai pelacakan</p></div></div></TableCell></TableRow>
+              ) : (
+                filteredItems.map((item: any) => {
+                  const sInfo = statusOptions.find(opt => opt.value === item.status) || statusOptions[0];
+                  return (
+                    <TableRow key={item.id} className="group hover:bg-emerald-50/10 transition-all border-slate-100/60">
+                      <TableCell className="px-8 py-6">
+                        <div className="flex flex-col gap-2">
+                          <span className="font-mono text-xs font-black text-emerald-800 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-lg shadow-sm w-fit">{item.job_order.tracking_code}</span>
+                          <Badge variant="outline" className={cn("text-[9px] font-black border-2 py-0.5 px-3 uppercase tracking-wider w-fit", sInfo.color)}>{sInfo.label}</Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-4">
+                        <div className="flex flex-col gap-1">
+                          <span className="font-black text-sm text-slate-800 tracking-tight">{item.job_order.quotation.profile.full_name}</span>
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.1em]">{item.job_order.quotation.profile.company_name || "Personal"}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-4">
+                        <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2">
+                                <User className="h-3.5 w-3.5 text-emerald-600" />
+                                <span className="text-xs font-black text-slate-700 uppercase tracking-tighter">{item.field_officer.full_name}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <MapPin className="h-3.5 w-3.5 text-slate-300" />
+                                <span className="text-[10px] font-bold text-slate-400 line-clamp-1">{item.location}</span>
+                            </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-4">
+                        <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                                <Calendar className="h-3.5 w-3.5 text-slate-300" />
+                                <span className="text-xs font-black text-slate-700">
+                                    {new Date(item.scheduled_date).toLocaleDateString("id-ID", {
+                                        day: 'numeric', month: 'short', year: 'numeric'
+                                    })}
+                                </span>
+                            </div>
+                            <span className="text-[10px] font-bold text-slate-400 ml-5.5 uppercase">
+                                {new Date(item.scheduled_date).toLocaleTimeString("id-ID", {
+                                    hour: '2-digit', minute: '2-digit'
+                                })} WIB
+                            </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-8 text-right">
+                        <div className="flex justify-end gap-1">
+                          <Link href={`/admin/sampling/${item.id}`}>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-10 w-10 rounded-xl text-emerald-600 hover:bg-emerald-100 transition-all active:scale-95 shadow-sm bg-white border border-slate-100"
+                                title="Detail Penugasan"
+                            >
+                                <Eye className="h-5 w-5" />
+                            </Button>
+                          </Link>
+                          {item.travel_order && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-10 w-10 rounded-xl text-blue-600 hover:bg-blue-100 transition-all active:scale-95 shadow-sm bg-white border border-slate-100"
+                                onClick={() => window.open(`/admin/travel-orders/${item.travel_order.id}`, '_blank')}
+                                title="Lihat Surat Tugas"
+                            >
+                                <FileText className="h-5 w-5" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
         </div>
 
-        {/* Mobile View */}
-        <div className="md:hidden divide-y divide-slate-100">
-          {loading ? (
-            <div className="p-10 text-center flex flex-col items-center justify-center">
-              <div className="flex justify-center mb-4">
-                <ChemicalLoader />
-              </div>
-            </div>
-          ) : filteredItems.length === 0 ? (
-            <div className="p-10 text-center flex flex-col items-center gap-4">
-              <div className="h-16 w-16 rounded-full bg-emerald-50 flex items-center justify-center">
-                <MapPin className="h-8 w-8 text-emerald-300" />
-              </div>
-              <div>
-                <p className="text-base font-semibold text-slate-700">Belum ada penugasan</p>
-                <p className="text-xs text-slate-500 mt-1">Mulai dengan membuat penugasan</p>
-              </div>
-              <Link href="/admin/sampling/create">
-                <Button className="bg-emerald-600 hover:bg-emerald-700 cursor-pointer">
-                  <Plus className="mr-2 h-4 w-4" /> Buat Penugasan
-                </Button>
-              </Link>
-            </div>
-          ) : (
-            filteredItems.map((item: any) => (
-              <div key={item.id} className="p-4 space-y-3 bg-white active:bg-slate-50">
-                <div className="flex justify-between items-start">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-emerald-600" />
-                      <h4 className="font-bold text-slate-900">{item.job_order.tracking_code}</h4>
-                    </div>
-                    <p className="text-sm text-slate-700">{item.job_order.quotation.profile.full_name}</p>
-                    <p className="text-xs text-slate-400">{item.job_order.quotation.profile.company_name || "Personal"}</p>
-                  </div>
-                  <Badge variant="outline" className={cn("capitalize", getStatusColor(item.status))}>
-                    {getStatusIcon(item.status)}
-                    {getStatusLabel(item.status)}
-                  </Badge>
-                </div>
-                <div className="space-y-2 pt-2 border-t">
-                  <div className="flex items-center gap-2 text-sm">
-                    <User className="h-4 w-4 text-slate-400" />
-                    <span className="text-slate-700">{item.field_officer.full_name}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <MapPin className="h-4 w-4 text-slate-400" />
-                    <span className="text-slate-700">{item.location}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <Calendar className="h-4 w-4 text-slate-400" />
-                    <span className="text-slate-700">
-                      {new Date(item.scheduled_date).toLocaleDateString("id-ID", {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric'
-                      })}
-                    </span>
-                  </div>
-                </div>
-                <div className="pt-2">
-                  <Link href={`/admin/sampling/${item.id}`} className="w-full">
-                    <Button variant="outline" size="sm" className="w-full text-emerald-600 hover:bg-emerald-50 cursor-pointer">
-                      <Eye className="h-4 w-4 mr-1" />
-                      Detail
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Pagination */}
-        <div className="p-4 border-t flex flex-col md:flex-row items-center justify-between bg-slate-50/50 gap-4">
-          <div className="flex items-center gap-4">
-            <p className="text-xs text-slate-500 font-medium">
-              Total {data.total} penugasan
-            </p>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 font-medium">Tampil:</span>
-              <Select value={limit.toString()} onValueChange={(val) => {
-                setLimit(parseInt(val));
-                setPage(1);
-              }}>
-                <SelectTrigger className="h-8 w-[70px] bg-white text-xs cursor-pointer">
-                  <SelectValue placeholder={limit.toString()} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="10" className="cursor-pointer">10</SelectItem>
-                  <SelectItem value="30" className="cursor-pointer">30</SelectItem>
-                  <SelectItem value="50" className="cursor-pointer">50</SelectItem>
-                  <SelectItem value="100" className="cursor-pointer">100</SelectItem>
-                </SelectContent>
-              </Select>
+        <div className="p-8 bg-slate-50/80 border-t flex items-center justify-between">
+          <div className="flex items-center gap-6">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Record: {data.total} sampling assignments</span>
+            <div className="h-4 w-[1px] bg-slate-300 hidden md:block" />
+            <div className="hidden md:flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Aliran Data Aktif</span>
             </div>
           </div>
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 rounded-lg cursor-pointer"
-              disabled={page === 1}
-              onClick={() => setPage(p => p - 1)}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div className="flex items-center px-4 text-xs font-bold bg-white border border-slate-200 rounded-lg shadow-sm">
-              {page} / {data.pages}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 rounded-lg cursor-pointer"
-              disabled={page === data.pages}
-              onClick={() => setPage(p => p + 1)}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+            <Button variant="outline" size="sm" className="h-11 w-11 rounded-2xl border-slate-200 shadow-sm bg-white" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft className="h-5 w-5" /></Button>
+            <div className="h-11 px-6 flex items-center justify-center bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-900 shadow-sm">{page} / {data.pages}</div>
+            <Button variant="outline" size="sm" className="h-11 w-11 rounded-2xl border-slate-200 shadow-sm bg-white" disabled={page === data.pages} onClick={() => setPage(p => p + 1)}><ChevronRight className="h-5 w-5" /></Button>
           </div>
         </div>
       </div>
 
-      {/* Create Penugasan Modal */}
-      <Dialog open={isCreateModalOpen} onOpenChange={(open) => {
-        setIsCreateModalOpen(open);
-        if (!open) {
-          setFormData({
-            job_order_id: "",
-            field_officer_id: "",
-            scheduled_date: "",
-            location: "",
-            notes: ""
-          });
-        }
-      }}>
-        <DialogContent className="sm:max-w-xl p-0 border-none shadow-2xl rounded-3xl overflow-hidden">
-          {/* Emerald Glassmorphism Header */}
-          <div className="bg-emerald-700/80 backdrop-blur-md p-4 text-white border-b border-emerald-600/50 shadow-lg flex items-center justify-between">
+      {/* CREATE MODAL */}
+      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+        <DialogContent className="sm:max-w-xl p-0 border-none shadow-2xl rounded-[2.5rem] overflow-hidden">
+          <div className="bg-emerald-700 p-6 text-white flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-white border border-white/20 shadow-inner">
-                <MapPin className="h-4 w-4" />
-              </div>
-              <DialogTitle className="text-base font-black uppercase tracking-widest">Buat Penugasan Baru</DialogTitle>
+              <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center border border-white/20"><Plus className="h-5 w-5" /></div>
+              <div><DialogTitle className="text-lg font-black uppercase tracking-tight">Penugasan Baru</DialogTitle><DialogDescription className="text-emerald-200 text-[10px] font-bold uppercase tracking-widest">Registrasi Petugas Lapangan</DialogDescription></div>
             </div>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => setIsCreateModalOpen(false)} 
-              className="text-white/60 hover:text-white hover:bg-white/10 rounded-xl h-8 w-8 transition-all"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            <Button variant="ghost" size="icon" onClick={() => setIsCreateModalOpen(false)} className="text-white/60 hover:text-white rounded-xl"><X className="h-5 w-5" /></Button>
           </div>
           
-          <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <form onSubmit={handleSubmit} className="p-8 space-y-6">
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="job_order_id" className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Job Order</Label>
+                <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Job Order Target</Label>
                 <Select
                   value={formData.job_order_id}
                   onValueChange={(val) => handleFormDataChange("job_order_id", val)}
                 >
-                  <SelectTrigger className="h-11 rounded-xl border-slate-200 bg-slate-50/50 focus:ring-emerald-500 cursor-pointer">
+                  <SelectTrigger className="h-12 rounded-2xl border-slate-200 bg-slate-50/50">
                     <SelectValue placeholder="Pilih Job Order..." />
                   </SelectTrigger>
-                  <SelectContent>
-                    {jobOrders.length === 0 ? (
-                      <SelectItem value="none" disabled>Tidak ada job order tersedia</SelectItem>
-                    ) : (
-                      jobOrders.map((job: any) => (
-                        <SelectItem key={job.id} value={job.id} className="cursor-pointer py-2">
-                          <div className="flex flex-col">
-                            <span className="font-bold text-slate-800">{job.tracking_code}</span>
-                            <span className="text-[10px] text-slate-500 uppercase">{job.quotation?.profile?.full_name}</span>
-                          </div>
-                        </SelectItem>
-                      ))
-                    )}
+                  <SelectContent className="rounded-2xl">
+                    {availableJobs.map((job: any) => (
+                      <SelectItem key={job.id} value={job.id} className="cursor-pointer py-3">
+                        <div className="flex flex-col">
+                          <span className="font-black text-slate-800 text-xs">{job.tracking_code}</span>
+                          <span className="text-[9px] text-slate-500 uppercase font-bold">{job.quotation?.profile?.full_name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
-                {jobOrders.length === 0 && (
-                  <div className="text-[10px] text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-100 flex items-center gap-2">
-                    <AlertCircle className="h-3 w-3" />
-                    Belum ada job order yang siap ditugaskan.
-                  </div>
-                )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="field_officer_id" className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Petugas Lapangan</Label>
+                <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Petugas Lapangan (Field Officer)</Label>
                 <Select
                   value={formData.field_officer_id}
                   onValueChange={(val) => handleFormDataChange("field_officer_id", val)}
                 >
-                  <SelectTrigger className="h-11 rounded-xl border-slate-200 bg-slate-50/50 focus:ring-emerald-500 cursor-pointer">
-                    <SelectValue placeholder="Pilih Petugas..." />
+                  <SelectTrigger className="h-12 rounded-2xl border-slate-200 bg-slate-50/50">
+                    <SelectValue placeholder="Pilih Personel..." />
                   </SelectTrigger>
-                  <SelectContent>
-                    {fieldOfficers.length === 0 ? (
-                      <SelectItem value="none" disabled>Tidak ada petugas lapangan</SelectItem>
-                    ) : (
-                      fieldOfficers.map((officer: any) => (
-                        <SelectItem key={officer.id} value={officer.id} className="cursor-pointer py-2">
-                          <div className="flex items-center gap-3">
-                            <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-xs uppercase">
-                              {officer.full_name.charAt(0)}
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="font-bold text-slate-800">{officer.full_name}</span>
-                              <span className="text-[10px] text-slate-500 uppercase tracking-tighter">Field Officer</span>
-                            </div>
-                          </div>
-                        </SelectItem>
-                      ))
-                    )}
+                  <SelectContent className="rounded-2xl">
+                    {fieldOfficers.map((officer: any) => (
+                      <SelectItem key={officer.id} value={officer.id} className="cursor-pointer py-3">
+                        <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-black text-[10px]">{officer.full_name.charAt(0)}</div>
+                            <span className="font-bold text-slate-800 text-xs">{officer.full_name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="scheduled_date" className="text-[10px] font-black text-emerald-600 uppercase tracking-wider flex items-center gap-2">
-                    <Calendar className="h-3 w-3" />
-                    Tanggal Rencana
-                  </Label>
+                  <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Waktu Rencana</Label>
                   <Input
-                    id="scheduled_date"
                     type="datetime-local"
                     value={formData.scheduled_date}
                     onChange={(e) => handleFormDataChange("scheduled_date", e.target.value)}
-                    required
-                    className="h-11 rounded-xl border-slate-200 bg-slate-50/50 focus:ring-emerald-500 cursor-pointer"
+                    className="h-12 rounded-2xl border-slate-200 bg-slate-50/50"
                   />
                 </div>
-
                 <div className="space-y-2">
-                  <Label htmlFor="location" className="text-[10px] font-black text-emerald-600 uppercase tracking-wider flex items-center gap-2">
-                    <MapPin className="h-3 w-3" />
-                    Lokasi Sampling
-                  </Label>
+                  <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Lokasi Sampling</Label>
                   <Input
-                    id="location"
-                    placeholder="Contoh: Site A, Karawang"
+                    placeholder="Nama Site / Alamat"
                     value={formData.location}
                     onChange={(e) => handleFormDataChange("location", e.target.value)}
-                    required
-                    className="h-11 rounded-xl border-slate-200 bg-slate-50/50 focus:ring-emerald-500"
+                    className="h-12 rounded-2xl border-slate-200 bg-slate-50/50"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="notes" className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Catatan Khusus</Label>
+                <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Catatan Operasional</Label>
                 <Textarea
-                  id="notes"
-                  placeholder="Instruksi khusus untuk petugas lapangan..."
+                  placeholder="Instruksi tambahan untuk petugas..."
                   value={formData.notes}
                   onChange={(e) => handleFormDataChange("notes", e.target.value)}
-                  rows={3}
-                  className="rounded-xl border-slate-200 bg-slate-50/50 focus:ring-emerald-500 resize-none"
+                  className="rounded-2xl border-slate-200 bg-slate-50/50 min-h-[100px] resize-none"
                 />
               </div>
             </div>
 
-            <DialogFooter className="flex items-center justify-between pt-4 border-t gap-3">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setIsCreateModalOpen(false)}
-                className="font-bold text-slate-400 text-xs uppercase px-6 h-11 rounded-xl"
-              >
-                Batal
-              </Button>
+            <DialogFooter className="pt-4 border-t flex gap-3">
+              <Button type="button" variant="ghost" onClick={() => setIsCreateModalOpen(false)} className="flex-1 font-black text-[10px] uppercase h-12 rounded-2xl text-slate-400">Batal</Button>
               <LoadingButton
                 type="submit"
                 loading={submitting}
-                loadingText="MEMPROSES..."
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-8 h-12 rounded-xl shadow-lg shadow-emerald-900/20 text-xs tracking-wide uppercase transition-all active:scale-95 flex-1 md:flex-none"
-                disabled={!formData.job_order_id || !formData.field_officer_id || !formData.scheduled_date || !formData.location}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase h-12 rounded-2xl shadow-lg shadow-emerald-900/20"
               >
-                Buat Penugasan
+                Konfirmasi Tugas
               </LoadingButton>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Loading Overlay */}
-      <LoadingOverlay 
-        isOpen={submitting} 
-        title="Menyimpan Penugasan..." 
-        description="Mohon tunggu sebentar, petugas sedang didaftarkan" 
-      />
+      <LoadingOverlay isOpen={submitting} title="Memproses Penugasan..." description="Sistem sedang meregistrasi jadwal dan personel lapangan" />
     </div>
   );
 }

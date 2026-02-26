@@ -258,11 +258,26 @@ export async function sendInvoiceToCustomer(invoiceId: string, customerEmail: st
       }
     })
 
-    // TODO: Implement actual email sending here
-    // For now, we just mark it as sent
+    // Create notification for customer
+    await prisma.notification.create({
+      data: {
+        user_id: invoice.job_order.quotation.profile.id,
+        type: 'invoice_sent',
+        title: 'Invoice Baru Tersedia',
+        message: `Invoice ${invoice.invoice_number} telah diterbitkan. Silakan periksa dashboard Anda.`,
+        link: `/dashboard/orders`, // Customer typically sees invoices in order history
+        metadata: {
+          invoice_id: invoice.id,
+          invoice_number: invoice.invoice_number,
+          amount: Number(invoice.amount)
+        }
+      }
+    })
 
     revalidatePath('/finance')
     revalidatePath('/finance/invoices')
+    revalidatePath('/dashboard')
+    revalidatePath('/api/notifications')
 
     return {
       success: true,

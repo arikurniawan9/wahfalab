@@ -434,12 +434,12 @@ export default function OperatorJobProgressPage() {
               </div>
               <div className="space-y-2">
                 <Label className="text-[10px] font-black text-slate-500 uppercase">Field Officer</Label>
-                <Select value={filters.fieldOfficerId} onValueChange={(val) => setFilters({ ...filters, fieldOfficerId: val })}>
+                <Select value={filters.fieldOfficerId || "all"} onValueChange={(val) => setFilters({ ...filters, fieldOfficerId: val === "all" ? "" : val })}>
                   <SelectTrigger className="h-10 rounded-xl border-slate-200 bg-white text-xs">
                     <SelectValue placeholder="Semua Officer" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Semua Officer</SelectItem>
+                    <SelectItem value="all">Semua Officer</SelectItem>
                     {fieldOfficers.map((o: any) => (
                       <SelectItem key={o.id} value={o.id}>{o.full_name}</SelectItem>
                     ))}
@@ -448,12 +448,12 @@ export default function OperatorJobProgressPage() {
               </div>
               <div className="space-y-2">
                 <Label className="text-[10px] font-black text-slate-500 uppercase">Customer</Label>
-                <Select value={filters.customerId} onValueChange={(val) => setFilters({ ...filters, customerId: val })}>
+                <Select value={filters.customerId || "all"} onValueChange={(val) => setFilters({ ...filters, customerId: val === "all" ? "" : val })}>
                   <SelectTrigger className="h-10 rounded-xl border-slate-200 bg-white text-xs">
                     <SelectValue placeholder="Semua Customer" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Semua Customer</SelectItem>
+                    <SelectItem value="all">Semua Customer</SelectItem>
                     {customers.map((c: any) => (
                       <SelectItem key={c.id} value={c.id}>{c.company_name || c.full_name}</SelectItem>
                     ))}

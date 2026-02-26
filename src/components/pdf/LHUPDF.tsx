@@ -68,6 +68,7 @@ const styles = StyleSheet.create({
     paddingBottom: 15,
     borderBottomWidth: 3,
     borderBottomColor: '#059669',
+    borderBottomStyle: 'solid',
   },
   logoSection: {
     flexDirection: 'row',
@@ -171,6 +172,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
+    borderBottomStyle: 'solid',
   },
   tableRowAlt: {
     backgroundColor: '#f8fafc',
@@ -190,6 +192,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
     borderWidth: 1,
+    borderStyle: 'solid',
     borderColor: '#cbd5e1',
     borderRadius: 4,
     padding: 15,
@@ -215,6 +218,7 @@ const styles = StyleSheet.create({
     right: 40,
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
+    borderTopStyle: 'solid',
     paddingTop: 10,
     textAlign: 'center',
   },

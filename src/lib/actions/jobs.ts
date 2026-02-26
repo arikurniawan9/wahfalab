@@ -94,6 +94,21 @@ export async function getJobOrders(
         analysis_started_at: true,
         analysis_done_at: true,
         reporting_done_at: true,
+        invoice: {
+          select: {
+            id: true,
+            status: true,
+            amount: true,
+            invoice_number: true
+          }
+        },
+        payment: {
+          select: {
+            id: true,
+            payment_status: true,
+            amount: true
+          }
+        },
         sampling_assignment: {
           select: {
             id: true,

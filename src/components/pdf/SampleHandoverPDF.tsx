@@ -10,8 +10,9 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    borderBottom: 2,
+    borderBottomWidth: 2,
     borderBottomColor: '#059669',
+    borderBottomStyle: 'solid',
     paddingBottom: 10,
     marginBottom: 20,
   },

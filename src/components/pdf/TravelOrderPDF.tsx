@@ -70,8 +70,9 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 20,
-    borderBottom: 2,
-    borderColor: '#059669',
+    borderBottomWidth: 2,
+    borderBottomColor: '#059669',
+    borderBottomStyle: 'solid',
     paddingBottom: 10
   },
   headerRow: {
@@ -183,6 +184,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     borderTopWidth: 1,
     borderTopColor: '#000',
+    borderTopStyle: 'solid',
     paddingTop: 5
   },
   footer: {
