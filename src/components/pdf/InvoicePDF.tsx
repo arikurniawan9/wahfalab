@@ -5,15 +5,11 @@ import {
   Text,
   View,
   StyleSheet,
-  Font,
   Image
 } from '@react-pdf/renderer';
 
-// Register Montserrat font
-Font.register({
-  family: 'Montserrat',
-  src: 'https://fonts.gstatic.com/s/montserrat/v25/JTUSjIg1_i6t8kCHKm459Wlhyw.woff'
-});
+// Use basic fonts only to avoid any formatting issues
+// Helvetica is built-in to all PDF viewers and react-pdf
 
 interface InvoiceData {
   invoice_number: string;
@@ -33,7 +29,9 @@ interface InvoiceData {
     address?: string | null;
   };
   items?: Array<{
+    category_name?: string | null;
     service_name?: string | null;
+    parameters?: string | null;
     quantity: number;
     unit_price: number;
     subtotal: number;
@@ -54,16 +52,16 @@ interface InvoicePDFProps {
 
 const styles = StyleSheet.create({
   page: {
-    fontFamily: 'Montserrat',
-    fontSize: 10,
     padding: 40,
     backgroundColor: '#ffffff',
+    fontSize: 9,
+    fontFamily: 'Helvetica',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 30,
+    marginBottom: 20,
     paddingBottom: 20,
     borderBottomWidth: 2,
     borderBottomColor: '#10b981',
@@ -72,76 +70,80 @@ const styles = StyleSheet.create({
   logoSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 15,
   },
   logo: {
     width: 60,
     height: 60,
-    objectFit: 'contain',
   },
   companyName: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
     color: '#065f46',
-    marginBottom: 4,
+    fontWeight: 'bold',
+    marginBottom: 2,
+    marginLeft: 10,
   },
   companyInfo: {
-    fontSize: 9,
+    fontSize: 8,
     color: '#64748b',
-    lineHeight: 1.5,
+    lineHeight: 1.4,
+    marginLeft: 10,
+    maxWidth: 250,
   },
-  invoiceTitle: {
+  invoiceTitleSection: {
     textAlign: 'right',
   },
   invoiceTitleText: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 20,
     color: '#065f46',
-    marginBottom: 5,
+    fontWeight: 'bold',
+    marginBottom: 4,
   },
-  invoiceNumber: {
-    fontSize: 11,
-    color: '#64748b',
-    marginBottom: 3,
-  },
-  invoiceDate: {
-    fontSize: 9,
-    color: '#94a3b8',
+  invoiceNumberLabel: {
+    fontSize: 10,
+    color: '#1e293b',
+    fontWeight: 'bold',
   },
   section: {
     marginBottom: 20,
   },
-  sectionTitle: {
-    fontSize: 11,
+  // New Two-Column Info Section
+  infoContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 25,
+    gap: 20,
+  },
+  infoBox: {
+    flex: 1,
+  },
+  infoSectionTitle: {
+    fontSize: 10,
     fontWeight: 'bold',
     color: '#065f46',
-    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    borderBottomStyle: 'solid',
+    paddingBottom: 4,
+    marginBottom: 8,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
-  customerInfo: {
-    backgroundColor: '#f8fafc',
-    padding: 15,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderStyle: 'solid',
-    borderColor: '#e2e8f0',
-  },
+  
   infoRow: {
     flexDirection: 'row',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   infoLabel: {
-    width: 100,
-    fontSize: 9,
+    width: 85,
     color: '#64748b',
-    fontWeight: 'medium',
+    fontSize: 8,
   },
   infoValue: {
     flex: 1,
-    fontSize: 9,
     color: '#1e293b',
+    fontSize: 8,
+    fontWeight: 'bold',
   },
+
   table: {
     marginTop: 10,
   },
@@ -151,156 +153,142 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     paddingVertical: 8,
     paddingHorizontal: 10,
-    fontWeight: 'bold',
     fontSize: 9,
+    fontWeight: 'bold',
   },
   tableRow: {
     flexDirection: 'row',
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderBottomColor: '#f1f5f9',
     borderBottomStyle: 'solid',
   },
   tableRowAlt: {
     backgroundColor: '#f8fafc',
   },
   col1: { width: '5%', textAlign: 'center' },
-  col2: { width: '45%', textAlign: 'left' },
-  col3: { width: '15%', textAlign: 'right' },
+  col2: { width: '50%', textAlign: 'left', paddingRight: 5 },
+  categoryText: {
+    fontSize: 7,
+    color: '#10b981',
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    marginBottom: 1,
+  },
+  serviceNameText: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#1e293b',
+  },
+  parameterText: {
+    fontSize: 7,
+    color: '#64748b',
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  col3: { width: '10%', textAlign: 'center' },
   col4: { width: '15%', textAlign: 'right' },
   col5: { width: '20%', textAlign: 'right' },
+  
   summary: {
-    marginTop: 10,
+    marginTop: 15,
     flexDirection: 'column',
     alignItems: 'flex-end',
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 6,
-    paddingHorizontal: 15,
-    width: 250,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    width: 200,
   },
   summaryLabel: {
     fontSize: 9,
     color: '#64748b',
   },
   summaryValue: {
-    fontSize: 10,
+    fontSize: 9,
     color: '#1e293b',
-    fontWeight: 'medium',
+    fontWeight: 'bold',
   },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    width: 250,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    width: 200,
     backgroundColor: '#10b981',
     borderRadius: 4,
+    marginTop: 5,
   },
   totalLabel: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#ffffff',
     fontWeight: 'bold',
   },
   totalValue: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#ffffff',
     fontWeight: 'bold',
   },
-  paymentInfo: {
-    marginTop: 20,
-    padding: 15,
-    backgroundColor: '#f0fdf4',
+
+  statusBadge: {
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 3,
+    fontSize: 8,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    width: 100,
+  },
+  statusPaid: {
+    backgroundColor: '#dcfce7',
+    color: '#166534',
+  },
+  statusPending: {
+    backgroundColor: '#fef3c7',
+    color: '#92400e',
+  },
+  statusCancelled: {
+    backgroundColor: '#fee2e2',
+    color: '#991b1b',
+  },
+
+  notes: {
+    marginTop: 30,
+    padding: 12,
+    backgroundColor: '#f8fafc',
     borderRadius: 6,
     borderWidth: 1,
     borderStyle: 'solid',
-    borderColor: '#bbf7d0',
+    borderColor: '#e2e8f0',
   },
-  paymentTitle: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#166534',
-    marginBottom: 8,
-  },
-  paymentRow: {
-    flexDirection: 'row',
-    marginBottom: 5,
-  },
-  paymentLabel: {
-    width: 120,
-    fontSize: 9,
-    color: '#166534',
-  },
-  paymentValue: {
-    flex: 1,
-    fontSize: 9,
-    color: '#14532d',
-    fontWeight: 'medium',
-  },
-  statusBadge: {
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 4,
+  notesTitle: {
     fontSize: 9,
     fontWeight: 'bold',
-    textAlign: 'center',
-    marginTop: 10,
+    color: '#1e293b',
+    marginBottom: 4,
   },
-  statusPaid: {
-    backgroundColor: '#10b981',
-    color: '#ffffff',
-  },
-  statusPending: {
-    backgroundColor: '#f59e0b',
-    color: '#ffffff',
-  },
-  statusCancelled: {
-    backgroundColor: '#ef4444',
-    color: '#ffffff',
+  notesText: {
+    fontSize: 8,
+    color: '#64748b',
+    lineHeight: 1.4,
   },
   footer: {
     position: 'absolute',
-    bottom: 40,
+    bottom: 30,
     left: 40,
     right: 40,
     borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
+    borderTopColor: '#f1f5f9',
     borderTopStyle: 'solid',
-    paddingTop: 15,
+    paddingTop: 10,
     textAlign: 'center',
   },
   footerText: {
-    fontSize: 8,
+    fontSize: 7,
     color: '#94a3b8',
-    marginTop: 3,
-  },
-  notes: {
-    marginTop: 20,
-    padding: 15,
-    backgroundColor: '#fef3c7',
-    borderRadius: 6,
-    borderWidth: 1,
-    borderStyle: 'solid',
-    borderColor: '#fde68a',
-  },
-  notesTitle: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#92400e',
-    marginBottom: 6,
-  },
-  notesText: {
-    fontSize: 9,
-    color: '#78350f',
-    lineHeight: 1.5,
-  },
-  trackingCode: {
-    fontSize: 9,
-    color: '#64748b',
-    marginTop: 5,
   },
 });
 
@@ -360,86 +348,77 @@ export const InvoicePDF: React.FC<InvoicePDFProps> = ({ data }) => {
               {data.company.address && (
                 <Text style={styles.companyInfo}>{data.company.address}</Text>
               )}
-              {data.company.phone && (
-                <Text style={styles.companyInfo}>Telp: {data.company.phone}</Text>
-              )}
-              {data.company.email && (
-                <Text style={styles.companyInfo}>Email: {data.company.email}</Text>
-              )}
+              <Text style={styles.companyInfo}>
+                Telp: {data.company.phone || '-'} | Email: {data.company.email || '-'}
+              </Text>
               {data.company.npwp && (
                 <Text style={styles.companyInfo}>NPWP: {data.company.npwp}</Text>
               )}
             </View>
           </View>
-          <View style={styles.invoiceTitle}>
+          <View style={styles.invoiceTitleSection}>
             <Text style={styles.invoiceTitleText}>INVOICE</Text>
-            <Text style={styles.invoiceNumber}>{data.invoice_number}</Text>
-            <Text style={styles.invoiceDate}>
-              Tanggal: {formatDate(data.issue_date)}
+            <Text style={styles.invoiceNumberLabel}>{data.invoice_number}</Text>
+            <Text style={{ fontSize: 8, color: '#64748b', marginTop: 2 }}>
+              Tanggal Terbit: {formatDate(data.issue_date)}
             </Text>
           </View>
         </View>
 
-        {/* Customer Info */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Kepada Yth:</Text>
-          <View style={styles.customerInfo}>
+        {/* Two-Column Info Section */}
+        <View style={styles.infoContainer}>
+          {/* Column Left: Customer Info */}
+          <View style={styles.infoBox}>
+            <Text style={styles.infoSectionTitle}>Kepada Yth:</Text>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Nama</Text>
               <Text style={styles.infoValue}>: {data.customer.full_name || '-'}</Text>
             </View>
-            {data.customer.company_name && (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Perusahaan</Text>
-                <Text style={styles.infoValue}>: {data.customer.company_name}</Text>
-              </View>
-            )}
-            {data.customer.email && (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Email</Text>
-                <Text style={styles.infoValue}>: {data.customer.email}</Text>
-              </View>
-            )}
-            {data.customer.phone && (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Telepon</Text>
-                <Text style={styles.infoValue}>: {data.customer.phone}</Text>
-              </View>
-            )}
-            {data.customer.address && (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Alamat</Text>
-                <Text style={styles.infoValue}>: {data.customer.address}</Text>
-              </View>
-            )}
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Perusahaan</Text>
+              <Text style={styles.infoValue}>: {data.customer.company_name || '-'}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Email</Text>
+              <Text style={styles.infoValue}>: {data.customer.email || '-'}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Telepon</Text>
+              <Text style={styles.infoValue}>: {data.customer.phone || '-'}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Alamat</Text>
+              <Text style={styles.infoValue}>: {data.customer.address || '-'}</Text>
+            </View>
           </View>
-        </View>
 
-        {/* Invoice Details */}
-        <View style={styles.section}>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Nomor Penawaran</Text>
-            <Text style={styles.infoValue}>: {data.quotation_number || '-'}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Job Order</Text>
-            <Text style={styles.infoValue}>: {data.tracking_code}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Jatuh Tempo</Text>
-            <Text style={styles.infoValue}>: {formatDate(data.due_date)}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Status</Text>
-            <View style={[styles.statusBadge, getStatusStyle(data.payment_status)]}>
-              <Text>{getStatusLabel(data.payment_status)}</Text>
+          {/* Column Right: Invoice Details */}
+          <View style={[styles.infoBox, { maxWidth: 200 }]}>
+            <Text style={styles.infoSectionTitle}>Detail Tagihan:</Text>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>No. Penawaran</Text>
+              <Text style={styles.infoValue}>: {data.quotation_number || '-'}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Job Order</Text>
+              <Text style={styles.infoValue}>: {data.tracking_code}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Jatuh Tempo</Text>
+              <Text style={styles.infoValue}>: {formatDate(data.due_date)}</Text>
+            </View>
+            <View style={[styles.infoRow, { marginTop: 5 }]}>
+              <Text style={styles.infoLabel}>Status</Text>
+              <View style={[styles.statusBadge, getStatusStyle(data.payment_status)]}>
+                <Text>{getStatusLabel(data.payment_status)}</Text>
+              </View>
             </View>
           </View>
         </View>
 
         {/* Items Table */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Rincian Layanan</Text>
+          <Text style={[styles.infoSectionTitle, { marginBottom: 5 }]}>Rincian Layanan & Pengujian</Text>
           <View style={styles.table}>
             <View style={styles.tableHeader}>
               <Text style={styles.col1}>No</Text>
@@ -456,9 +435,18 @@ export const InvoicePDF: React.FC<InvoicePDFProps> = ({ data }) => {
                     styles.tableRow,
                     index % 2 === 1 ? styles.tableRowAlt : {},
                   ]}
+                  wrap={false}
                 >
                   <Text style={styles.col1}>{index + 1}</Text>
-                  <Text style={styles.col2}>{item.service_name || 'Layanan'}</Text>
+                  <View style={styles.col2}>
+                    {item.category_name && (
+                      <Text style={styles.categoryText}>{item.category_name}</Text>
+                    )}
+                    <Text style={styles.serviceNameText}>{item.service_name || 'Layanan'}</Text>
+                    {item.parameters && (
+                      <Text style={styles.parameterText}>Parameter: {item.parameters}</Text>
+                    )}
+                  </View>
                   <Text style={styles.col3}>{item.quantity}</Text>
                   <Text style={styles.col4}>{formatCurrency(item.unit_price)}</Text>
                   <Text style={styles.col5}>{formatCurrency(item.subtotal)}</Text>
@@ -481,55 +469,24 @@ export const InvoicePDF: React.FC<InvoicePDFProps> = ({ data }) => {
               <Text style={styles.summaryValue}>{formatCurrency(data.amount)}</Text>
             </View>
             <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Total</Text>
+              <Text style={styles.totalLabel}>TOTAL TAGIHAN</Text>
               <Text style={styles.totalValue}>{formatCurrency(data.amount)}</Text>
             </View>
           </View>
         </View>
 
-        {/* Payment Info */}
-        {(data.payment_method || data.paid_at) && (
-          <View style={styles.paymentInfo}>
-            <Text style={styles.paymentTitle}>Informasi Pembayaran</Text>
-            {data.payment_method && (
-              <View style={styles.paymentRow}>
-                <Text style={styles.paymentLabel}>Metode Pembayaran</Text>
-                <Text style={styles.paymentValue}>
-                  : {data.payment_method === 'cash' ? 'Tunai' : 'Transfer Bank'}
-                </Text>
-              </View>
-            )}
-            {data.paid_at && (
-              <View style={styles.paymentRow}>
-                <Text style={styles.paymentLabel}>Tanggal Bayar</Text>
-                <Text style={styles.paymentValue}>: {formatDate(data.paid_at)}</Text>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* Notes */}
+        {/* Payment Info & Notes */}
         <View style={styles.notes}>
-          <Text style={styles.notesTitle}>Catatan Pembayaran:</Text>
-          <Text style={styles.notesText}>
-            • Pembayaran mohon ditransfer ke rekening: {data.company.company_name}
-          </Text>
-          <Text style={styles.notesText}>
-            • Harap konfirmasi pembayaran dengan mengirimkan bukti transfer
-          </Text>
-          <Text style={styles.notesText}>
-            • Untuk pertanyaan, hubungi kami di {data.company.email || 'finance@wahfalab.com'}
-          </Text>
+          <Text style={styles.notesTitle}>Instruksi Pembayaran:</Text>
+          <Text style={styles.notesText}>• Pembayaran dilakukan melalui transfer ke rekening perusahaan.</Text>
+          <Text style={styles.notesText}>• Mohon lampirkan nomor invoice {data.invoice_number} pada berita transfer.</Text>
+          <Text style={styles.notesText}>• Harap konfirmasi pembayaran kepada admin kami setelah transfer berhasil.</Text>
         </View>
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Terima kasih atas kepercayaan Anda menggunakan layanan WahfaLab
-          </Text>
-          <Text style={styles.footerText}>
-            {formatDate(new Date().toISOString())}
-          </Text>
+          <Text style={styles.footerText}>Terima kasih atas kepercayaan Anda menggunakan layanan WahfaLab</Text>
+          <Text style={[styles.footerText, { marginTop: 2, fontSize: 6 }]}>Dokumen ini diterbitkan secara elektronik dan sah tanpa tanda tangan basah.</Text>
         </View>
       </Page>
     </Document>

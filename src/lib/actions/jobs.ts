@@ -106,7 +106,10 @@ export async function getJobOrders(
           select: {
             id: true,
             payment_status: true,
-            amount: true
+            amount: true,
+            transfer_reference: true,
+            payment_proof_url: true,
+            paid_at: true
           }
         },
         sampling_assignment: {
@@ -134,21 +137,39 @@ export async function getJobOrders(
             id: true,
             quotation_number: true,
             total_amount: true,
+            perdiem_price: true,
+            perdiem_qty: true,
+            perdiem_name: true,
+            transport_price: true,
+            transport_qty: true,
+            transport_name: true,
             profile: {
               select: {
                 id: true,
                 full_name: true,
-                company_name: true
+                company_name: true,
+                email: true,
+                phone: true,
+                address: true
               }
             },
             items: {
-              take: 1,
               select: {
+                id: true,
+                qty: true,
+                price_snapshot: true,
+                parameter_snapshot: true,
                 service: {
                   select: {
                     id: true,
                     name: true,
                     category: true
+                  }
+                },
+                equipment: {
+                  select: {
+                    id: true,
+                    name: true
                   }
                 }
               }

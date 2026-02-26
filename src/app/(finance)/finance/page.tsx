@@ -44,7 +44,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { getAllPayments, processPayment, cancelPayment, getPendingPaymentsCount } from "@/lib/actions/payment";
-import { ChemicalLoader, PageSkeleton } from "@/components/ui";
+import { verifyPayment } from "@/lib/actions/invoice";
+import { ChemicalLoader, PageSkeleton, LoadingOverlay } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 const statusColors: Record<string, string> = {
@@ -122,7 +123,25 @@ export default function FinanceDashboardPage() {
 
   const handleProcessPayment = (payment: any) => {
     setSelectedPayment(payment);
+    setPaymentMethod(payment.payment_method || "cash");
+    setTransferReference(payment.transfer_reference || "");
     setIsPaymentModalOpen(true);
+  };
+
+  const handleVerify = async (paymentId: string, approved: boolean) => {
+    setProcessing(true);
+    try {
+      const result = await verifyPayment(paymentId, approved);
+      if (result.error) throw new Error(result.error);
+      toast.success(approved ? 'Pembayaran berhasil dikonfirmasi' : 'Pembayaran ditolak');
+      setIsPaymentModalOpen(false);
+      loadData();
+      loadStats();
+    } catch (error: any) {
+      toast.error(error.message || 'Gagal memproses verifikasi');
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const handleCancelPayment = async (payment: any) => {
@@ -540,73 +559,107 @@ export default function FinanceDashboardPage() {
                 </div>
               </div>
 
-              {/* Payment Method */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Metode Pembayaran</Label>
-                <Select value={paymentMethod} onValueChange={(v: any) => setPaymentMethod(v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih metode" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">💵 Tunai / Cash</SelectItem>
-                    <SelectItem value="transfer">🏦 Transfer Bank</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Transfer Reference */}
-              {paymentMethod === "transfer" && (
+              {/* Payment Proof (If exists) */}
+              {selectedPayment?.payment_proof_url && (
                 <div className="space-y-2">
-                  <Label htmlFor="reference" className="text-sm font-medium">
-                    Nomor Referensi Transfer
-                  </Label>
-                  <Input
-                    id="reference"
-                    value={transferReference}
-                    onChange={(e) => setTransferReference(e.target.value)}
-                    placeholder="Contoh: TRF123456789"
-                  />
-                  <p className="text-xs text-slate-500">
-                    Masukkan nomor referensi/nomor transaksi transfer
-                  </p>
+                  <Label className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Bukti Transfer Pelanggan</Label>
+                  <div className="relative aspect-video rounded-2xl overflow-hidden border-2 border-slate-200 group bg-slate-100">
+                    <img 
+                      src={selectedPayment.payment_proof_url} 
+                      alt="Bukti Transfer" 
+                      className="w-full h-full object-contain"
+                    />
+                    <a 
+                      href={selectedPayment.payment_proof_url} 
+                      target="_blank" 
+                      className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-black tracking-widest uppercase"
+                    >
+                      Perbesar Bukti
+                    </a>
+                  </div>
+                  <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                    <p className="text-[10px] text-blue-700 font-black uppercase">Referensi: {selectedPayment.transfer_reference || '-'}</p>
+                  </div>
                 </div>
+              )}
+
+              {/* Payment Method (Only if no proof yet) */}
+              {!selectedPayment?.payment_proof_url && (
+                <>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Metode Pembayaran</Label>
+                    <Select value={paymentMethod} onValueChange={(v: any) => setPaymentMethod(v)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pilih metode" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">💵 Tunai / Cash</SelectItem>
+                        <SelectItem value="transfer">🏦 Transfer Bank</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {paymentMethod === "transfer" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="reference" className="text-sm font-medium">
+                        Nomor Referensi Transfer
+                      </Label>
+                      <Input
+                        id="reference"
+                        value={transferReference}
+                        onChange={(e) => setTransferReference(e.target.value)}
+                        placeholder="Contoh: TRF123456789"
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
             {/* Actions */}
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button
-                variant="outline"
-                onClick={() => setIsPaymentModalOpen(false)}
-                disabled={processing}
-                className="flex-1"
-              >
-                Batal
-              </Button>
-              <Button
-                onClick={confirmProcessPayment}
-                disabled={processing}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-              >
-                {processing ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Memproses...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Konfirmasi Pembayaran
-                  </>
-                )}
-              </Button>
+            <DialogFooter className="gap-2 pt-4">
+              {selectedPayment?.payment_proof_url ? (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleVerify(selectedPayment.id, false)}
+                    disabled={processing}
+                    className="flex-1 border-red-200 text-red-600 hover:bg-red-50"
+                  >
+                    Tolak Bukti
+                  </Button>
+                  <Button
+                    onClick={() => handleVerify(selectedPayment.id, true)}
+                    disabled={processing}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    {processing ? "Memproses..." : "Setujui & Lunas"}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsPaymentModalOpen(false)}
+                    disabled={processing}
+                    className="flex-1"
+                  >
+                    Batal
+                  </Button>
+                  <Button
+                    onClick={confirmProcessPayment}
+                    disabled={processing}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    {processing ? "Memproses..." : "Konfirmasi Bayar"}
+                  </Button>
+                </>
+              )}
             </DialogFooter>
           </div>
         </DialogContent>
       </Dialog>
+      <LoadingOverlay isOpen={processing} title="Memproses..." description="Sistem sedang memverifikasi data pembayaran" />
     </div>
   );
 }

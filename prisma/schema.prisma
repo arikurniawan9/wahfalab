@@ -553,6 +553,7 @@ model Payment {
   payment_method    PaymentMethod?
   payment_status    PaymentStatus @default(pending)
   transfer_reference String?      // Nomor referensi transfer
+  payment_proof_url  String?      // URL bukti transfer (Supabase Storage)
   paid_at           DateTime?
   handled_by        String?       // Finance user who processed
   handler           Profile?      @relation("FinanceHandler", fields: [handled_by], references: [id])
