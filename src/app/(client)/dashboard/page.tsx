@@ -6,6 +6,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import {
   Box,
   Clock,
@@ -33,7 +34,8 @@ import {
   Zap,
   User,
   MessageCircle,
-  Activity
+  Activity,
+  X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
