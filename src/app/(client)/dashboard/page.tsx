@@ -24,6 +24,7 @@ import {
   Search,
   Filter,
   Download,
+  History,
   Eye,
   Calendar,
   DollarSign,
@@ -377,9 +378,20 @@ export default function ClientDashboard() {
                                             <h4 className="text-base font-black text-slate-800 uppercase tracking-tight">{job.quotation?.items?.[0]?.service?.name || 'Uji Laboratorium'}</h4>
                                         </div>
                                         <div className="flex gap-1">
-                                            <Button variant="ghost" size="icon" onClick={() => { setSelectedJob(job); setIsDetailOpen(true); }} className="h-9 w-9 rounded-xl text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"><Eye className="h-4 w-4" /></Button>
+                                            <Button variant="ghost" size="icon" onClick={() => { setSelectedJob(job); setIsDetailOpen(true); }} className="h-9 w-9 rounded-xl text-slate-400 hover:text-emerald-600 hover:bg-emerald-50" title="Detail"><Eye className="h-4 w-4" /></Button>
+                                            {job.invoice && (job.invoice.status === 'sent' || job.invoice.status === 'paid') && (
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    onClick={() => window.location.href = '/dashboard/orders'} 
+                                                    className="h-9 w-9 rounded-xl text-blue-600 hover:bg-blue-50"
+                                                    title="Lihat Invoice"
+                                                >
+                                                    <CreditCard className="h-4 w-4" />
+                                                </Button>
+                                            )}
                                             {job.certificate_url && (
-                                                <Button size="icon" onClick={() => handleDownloadCertificate(job)} className="h-9 w-9 rounded-xl bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-900/20"><Download className="h-4 w-4" /></Button>
+                                                <Button size="icon" onClick={() => handleDownloadCertificate(job)} className="h-9 w-9 rounded-xl bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-900/20" title="Sertifikat"><Download className="h-4 w-4" /></Button>
                                             )}
                                         </div>
                                     </div>

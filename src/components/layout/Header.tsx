@@ -7,8 +7,19 @@ import { NotificationBell } from '@/components/ui/notification-bell'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 import { NavContent, adminMenuItems, operatorMenuItems } from './Sidebar'
 import { usePathname } from 'next/navigation'
+import Link from 'next/link'
 import { logout } from '@/lib/actions/auth'
 import { getPendingApprovalCount } from '@/lib/actions/approval'
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { LogOut, Settings, User as UserIcon } from 'lucide-react'
 
 interface HeaderProps {
   title?: string
@@ -26,6 +37,16 @@ export function Header({ title, subtitle, profile }: HeaderProps) {
   const [companyName, setCompanyName] = useState("WahfaLab");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [pendingApprovals, setPendingApprovals] = useState(0);
+
+  // Determine settings link based on role
+  const getSettingsLink = () => {
+    switch (profile?.role) {
+      case 'admin': return '/admin/settings/profile';
+      case 'operator': return '/operator/settings/profile';
+      case 'client': return '/dashboard/settings';
+      default: return '#';
+    }
+  };
 
   // Determine if we should show hamburger menu based on role
   const showHamburger = profile?.role === 'admin' || profile?.role === 'operator';
@@ -113,17 +134,47 @@ export function Header({ title, subtitle, profile }: HeaderProps) {
         {/* Notification Bell */}
         <NotificationBell />
 
-        {/* Profile Avatar */}
+        {/* Profile Avatar with Dropdown */}
         {profile && (
-          <div className="flex items-center gap-2 pl-2 md:pl-3 border-l border-slate-200">
-            <div className="hidden md:block text-right">
-              <p className="text-xs font-bold text-slate-700">{profile.full_name}</p>
-              <p className="text-[10px] text-slate-500 uppercase font-medium">{profile.role}</p>
-            </div>
-            <div className="h-8 w-8 md:h-9 md:w-9 bg-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-xs md:text-sm shadow-md">
-              {(profile.full_name || 'U').charAt(0)}
-            </div>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <div className="flex items-center gap-2 pl-2 md:pl-3 border-l border-slate-200 cursor-pointer hover:opacity-80 transition-all group">
+                <div className="hidden md:block text-right">
+                  <p className="text-xs font-bold text-slate-700 group-hover:text-emerald-600 transition-colors">{profile.full_name}</p>
+                  <p className="text-[10px] text-slate-500 uppercase font-medium">{profile.role}</p>
+                </div>
+                <div className="h-8 w-8 md:h-9 md:w-9 bg-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-xs md:text-sm shadow-md ring-2 ring-transparent group-hover:ring-emerald-100 transition-all">
+                  {(profile.full_name || 'U').charAt(0)}
+                </div>
+              </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 shadow-2xl border-slate-200">
+              <DropdownMenuLabel className="px-3 py-2">
+                <p className="text-xs font-black text-slate-900 uppercase truncate">{profile.full_name}</p>
+                <p className="text-[10px] text-slate-500 truncate lowercase">{profile.email}</p>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator className="my-2 bg-slate-100" />
+              
+              <Link href={getSettingsLink()}>
+                <DropdownMenuItem className="rounded-xl cursor-pointer font-bold text-xs py-2.5 px-3">
+                  <Settings className="h-4 w-4 mr-2 text-slate-400" />
+                  Pengaturan Profil
+                </DropdownMenuItem>
+              </Link>
+
+              <DropdownMenuSeparator className="my-2 bg-slate-100" />
+              
+              <DropdownMenuItem 
+                className="rounded-xl cursor-pointer font-bold text-xs py-2.5 px-3 text-red-600 focus:text-red-600 focus:bg-red-50"
+                onClick={async () => {
+                  await logout();
+                }}
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Keluar Aplikasi
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
     </header>

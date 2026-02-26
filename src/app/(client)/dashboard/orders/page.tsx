@@ -1,16 +1,11 @@
 // ============================================================================
-// CLIENT ORDERS PAGE - Riwayat Pesanan
-// Fitur:
-// 1. ✅ Semua riwayat pesanan
-// 2. ✅ Filter by status & date
-// 3. ✅ Search tracking code
-// 4. ✅ Download certificate
-// 5. ✅ Re-order functionality
+// CLIENT ORDERS & INVOICES PAGE - v3.0 (Super Experience)
+// Riwayat pesanan lengkap dengan akses cepat ke Invoice dan Sertifikat.
 // ============================================================================
 
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   History,
@@ -30,11 +25,20 @@ import {
   RefreshCw,
   AlertCircle,
   DollarSign,
-  X
+  X,
+  CreditCard,
+  ShieldCheck,
+  Receipt,
+  ExternalLink,
+  Beaker,
+  Truck,
+  Activity,
+  MessageCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -55,27 +59,36 @@ import { getJobOrders } from "@/lib/actions/jobs";
 import { getProfile } from "@/lib/actions/auth";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { ChemicalLoader } from "@/components/ui";
+import { ChemicalLoader, LoadingOverlay } from "@/components/ui";
+import { pdf } from "@react-pdf/renderer";
+import { InvoicePDF } from "@/components/pdf/InvoicePDF";
 
 const statusColors: Record<string, string> = {
-  scheduled: 'bg-amber-100 text-amber-700 border-amber-200',
-  sampling: 'bg-blue-100 text-blue-700 border-blue-200',
-  analysis: 'bg-purple-100 text-purple-700 border-purple-200',
-  analysis_ready: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  analysis_done: 'bg-violet-100 text-violet-700 border-violet-200',
-  reporting: 'bg-indigo-100 text-indigo-700 border-indigo-200',
-  completed: 'bg-emerald-100 text-emerald-700 border-emerald-200'
+  scheduled: 'bg-amber-50 text-amber-600 border-amber-100',
+  sampling: 'bg-blue-50 text-blue-600 border-blue-100',
+  analysis_ready: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+  analysis: 'bg-purple-50 text-purple-600 border-purple-100',
+  reporting: 'bg-indigo-50 text-indigo-600 border-indigo-100',
+  completed: 'bg-emerald-50 text-emerald-600 border-emerald-100'
 };
 
 const statusLabels: Record<string, string> = {
   scheduled: 'Antrean',
   sampling: 'Sampling',
+  analysis_ready: 'Diterima Lab',
   analysis: 'Analisis Lab',
-  analysis_ready: 'Siap Analisis',
-  analysis_done: 'Selesai Analisis',
   reporting: 'Pelaporan',
   completed: 'Selesai'
 };
+
+const steps = [
+  { id: 'scheduled', label: 'Antrean', icon: Clock },
+  { id: 'sampling', label: 'Sampling', icon: Truck },
+  { id: 'analysis_ready', label: 'BAST', icon: ClipboardCheck },
+  { id: 'analysis', label: 'Lab', icon: Beaker },
+  { id: 'reporting', label: 'Laporan', icon: FileText },
+  { id: 'completed', label: 'Selesai', icon: FileCheck }
+];
 
 export default function ClientOrdersPage() {
   const [profile, setProfile] = useState<any>(null);
@@ -84,11 +97,9 @@ export default function ClientOrdersPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
 
   const supabase = createClient();
 
@@ -105,37 +116,22 @@ export default function ClientOrdersPage() {
       setProfile(prof);
       const { data: { user } } = await supabase.auth.getUser();
       
-      console.log('Profile:', prof);
-      console.log('User:', user);
-      console.log('Orders data:', jobsData);
-      
-      // Filter orders by customer profile
       const filteredOrders = (jobsData.items || []).filter(
         (o: any) => {
-          // Match by profile_id from quotation
-          const matchByProfileId = o.quotation?.profile?.id === prof?.id;
-          // Also match by user email as fallback
-          const matchByEmail = o.quotation?.profile?.email === user?.email;
-          // Also match by user_id if exists
-          const matchByUserId = o.quotation?.user_id === user?.id;
-          
-          return matchByProfileId || matchByEmail || matchByUserId;
+          return o.quotation?.profile?.id === prof?.id || 
+                 o.quotation?.profile?.email === user?.email || 
+                 o.quotation?.user_id === user?.id;
         }
       );
       
-      console.log('Filtered orders:', filteredOrders);
       setOrders(filteredOrders);
 
       if (showRefreshToast) {
-        toast.success("Data diperbarui", {
-          description: `${filteredOrders.length} pesanan ditemukan`
-        });
+        toast.success("Data diperbarui");
       }
     } catch (error: any) {
       console.error('Load orders error:', error);
-      toast.error("Gagal memuat data", {
-        description: error?.message || "Silakan coba lagi"
-      });
+      toast.error("Gagal memuat data");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -146,33 +142,82 @@ export default function ClientOrdersPage() {
     loadOrders();
   }, []);
 
-  // Filter & Search
-  const filteredOrders = orders.filter((order: any) => {
-    const matchesSearch = search === "" ||
-      order.tracking_code.toLowerCase().includes(search.toLowerCase()) ||
-      order.quotation?.items?.[0]?.service?.name?.toLowerCase().includes(search.toLowerCase());
+  const filteredOrders = useMemo(() => {
+    return orders.filter((order: any) => {
+      const matchesSearch = search === "" ||
+        order.tracking_code.toLowerCase().includes(search.toLowerCase()) ||
+        order.quotation?.items?.[0]?.service?.name?.toLowerCase().includes(search.toLowerCase());
+      const matchesStatus = filterStatus === "all" || order.status === filterStatus;
+      return matchesSearch && matchesStatus;
+    });
+  }, [orders, search, filterStatus]);
 
-    const matchesStatus = filterStatus === "all" || order.status === filterStatus;
+  const handleDownloadInvoice = async (order: any) => {
+    if (!order.invoice) {
+        toast.error("Invoice belum tersedia");
+        return;
+    }
 
-    const orderDate = new Date(order.created_at);
-    const matchesDateFrom = dateFrom ? orderDate >= new Date(dateFrom) : true;
-    const matchesDateTo = dateTo ? orderDate <= new Date(dateTo) : true;
+    setIsDownloadingPdf(true);
+    try {
+      // Ensure we have window origin for absolute asset paths
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+      
+      const companyProfile = {
+        company_name: 'WahfaLab',
+        address: 'Jl. Laboratorium No. 123',
+        phone: '+62 812-3456-7890',
+        email: 'info@wahfalab.com',
+        logo_url: `${origin}/logo-wahfalab.png`, // Use absolute URL
+        npwp: '01.234.567.8-901.000'
+      };
 
-    return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
-  });
+      const items = order.quotation?.items?.map((item: any) => ({
+        service_name: item.service?.name || item.equipment?.name || 'Layanan',
+        quantity: Number(item.qty || 1),
+        unit_price: Number(item.price_snapshot || 0),
+        subtotal: Number((item.qty || 1) * (item.price_snapshot || 0))
+      })) || [];
 
-  // Stats
-  const stats = {
-    total: orders.length,
-    active: orders.filter(o => o.status !== 'completed').length,
-    completed: orders.filter(o => o.status === 'completed').length,
-    withCertificate: orders.filter(o => o.certificate_url).length
-  };
+      const pdfData = {
+        invoice_number: String(order.invoice.invoice_number),
+        quotation_number: order.quotation?.quotation_number || '-',
+        tracking_code: String(order.tracking_code),
+        issue_date: order.invoice.created_at || new Date().toISOString(),
+        due_date: order.invoice.due_date || new Date().toISOString(),
+        amount: Number(order.invoice.amount || 0),
+        payment_status: String(order.invoice.status || 'draft'),
+        customer: {
+          full_name: order.quotation?.profile?.full_name || 'Pelanggan',
+          company_name: order.quotation?.profile?.company_name || '-',
+          email: order.quotation?.profile?.email || '-',
+          phone: order.quotation?.profile?.phone || '-',
+          address: order.quotation?.profile?.address || '-'
+        },
+        items,
+        company: companyProfile
+      };
 
-  const handleDownloadCertificate = (order: any) => {
-    if (order.certificate_url) {
-      window.open(order.certificate_url, '_blank');
-      toast.success("✅ Sertifikat sedang diunduh");
+      // Generate the PDF blob
+      const blob = await pdf(<InvoicePDF data={pdfData} />).toBlob();
+      
+      if (!blob) throw new Error("Gagal membuat data binary PDF");
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Invoice-${order.invoice.invoice_number}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success("✅ Invoice berhasil diunduh");
+    } catch (error: any) {
+      console.error('PDF generation error detail:', error);
+      toast.error(`Gagal membuat PDF invoice: ${error.message || 'Unknown error'}`);
+    } finally {
+      setIsDownloadingPdf(false);
     }
   };
 
@@ -185,389 +230,228 @@ export default function ClientOrdersPage() {
   }
 
   return (
-    <div className="p-4 md:p-8 pb-24 md:pb-8 bg-slate-50/20">
-      {/* Header */}
-      <div className="mb-8">
-        <Link href="/dashboard">
-          <Button variant="ghost" size="sm" className="mb-4 cursor-pointer">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Kembali
-          </Button>
-        </Link>
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-emerald-900 tracking-tight flex items-center gap-3">
-              <History className="h-8 w-8 text-emerald-600" />
-              Riwayat Pesanan
-            </h1>
-            <p className="text-slate-500 text-sm mt-1">
-              Lacak semua pesanan pengujian laboratorium Anda
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => loadOrders(true)}
-            disabled={refreshing}
-            className="cursor-pointer"
-          >
-            <RefreshCw className={cn("h-4 w-4 mr-2", refreshing && "animate-spin")} />
-            Refresh
-          </Button>
-        </div>
-      </div>
+    <div className="p-4 md:p-10 pb-24 md:pb-10 bg-slate-50/20 space-y-10">
+      <LoadingOverlay isOpen={isDownloadingPdf} title="Menyiapkan Dokumen..." description="Sistem sedang men-generate file PDF Anda" />
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <StatCard
-          title="Total Pesanan"
-          value={stats.total}
-          icon={History}
-          color="slate"
-          description="Semua riwayat"
-        />
-        <StatCard
-          title="Dalam Proses"
-          value={stats.active}
-          icon={Clock}
-          color="amber"
-          description="Belum selesai"
-        />
-        <StatCard
-          title="Selesai"
-          value={stats.completed}
-          icon={CheckCircle}
-          color="emerald"
-          description="Sertifikat terbit"
-        />
-        <StatCard
-          title="Sertifikat"
-          value={stats.withCertificate}
-          icon={FileCheck}
-          color="blue"
-          description="Tersedia untuk diunduh"
-        />
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <div className="space-y-1">
+          <Link href="/dashboard" className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em] flex items-center gap-2 mb-2 hover:translate-x-[-4px] transition-transform">
+            <ArrowLeft className="h-3 w-3" /> Kembali ke Panel
+          </Link>
+          <h1 className="text-3xl font-black text-emerald-900 tracking-tight flex items-center gap-3">
+            <History className="h-8 w-8 text-emerald-600" />
+            RIWAYAT PESANAN
+          </h1>
+          <p className="text-slate-500 text-xs font-bold uppercase tracking-[0.1em] opacity-80">Pantau seluruh riwayat pengujian dan administrasi Anda</p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => loadOrders(true)}
+          disabled={refreshing}
+          className="h-11 px-6 rounded-2xl border-slate-200 bg-white font-bold text-xs gap-2 shadow-sm"
+        >
+          <RefreshCw className={cn("h-4 w-4 text-emerald-600", refreshing && "animate-spin")} />
+          Update Data
+        </Button>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
-        <div className="flex flex-col gap-4">
-          {/* Search & Toggle */}
-          <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-            <div className="relative flex-1 w-full">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <Input
-                placeholder="Cari tracking code atau layanan..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10 h-12 rounded-xl border-slate-200"
-              />
-            </div>
-            <div className="flex gap-2 w-full md:w-auto">
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-full md:w-48 h-12 rounded-xl border-slate-200">
-                  <SelectValue placeholder="Filter Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Status</SelectItem>
-                  {Object.entries(statusLabels).map(([key, label]) => (
-                    <SelectItem key={key} value={key}>{label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowFilters(!showFilters)}
-                className="h-12 px-4 rounded-xl"
-              >
-                {showFilters ? "Tutup" : "Filter"}
-              </Button>
-            </div>
-          </div>
-
-          {/* Advanced Filters */}
-          {showFilters && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Dari Tanggal</label>
-                <Input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  className="h-10 rounded-lg border-slate-200 text-xs"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Sampai Tanggal</label>
-                <Input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  className="h-10 rounded-lg border-slate-200 text-xs"
-                />
-              </div>
-              <div className="flex items-end">
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setDateFrom("");
-                    setDateTo("");
-                    setSearch("");
-                    setFilterStatus("all");
-                  }}
-                  className="w-full text-xs font-bold"
-                >
-                  Reset Filter
-                </Button>
-              </div>
-            </div>
-          )}
+      <div className="bg-white rounded-[2rem] border border-slate-200 p-6 shadow-sm flex flex-col md:flex-row gap-4 items-center">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <Input
+            placeholder="Cari tracking code atau jenis layanan..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-11 h-12 rounded-2xl border-slate-200 focus-visible:ring-emerald-500"
+          />
+        </div>
+        <div className="flex gap-3 w-full md:w-auto">
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-full md:w-48 h-12 rounded-2xl border-slate-200 font-bold text-xs">
+              <SelectValue placeholder="Status Pesanan" />
+            </SelectTrigger>
+            <SelectContent className="rounded-2xl">
+              <SelectItem value="all">Semua Status</SelectItem>
+              {Object.entries(statusLabels).map(([key, label]) => (
+                <SelectItem key={key} value={key}>{label.toUpperCase()}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
       {/* Orders List */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-5 border-b bg-slate-50/50 flex items-center justify-between">
-          <h3 className="font-bold text-emerald-900 flex items-center gap-2 text-sm uppercase tracking-wide">
-            <FlaskConical className="h-4 w-4" />
-            Semua Pesanan ({filteredOrders.length})
-          </h3>
-        </div>
-
-        <div className="divide-y divide-slate-100">
-          {filteredOrders.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="h-20 w-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-4">
-                <History className="h-10 w-10 text-slate-300" />
-              </div>
-              <h4 className="font-semibold text-slate-700 mb-1">Tidak ada pesanan</h4>
-              <p className="text-slate-500 text-sm mb-4">
-                {search || filterStatus !== "all" || dateFrom || dateTo
-                  ? "Coba ubah filter atau kata kunci pencarian"
-                  : "Mulai dengan membuat pesanan pengujian pertama Anda"}
-              </p>
-              {!search && filterStatus === "all" && !dateFrom && !dateTo && (
-                <Link href="/operator/quotations">
-                  <Button className="bg-emerald-600 hover:bg-emerald-700 cursor-pointer">
-                    Buat Pesanan Baru
-                  </Button>
-                </Link>
-              )}
-            </div>
-          ) : (
-            filteredOrders.map((order: any) => (
-              <div key={order.id} className="p-5 hover:bg-slate-50 transition-all">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                  <div className="flex gap-4 flex-1">
-                    <div className="h-12 w-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 font-bold text-[10px] shrink-0">
-                      {order.tracking_code.slice(-3)}
+      <div className="space-y-4">
+        {filteredOrders.length === 0 ? (
+          <Card className="rounded-[2.5rem] border-none shadow-xl shadow-slate-200/50">
+            <CardContent className="py-32 text-center flex flex-col items-center gap-6">
+                <div className="h-24 w-24 rounded-full bg-slate-50 flex items-center justify-center border-4 border-white shadow-lg">
+                    <History className="h-10 w-10 text-slate-200" />
+                </div>
+                <div className="space-y-1">
+                    <p className="font-black text-slate-800 text-lg uppercase tracking-widest">Belum ada pesanan</p>
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-tighter">Riwayat pesanan Anda akan muncul di sini</p>
+                </div>
+            </CardContent>
+          </Card>
+        ) : (
+          filteredOrders.map((order: any) => (
+            <Card key={order.id} className="rounded-[2rem] border-none shadow-md hover:shadow-xl transition-all overflow-hidden group">
+              <CardContent className="p-0">
+                <div className="flex flex-col lg:flex-row">
+                  {/* Status Indicator Sidebar */}
+                  <div className={cn("w-full lg:w-40 p-6 flex flex-col items-center justify-center gap-3 lg:border-r border-slate-100", statusColors[order.status])}>
+                    <div className="h-12 w-12 rounded-2xl bg-white shadow-sm flex items-center justify-center">
+                        {React.createElement(steps.find(s => s.id === order.status)?.icon || Activity, { className: "h-6 w-6" })}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">
-                          {order.tracking_code}
-                        </span>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-[8px] h-5 px-2 font-bold uppercase border-2",
-                            statusColors[order.status] || "bg-slate-100"
-                          )}
-                        >
-                          {statusLabels[order.status] || order.status}
-                        </Badge>
-                        <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {new Date(order.created_at).toLocaleDateString("id-ID")}
-                        </span>
-                      </div>
-                      <h4 className="font-bold text-slate-800 text-sm truncate mb-2">
-                        {order.quotation?.items?.[0]?.service?.name || 'Uji Analisis Lab'}
-                      </h4>
-                      {/* Visual Workflow Timeline */}
-                      <WorkflowTimeline status={order.status} />
-                      <div className="flex items-center gap-3 mt-2">
-                        <span className="text-[10px] text-slate-500 flex items-center gap-1">
-                          <DollarSign className="h-3 w-3" />
-                          <span className="font-bold text-emerald-700">
-                            Rp {Number(order.quotation?.total_amount || 0).toLocaleString("id-ID")}
-                          </span>
-                        </span>
-                        {order.certificate_url && (
-                          <span className="text-[10px] text-emerald-600 flex items-center gap-1 font-bold">
-                            <FileCheck className="h-3 w-3" />
-                            Sertifikat Tersedia
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-center leading-tight">
+                        {statusLabels[order.status] || order.status}
+                    </span>
                   </div>
-                  <div className="flex gap-2 w-full md:w-auto">
-                    <Button
-                      onClick={() => {
-                        setSelectedOrder(order);
-                        setIsDetailOpen(true);
-                      }}
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 md:flex-none h-9 text-xs font-bold rounded-lg border-emerald-100 text-emerald-700 cursor-pointer"
-                    >
-                      <Eye className="h-3 w-3 mr-1" />
-                      Detail
-                    </Button>
-                    {order.certificate_url && (
-                      <Button
-                        onClick={() => handleDownloadCertificate(order)}
-                        size="sm"
-                        className="flex-1 md:flex-none h-9 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
-                      >
-                        <Download className="h-3 w-3 mr-1" />
-                        Unduh
-                      </Button>
-                    )}
+
+                  {/* Main Content */}
+                  <div className="flex-1 p-8 space-y-6">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div className="space-y-1">
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="font-mono text-xs font-black text-emerald-800 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-lg">{order.tracking_code}</span>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{new Date(order.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                            </div>
+                            <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight leading-tight">
+                                {order.quotation?.items?.[0]?.service?.name || 'Uji Laboratorium Analisis'}
+                            </h4>
+                        </div>
+                        <div className="flex gap-2 w-full md:w-auto">
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={() => { setSelectedOrder(order); setIsDetailOpen(true); }}
+                                className="flex-1 md:flex-none h-10 rounded-xl font-black text-[10px] uppercase tracking-widest border-slate-200"
+                            >
+                                <Eye className="h-4 w-4 mr-2 text-emerald-600" /> Detail
+                            </Button>
+                            
+                            {order.invoice && (
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => handleDownloadInvoice(order)}
+                                    className="flex-1 md:flex-none h-10 rounded-xl font-black text-[10px] uppercase tracking-widest border-blue-100 text-blue-600 hover:bg-blue-50"
+                                >
+                                    <Receipt className="h-4 w-4 mr-2" /> Invoice
+                                </Button>
+                            )}
+
+                            {order.certificate_url && (
+                                <Button 
+                                    size="sm" 
+                                    onClick={() => window.open(order.certificate_url, '_blank')}
+                                    className="flex-1 md:flex-none h-10 rounded-xl font-black text-[10px] uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-900/20"
+                                >
+                                    <Download className="h-4 w-4 mr-2" /> Sertifikat
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-slate-50">
+                        <WorkflowTimeline status={order.status} />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-6 pt-2">
+                        <div className="flex items-center gap-2">
+                            <DollarSign className="h-4 w-4 text-emerald-600" />
+                            <div>
+                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">Total Biaya</p>
+                                <p className="text-xs font-black text-slate-700">Rp {Number(order.quotation?.total_amount || 0).toLocaleString("id-ID")}</p>
+                            </div>
+                        </div>
+                        {order.invoice && (
+                            <div className="flex items-center gap-2">
+                                <CreditCard className="h-4 w-4 text-blue-500" />
+                                <div>
+                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">Status Bayar</p>
+                                    <Badge className={cn("text-[8px] font-black uppercase h-5", order.invoice.status === 'paid' ? "bg-emerald-500 text-white" : "bg-blue-50 text-blue-600 border border-blue-100")}>
+                                        {order.invoice.status === 'paid' ? 'LUNAS' : 'MENUNGGU PEMBAYARAN'}
+                                    </Badge>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
-          )}
-        </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
       </div>
 
-      {/* Order Detail Dialog */}
+      {/* Order Detail Modal */}
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className="sm:max-w-[600px] rounded-2xl p-0 overflow-hidden max-h-[90vh]">
-          <div className="bg-gradient-to-r from-emerald-900 to-indigo-900 p-6 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <DialogHeader>
-                  <DialogTitle className="text-xl font-bold">
-                    {selectedOrder?.quotation?.items?.[0]?.service?.name || 'Detail Pesanan'}
-                  </DialogTitle>
-                  <DialogDescription className="text-emerald-200 text-xs font-medium mt-1">
-                    {selectedOrder?.tracking_code}
-                  </DialogDescription>
-                </DialogHeader>
+        <DialogContent className="sm:max-w-xl p-0 border-none shadow-2xl rounded-[3rem] overflow-hidden">
+          <div className="bg-slate-900 p-8 text-white relative">
+            <div className="absolute top-0 right-0 p-8">
+                <Button variant="ghost" size="icon" onClick={() => setIsDetailOpen(false)} className="text-white/40 hover:text-white hover:bg-white/10 rounded-2xl h-12 w-12"><X className="h-6 w-6" /></Button>
+            </div>
+            <div className="flex items-center gap-6">
+              <div className="w-16 h-16 rounded-[1.5rem] bg-emerald-500 flex items-center justify-center shadow-xl shadow-emerald-500/20 transform rotate-3">
+                <Activity className="h-8 w-8 text-slate-900" />
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsDetailOpen(false)}
-                className="text-white/60 hover:text-white rounded-xl"
-              >
-                <X className="h-5 w-5" />
-              </Button>
+              <div>
+                <DialogTitle className="text-xl font-black uppercase tracking-tight">STATUS PESANAN</DialogTitle>
+                <div className="flex items-center gap-3 mt-1">
+                    <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px] font-black uppercase tracking-widest">{selectedOrder?.tracking_code}</Badge>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="p-6 bg-white overflow-y-auto max-h-[60vh]">
-            {selectedOrder && (
-              <div className="space-y-6">
-                {/* Order Info */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-slate-50 p-4 rounded-xl">
-                    <h5 className="text-xs font-bold text-slate-500 uppercase mb-2">Tanggal Order</h5>
-                    <p className="text-sm font-semibold">
-                      {new Date(selectedOrder.created_at).toLocaleDateString("id-ID", {
-                        day: 'numeric',
-                        month: 'long',
-                        year: 'numeric'
-                      })}
-                    </p>
-                  </div>
-                  <div className="bg-slate-50 p-4 rounded-xl">
-                    <h5 className="text-xs font-bold text-slate-500 uppercase mb-2">Total Biaya</h5>
-                    <p className="text-lg font-bold text-emerald-700">
-                      Rp {Number(selectedOrder.quotation?.total_amount || 0).toLocaleString("id-ID")}
-                    </p>
-                  </div>
+          <div className="p-8 space-y-8 bg-white">
+            <div className="grid grid-cols-2 gap-4">
+                <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100">
+                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Tgl Order</p>
+                    <p className="text-sm font-black text-slate-800">{new Date(selectedOrder?.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
                 </div>
-
-                {/* Customer Info */}
-                <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
-                  <h5 className="text-xs font-bold text-blue-600 uppercase mb-2">Informasi Customer</h5>
-                  <div className="space-y-1 text-sm">
-                    <p className="font-semibold text-slate-800">{selectedOrder.quotation?.profile?.full_name}</p>
-                    {selectedOrder.quotation?.profile?.company_name && (
-                      <p className="text-slate-600">{selectedOrder.quotation?.profile?.company_name}</p>
-                    )}
-                    {selectedOrder.quotation?.profile?.email && (
-                      <p className="text-slate-600">{selectedOrder.quotation?.profile?.email}</p>
-                    )}
-                  </div>
+                <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100">
+                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Total Biaya</p>
+                    <p className="text-sm font-black text-emerald-700">Rp {Number(selectedOrder?.quotation?.total_amount || 0).toLocaleString("id-ID")}</p>
                 </div>
+            </div>
 
-                {/* Status Timeline */}
-                <div>
-                  <h5 className="text-xs font-bold text-slate-500 uppercase mb-4">Progress Pengujian</h5>
-                  <div className="space-y-3">
-                    {Object.entries(statusLabels).map(([status, label]) => {
-                      const isCurrent = selectedOrder.status === status;
-                      const isPast = Object.keys(statusLabels).indexOf(status) < Object.keys(statusLabels).indexOf(selectedOrder.status);
-                      
-                      return (
-                        <div key={status} className="flex items-center gap-3">
-                          <div className={cn(
-                            "w-8 h-8 rounded-lg flex items-center justify-center",
-                            isCurrent ? "bg-emerald-600 text-white" :
-                            isPast ? "bg-emerald-100 text-emerald-600" :
-                            "bg-slate-100 text-slate-300"
-                          )}>
-                            {isCurrent ? <CheckCircle className="h-4 w-4" /> :
-                             isPast ? <CheckCircle className="h-4 w-4" /> :
-                             <Clock className="h-4 w-4" />}
-                          </div>
-                          <span className={cn(
-                            "text-sm font-bold",
-                            isCurrent ? "text-emerald-900" :
-                            isPast ? "text-emerald-600" :
-                            "text-slate-400"
-                          )}>
-                            {label}
-                          </span>
+            <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100 shadow-inner text-center">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-8">Pelacakan Progres</p>
+                <div className="flex justify-center py-2">
+                    <WorkflowTimeline status={selectedOrder?.status || ''} />
+                </div>
+                <p className="mt-8 text-xs font-bold text-emerald-600 uppercase tracking-widest animate-pulse">
+                    {statusLabels[selectedOrder?.status] || 'MEMPROSES'}
+                </p>
+            </div>
+
+            {selectedOrder?.invoice && (
+                <div className={cn("p-6 rounded-[2rem] flex items-center justify-between shadow-xl", selectedOrder.invoice.status === 'paid' ? "bg-emerald-900 text-white shadow-emerald-900/20" : "bg-blue-600 text-white shadow-blue-900/20")}>
+                    <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 rounded-2xl bg-white/10 flex items-center justify-center border border-white/10">
+                            <Receipt className="h-6 w-6 text-white" />
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Certificate */}
-                {selectedOrder.certificate_url && (
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-                    <div className="flex items-start gap-3">
-                      <FileCheck className="h-6 w-6 text-emerald-600 shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <h5 className="text-sm font-bold text-emerald-800 mb-1">Sertifikat Tersedia</h5>
-                        <p className="text-xs text-emerald-700 mb-3">Unduh sertifikat pengujian laboratorium Anda</p>
-                        <Button
-                          onClick={() => handleDownloadCertificate(selectedOrder)}
-                          size="sm"
-                          className="bg-emerald-600 hover:bg-emerald-700 text-xs cursor-pointer"
-                        >
-                          <Download className="h-3 w-3 mr-2" />
-                          Unduh Sertifikat
-                        </Button>
-                      </div>
+                        <div>
+                            <p className="text-xs font-black uppercase tracking-tight">{selectedOrder.invoice.status === 'paid' ? 'TAGIHAN LUNAS' : 'TAGIHAN TERSEDIA'}</p>
+                            <p className="text-[10px] opacity-80 font-bold uppercase">{selectedOrder.invoice.invoice_number}</p>
+                        </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                    <Button onClick={() => handleDownloadInvoice(selectedOrder)} className="bg-white text-slate-900 hover:bg-slate-100 font-black text-[10px] uppercase h-12 px-6 rounded-xl">Unduh PDF</Button>
+                </div>
             )}
           </div>
 
-          <DialogFooter className="p-4 bg-slate-50 border-t gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setIsDetailOpen(false)}
-              className="flex-1 cursor-pointer"
-            >
-              Tutup
+          <DialogFooter className="p-6 bg-slate-50 border-t flex gap-3">
+            <Button variant="outline" onClick={() => setIsDetailOpen(false)} className="flex-1 font-black text-[10px] uppercase h-12 rounded-2xl border-slate-300">Tutup</Button>
+            <Button className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-black text-[10px] uppercase h-12 rounded-2xl shadow-xl shadow-slate-900/20 gap-2">
+                <MessageCircle className="h-4 w-4 text-emerald-400" />
+                Bantuan CS
             </Button>
-            <Link href={`/operator/quotations/${selectedOrder?.quotation_id}`} className="flex-1">
-              <Button className="w-full bg-emerald-600 hover:bg-emerald-700 cursor-pointer">
-                <Eye className="h-4 w-4 mr-2" />
-                Lihat Penawaran
-              </Button>
-            </Link>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -575,84 +459,72 @@ export default function ClientOrdersPage() {
   );
 }
 
-// Stat Card Component
-function StatCard({
-  title,
-  value,
-  icon: Icon,
-  color,
-  description
-}: {
-  title: string;
-  value: number;
-  icon: any;
-  color: string;
-  description: string;
-}) {
-  const colorClasses: Record<string, string> = {
-    emerald: "bg-emerald-50 text-emerald-600",
-    amber: "bg-amber-50 text-amber-600",
-    blue: "bg-blue-50 text-blue-600",
-    slate: "bg-slate-50 text-slate-600"
-  };
-
-  return (
-    <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-all">
-      <div className="flex items-center justify-between mb-2">
-        <div className={cn("p-2 rounded-lg", colorClasses[color])}>
-          <Icon className="h-4 w-4" />
-        </div>
-      </div>
-      <p className="text-2xl font-bold text-slate-800">{value}</p>
-      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{title}</p>
-      <p className="text-[9px] text-slate-400 mt-0.5">{description}</p>
-    </div>
-  );
-}
-
-// Workflow Timeline Component
+// Visual Workflow Timeline
 function WorkflowTimeline({ status }: { status: string }) {
   const stages = [
     { id: 1, name: "Order", icon: FileText, complete: true },
-    { id: 2, name: "Sampling", icon: MapPin, complete: ["sampling", "analysis_ready", "analysis", "analysis_done", "reporting", "completed"].includes(status) },
-    { id: 3, name: "Handover", icon: ClipboardCheck, complete: ["analysis_ready", "analysis", "analysis_done", "reporting", "completed"].includes(status) },
-    { id: 4, name: "Analisis", icon: FlaskConical, complete: ["analysis", "analysis_done", "reporting", "completed"].includes(status) },
-    { id: 5, name: "Reporting", icon: FileText, complete: ["reporting", "completed"].includes(status) },
-    { id: 6, name: "Selesai", icon: CheckCircle, complete: status === "completed" },
+    { id: 2, name: "Sampling", icon: Truck, complete: ["sampling", "analysis_ready", "analysis", "reporting", "completed"].includes(status) },
+    { id: 3, name: "BAST", icon: ClipboardCheck, complete: ["analysis_ready", "analysis", "reporting", "completed"].includes(status) },
+    { id: 4, name: "Lab", icon: Beaker, complete: ["analysis", "reporting", "completed"].includes(status) },
+    { id: 5, name: "Laporan", icon: FileText, complete: ["reporting", "completed"].includes(status) },
+    { id: 6, name: "Selesai", icon: FileCheck, complete: status === "completed" },
   ];
 
   const getStatusColor = (stage: any) => {
-    if (stage.complete) return "bg-emerald-500 text-white border-emerald-600";
+    if (stage.complete) return "bg-emerald-500 text-white border-emerald-600 shadow-[0_0_10px_rgba(16,185,129,0.4)]";
     if (stage.id === stages.findIndex(s => !s.complete) + 1) return "bg-amber-500 text-white border-amber-600 animate-pulse";
-    return "bg-slate-100 text-slate-400 border-slate-200";
+    return "bg-slate-100 text-slate-300 border-slate-200";
   };
 
   return (
-    <div className="flex items-center gap-1 min-w-[200px]">
+    <div className="flex items-center gap-1 min-w-[200px] justify-center">
       {stages.map((stage, index) => (
         <React.Fragment key={stage.id}>
           <div className="flex flex-col items-center gap-1">
             <div className={cn(
-              "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-300",
+              "w-8 h-8 rounded-xl border-2 flex items-center justify-center transition-all duration-500",
               getStatusColor(stage)
             )}>
-              <stage.icon className="h-3 w-3" />
+              <stage.icon className="h-4 w-4" />
             </div>
             <span className={cn(
-              "text-[8px] font-bold uppercase tracking-tighter",
-              stage.complete ? "text-emerald-600" : stage.id === stages.findIndex(s => !s.complete) + 1 ? "text-amber-600" : "text-slate-400"
+              "text-[7px] font-black uppercase tracking-tighter transition-colors",
+              stage.complete ? "text-emerald-600" : stage.id === stages.findIndex(s => !s.complete) + 1 ? "text-amber-600" : "text-slate-300"
             )}>
               {stage.name}
             </span>
           </div>
           {index < stages.length - 1 && (
             <div className={cn(
-              "w-4 h-0.5 transition-all duration-300",
-              stage.complete ? "bg-emerald-500" : "bg-slate-200"
+              "w-4 md:w-8 h-0.5 transition-all duration-1000 mb-3",
+              stage.complete ? "bg-emerald-500" : "bg-slate-100"
             )} />
           )}
         </React.Fragment>
       ))}
+    </div>
+  );
+}
+
+// Re-using same style components
+function StatCard({ title, value, icon: Icon, color, description }: { title: string; value: number; icon: any; color: string; description: string; }) {
+  const colorClasses: Record<string, string> = {
+    emerald: "bg-emerald-50 text-emerald-600 border-emerald-100",
+    amber: "bg-amber-50 text-amber-600 border-amber-100",
+    blue: "bg-blue-50 text-blue-600 border-blue-100",
+    slate: "bg-slate-50 text-slate-600 border-slate-100"
+  };
+
+  return (
+    <div className={cn("bg-white p-5 rounded-[2rem] shadow-sm border-2 transition-all hover:shadow-md flex flex-col items-center text-center gap-3", colorClasses[color] || colorClasses.slate)}>
+      <div className="p-2.5 rounded-2xl bg-white shadow-sm shrink-0">
+        <Icon className="h-5 w-5" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-[9px] font-black uppercase opacity-60 tracking-widest leading-none mb-1">{title}</p>
+        <p className="text-2xl font-black tracking-tighter leading-none">{value}</p>
+        <p className="text-[8px] font-bold opacity-50 mt-1 truncate">{description}</p>
+      </div>
     </div>
   );
 }
