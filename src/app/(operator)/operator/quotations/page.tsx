@@ -513,7 +513,7 @@ export default function OperatorQuotationListPage() {
       </div>
 
       {/* Main Table */}
-      <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
         <div className="p-5 border-b bg-emerald-50/5 flex flex-col md:flex-row gap-4 items-center">
           <div className="relative flex-1 w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
@@ -558,11 +558,14 @@ export default function OperatorQuotationListPage() {
           </TableHeader>
           <TableBody>
             {loading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  <TableCell colSpan={6} className="py-4"><div className="h-10 bg-slate-50 animate-pulse rounded-lg" /></TableCell>
-                </TableRow>
-              ))
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-20">
+                  <div className="flex flex-col items-center justify-center">
+                    <ChemicalLoader />
+                    <p className="mt-4 text-emerald-800 font-bold uppercase tracking-widest text-[10px] animate-pulse">Memuat Daftar Penawaran...</p>
+                  </div>
+                </TableCell>
+              </TableRow>
             ) : filteredItems.length === 0 ? (
               <TableRow><TableCell colSpan={6} className="text-center py-20 text-slate-400">Data tidak ditemukan.</TableCell></TableRow>
             ) : (
@@ -627,7 +630,7 @@ export default function OperatorQuotationListPage() {
 
       {/* CREATE QUOTATION DIALOG */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto p-0 border-none shadow-2xl rounded-3xl">
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto p-0 border-none shadow-2xl rounded-2xl">
           <div className="bg-emerald-700/80 backdrop-blur-md p-4 text-white sticky top-0 z-20 border-b border-emerald-600/50 shadow-lg">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -702,6 +705,22 @@ export default function OperatorQuotationListPage() {
                         <div className="md:col-span-3 space-y-1"><label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Harga (Rp)</label><Input type="number" {...register(`items.${index}.price`)} className="h-9 font-bold text-emerald-700 text-xs" /></div>
                         <div className="md:col-span-1"><Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="w-full h-9 text-slate-300 hover:text-red-500"><Trash2 className="h-4 w-4" /></Button></div>
                       </div>
+                      
+                      {watchedItems[index]?.service_id && (
+                        <div className="flex flex-col gap-2">
+                          {(() => {
+                            const selectedService = services.find(s => s.id === watchedItems[index].service_id);
+                            const regulation = selectedService?.regulation || selectedService?.regulation_ref?.name;
+                            if (!regulation) return null;
+                            return (
+                              <div className="text-[9px] bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200 w-fit">
+                                <span className="font-bold">Regulasi:</span> {regulation}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+
                       {itemParams.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 pt-1">
                           {itemParams.map((param: string, pIdx: number) => (
@@ -843,7 +862,7 @@ export default function OperatorQuotationListPage() {
 
       {/* Catalog Dialogs */}
       <Dialog open={isPerdiemDialogOpen} onOpenChange={setIsPerdiemDialogOpen}>
-        <DialogContent className="sm:max-w-[500px] rounded-3xl"><DialogHeader><DialogTitle>Katalog Perdiem</DialogTitle></DialogHeader>
+        <DialogContent className="sm:max-w-[500px] rounded-2xl"><DialogHeader><DialogTitle>Katalog Perdiem</DialogTitle></DialogHeader>
           <div className="max-h-[400px] overflow-y-auto space-y-2 py-4">
             {operationalCatalogs.filter(c => c.category === 'perdiem').map(c => (
               <div key={c.id} className="p-4 border rounded-2xl hover:bg-emerald-50 cursor-pointer flex justify-between items-center group"
@@ -857,7 +876,7 @@ export default function OperatorQuotationListPage() {
       </Dialog>
 
       <Dialog open={isTransportDialogOpen} onOpenChange={setIsTransportDialogOpen}>
-        <DialogContent className="sm:max-w-[500px] rounded-3xl"><DialogHeader><DialogTitle>Katalog Transport</DialogTitle></DialogHeader>
+        <DialogContent className="sm:max-w-[500px] rounded-2xl"><DialogHeader><DialogTitle>Katalog Transport</DialogTitle></DialogHeader>
           <div className="max-h-[400px] overflow-y-auto space-y-2 py-4">
             {operationalCatalogs.filter(c => c.category === 'transport').map(c => (
               <div key={c.id} className="p-4 border rounded-2xl hover:bg-blue-50 cursor-pointer flex justify-between items-center group"
@@ -871,7 +890,7 @@ export default function OperatorQuotationListPage() {
       </Dialog>
 
       <Dialog open={isEquipmentDialogOpen} onOpenChange={setIsEquipmentDialogOpen}>
-        <DialogContent className="sm:max-w-[600px] rounded-3xl"><DialogHeader><DialogTitle>Katalog Alat Laboratorium</DialogTitle></DialogHeader>
+        <DialogContent className="sm:max-w-[600px] rounded-2xl"><DialogHeader><DialogTitle>Katalog Alat Laboratorium</DialogTitle></DialogHeader>
           <div className="max-h-[400px] overflow-y-auto space-y-2 py-4 px-1">
             {equipment.map((eq) => {
               const isSelected = watchedItems.some((item: any) => item.equipment_id === eq.id);
@@ -897,7 +916,7 @@ export default function OperatorQuotationListPage() {
       </Dialog>
 
       <AlertDialog open={isSaveConfirmOpen} onOpenChange={setIsSaveConfirmOpen}>
-        <AlertDialogContent className="sm:max-w-[425px] rounded-3xl">
+        <AlertDialogContent className="sm:max-w-[425px] rounded-2xl">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-emerald-600"><Check className="h-5 w-5" /> Konfirmasi Simpan</AlertDialogTitle>
             <AlertDialogDescription className="pt-4">Apakah Anda yakin ingin menyimpan penawaran ini? Pastikan semua rincian sudah benar.</AlertDialogDescription>
@@ -912,7 +931,7 @@ export default function OperatorQuotationListPage() {
       <LoadingOverlay isOpen={submitting} title="Menyimpan Penawaran..." description="Mohon tunggu sebentar, penawaran sedang diproses" />
 
       <Dialog open={isCustomerDialogOpen} onOpenChange={setIsCustomerDialogOpen}>
-        <DialogContent className="sm:max-w-[425px] rounded-3xl">
+        <DialogContent className="sm:max-w-[425px] rounded-2xl">
           <DialogHeader><DialogTitle>Tambah Customer Baru</DialogTitle><DialogDescription>Masukkan data lengkap pelanggan baru.<span className="block mt-2 text-xs font-bold text-amber-600 bg-amber-50 p-2 rounded border border-amber-100">Password default: 123456</span></DialogDescription></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2"><label className="text-sm font-medium">Nama Lengkap *</label><Input placeholder="John Doe" value={customerData.full_name} onChange={(e) => setCustomerData({...customerData, full_name: e.target.value})} className="rounded-xl" /></div>

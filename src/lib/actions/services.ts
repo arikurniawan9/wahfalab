@@ -118,7 +118,10 @@ export async function deleteManyServices(ids: string[]) {
 
 export async function getAllServices() {
   const services = await prisma.service.findMany({
-    include: { category_ref: true },
+    include: { 
+      category_ref: true,
+      regulation_ref: { select: { name: true } }
+    },
     orderBy: { name: 'asc' }
   })
   

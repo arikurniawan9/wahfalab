@@ -380,7 +380,7 @@ export default function OperatorJobProgressPage() {
       </div>
 
       {/* Main Table Container */}
-      <div className="bg-white rounded-[2rem] shadow-2xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-2xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
         <div className="p-6 border-b bg-emerald-50/10 flex flex-col gap-4">
           {/* Search & Status Filter */}
           <div className="flex flex-col md:flex-row gap-4 items-center">
@@ -551,7 +551,7 @@ export default function OperatorJobProgressPage() {
                       )}
                     </TableCell>
                     <TableCell className="px-6 text-right">
-                      <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex justify-end gap-2">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -582,13 +582,12 @@ export default function OperatorJobProgressPage() {
 
       {/* ASSIGN FIELD OFFICER MODAL */}
       <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
-        <DialogContent className="sm:max-w-xl p-0 border-none shadow-2xl rounded-[2rem] overflow-hidden">
+        <DialogContent className="sm:max-w-xl p-0 border-none shadow-2xl rounded-2xl overflow-hidden">
           <div className="bg-emerald-700 p-6 text-white flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center border border-white/20"><MapPin className="h-5 w-5" /></div>
+              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center border border-white/20"><MapPin className="h-5 w-5" /></div>
               <div><DialogTitle className="text-lg font-black uppercase tracking-tight">Penugasan Sampling</DialogTitle><DialogDescription className="text-emerald-200 text-[10px] font-bold uppercase tracking-widest">Tugaskan Petugas Lapangan</DialogDescription></div>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => setIsAssignDialogOpen(false)} className="text-white/60 hover:text-white rounded-xl"><X className="h-5 w-5" /></Button>
           </div>
 
           <div className="p-8 space-y-6">
@@ -633,11 +632,11 @@ export default function OperatorJobProgressPage() {
 
       {/* QUICK PREVIEW MODAL */}
       <Dialog open={isPreviewDialogOpen} onOpenChange={setIsPreviewDialogOpen}>
-        <DialogContent className="sm:max-w-4xl p-0 border-none shadow-2xl rounded-3xl overflow-hidden max-h-[90vh]">
+        <DialogContent className="sm:max-w-4xl p-0 border-none shadow-2xl rounded-2xl overflow-hidden max-h-[90vh]">
           <div className="bg-gradient-to-r from-emerald-600 to-indigo-600 p-6 text-white">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center border border-white/20">
+                <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center border border-white/20">
                   <Briefcase className="h-6 w-6" />
                 </div>
                 <div>
@@ -647,9 +646,6 @@ export default function OperatorJobProgressPage() {
                   </DialogDescription>
                 </div>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => setIsPreviewDialogOpen(false)} className="text-white/60 hover:text-white rounded-xl">
-                <X className="h-6 w-6" />
-              </Button>
             </div>
           </div>
 

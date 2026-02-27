@@ -183,7 +183,15 @@ export default function ClientOrdersPage() {
     try {
       const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
       const companyProfile = { company_name: 'WahfaLab', address: 'Jl. Laboratorium No. 123', phone: '+62 812-3456-7890', email: 'info@wahfalab.com', logo_url: `${origin}/logo-wahfalab.png`, npwp: '01.234.567.8-901.000' };
-      const items = order.quotation?.items?.map((item: any) => ({ category_name: item.service?.category_ref?.name || item.service?.category || (item.equipment ? "ALAT LAB" : "Layanan Lab"), service_name: item.service?.name || item.equipment?.name || 'Layanan', parameters: item.parameter_snapshot || null, quantity: Number(item.qty || 1), unit_price: Number(item.price_snapshot || 0), subtotal: Number((item.qty || 1) * (item.price_snapshot || 0)) })) || [];
+      const items = order.quotation?.items?.map((item: any) => ({ 
+        category_name: item.service?.category_ref?.name || item.service?.category || (item.equipment ? "ALAT LAB" : "Layanan Lab"), 
+        service_name: item.service?.name || item.equipment?.name || 'Layanan', 
+        parameters: item.parameter_snapshot || null, 
+        regulation: item.service?.regulation || item.service?.regulation_ref?.name || null,
+        quantity: Number(item.qty || 1), 
+        unit_price: Number(item.price_snapshot || 0), 
+        subtotal: Number((item.qty || 1) * (item.price_snapshot || 0)) 
+      })) || [];
       const pdfData = { invoice_number: String(order.invoice.invoice_number), quotation_number: order.quotation?.quotation_number || '-', tracking_code: String(order.tracking_code), issue_date: order.invoice.created_at || new Date().toISOString(), due_date: order.invoice.due_date || new Date().toISOString(), amount: Number(order.invoice.amount || 0), payment_status: String(order.invoice.status || 'draft'), customer: { full_name: order.quotation?.profile?.full_name || 'Pelanggan', company_name: order.quotation?.profile?.company_name || '-', email: order.quotation?.profile?.email || '-', phone: order.quotation?.profile?.phone || '-', address: order.quotation?.profile?.address || '-' }, items, company: companyProfile };
       const blob = await pdf(<InvoicePDF data={pdfData} />).toBlob();
       if (!blob) throw new Error("Gagal membuat data binary PDF");

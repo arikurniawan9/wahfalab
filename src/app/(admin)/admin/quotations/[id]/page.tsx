@@ -250,6 +250,13 @@ export default function QuotationDetailPage() {
                         <td className="px-6 py-4">
                           <div className="font-bold text-slate-800">{itemName}</div>
                           <div className="text-[10px] text-slate-400 uppercase tracking-wider">{itemCategory}</div>
+                          
+                          {(item.service?.regulation || item.service?.regulation_ref?.name) && (
+                            <div className="mt-2 text-[10px] bg-slate-100 text-slate-600 px-2 py-1 rounded inline-block border border-slate-200">
+                              <span className="font-bold">Regulasi:</span> {item.service?.regulation || item.service?.regulation_ref?.name}
+                            </div>
+                          )}
+
                           {params.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-2">
                               {params.map((p: string, i: number) => (

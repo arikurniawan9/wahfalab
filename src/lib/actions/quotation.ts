@@ -48,7 +48,16 @@ export async function getQuotationById(id: string) {
             id: true,
             qty: true,
             price_snapshot: true,
-            service: { select: { id: true, name: true, category: true } },
+            parameter_snapshot: true,
+            service: { 
+              select: { 
+                id: true, 
+                name: true, 
+                category: true, 
+                regulation: true,
+                regulation_ref: { select: { name: true } }
+              } 
+            },
             equipment: { select: { id: true, name: true } }
           }
         }
@@ -125,7 +134,16 @@ export async function getQuotations(
             id: true,
             qty: true,
             price_snapshot: true,
-            service: { select: { id: true, name: true, category: true } },
+            parameter_snapshot: true,
+            service: { 
+              select: { 
+                id: true, 
+                name: true, 
+                category: true, 
+                regulation: true,
+                regulation_ref: { select: { name: true } }
+              } 
+            },
             equipment: { select: { id: true, name: true } }
           }
         }

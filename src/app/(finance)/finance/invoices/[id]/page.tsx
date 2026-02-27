@@ -104,9 +104,15 @@ export default function InvoiceDetailPage() {
 
       const items = invoice.job_order?.quotation?.items?.map((item: any) => ({
         service_name: item.service?.name || item.equipment?.name || 'Layanan',
-        quantity: item.quantity || 1,
-        unit_price: Number(item.unit_price || item.price || 0),
-        subtotal: Number(item.subtotal || item.total || 0)
+        parameters: item.parameter_snapshot || (item.service?.parameters ? 
+          (typeof item.service.parameters === 'string' ? 
+            JSON.parse(item.service.parameters).map((p: any) => p.name).join(", ") : 
+            item.service.parameters.map((p: any) => p.name).join(", ")
+          ) : null),
+        regulation: item.service?.regulation || item.service?.regulation_ref?.name,
+        quantity: item.qty || 1,
+        unit_price: Number(item.price_snapshot || 0),
+        subtotal: (item.qty || 1) * Number(item.price_snapshot || 0)
       })) || [];
 
       const pdfData = {

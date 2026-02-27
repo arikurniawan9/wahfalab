@@ -55,6 +55,8 @@ export default function OperatorServicesPage() {
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [selectedService, setSelectedService] = useState<any>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
 
   const loadData = async () => {
     setLoading(true);
@@ -89,6 +91,9 @@ export default function OperatorServicesPage() {
     return matchesSearch && matchesCategory;
   });
 
+  const totalPages = Math.ceil(filteredServices.length / limit);
+  const paginatedServices = filteredServices.slice((page - 1) * limit, page * limit);
+
   return (
     <div className="p-4 md:p-10 pb-24 md:pb-10 bg-slate-50/20">
       {/* Header */}
@@ -103,31 +108,6 @@ export default function OperatorServicesPage() {
         </div>
       </header>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-        <StatCard
-          title="Total Layanan"
-          value={services.length}
-          icon={FlaskConical}
-          color="emerald"
-        />
-        <StatCard
-          title="Kategori"
-          value={categories.length}
-          icon={Tag}
-          color="blue"
-        />
-        <StatCard
-          title="Rata-rata Harga"
-          value={services.length > 0 
-            ? `Rp ${(services.reduce((acc, s) => acc + Number(s.price), 0) / services.length / 1000).toFixed(0)}k`
-            : "Rp 0"
-          }
-          icon={Search}
-          color="amber"
-        />
-      </div>
-
       {/* Filters */}
       <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6">
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
@@ -136,12 +116,18 @@ export default function OperatorServicesPage() {
             <Input
               placeholder="Cari nama layanan atau kategori..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               className="pl-10 focus-visible:ring-emerald-500"
             />
           </div>
           <div className="flex items-center gap-2 w-full md:w-auto">
-            <Select value={filterCategory} onValueChange={setFilterCategory}>
+            <Select value={filterCategory} onValueChange={(val) => {
+              setFilterCategory(val);
+              setPage(1);
+            }}>
               <SelectTrigger className="w-full md:w-48 cursor-pointer">
                 <SelectValue placeholder="Filter Kategori" />
               </SelectTrigger>
@@ -158,6 +144,7 @@ export default function OperatorServicesPage() {
               onClick={() => {
                 setSearch("");
                 setFilterCategory("all");
+                setPage(1);
               }}
               className="h-10 w-10 cursor-pointer"
             >
@@ -191,13 +178,13 @@ export default function OperatorServicesPage() {
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-20">
-                    <div className="flex justify-center">
+                    <div className="flex flex-col items-center justify-center">
                       <ChemicalLoader />
+                      <p className="mt-4 text-emerald-800 font-bold uppercase tracking-widest text-[10px] animate-pulse">Memuat Katalog Layanan...</p>
                     </div>
-                    <p className="mt-4 text-sm text-slate-500">Memuat data...</p>
                   </TableCell>
                 </TableRow>
-              ) : filteredServices.length === 0 ? (
+              ) : paginatedServices.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-20">
                     <div className="flex flex-col items-center gap-4">
@@ -217,6 +204,7 @@ export default function OperatorServicesPage() {
                             onClick={() => {
                               setSearch("");
                               setFilterCategory("all");
+                              setPage(1);
                             }}
                             className="mt-2 cursor-pointer"
                           >
@@ -228,57 +216,82 @@ export default function OperatorServicesPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredServices.map((service: any) => {
-                  const paramCount = Array.isArray(service.parameters) ? service.parameters.length : 0;
-                  return (
-                    <TableRow key={service.id} className="hover:bg-slate-50/50">
-                      <TableCell className="px-4">
-                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                          {service.category_ref?.name || service.category || 'Umum'}
+                paginatedServices.map((service: any) => (
+                  <TableRow key={service.id} className="hover:bg-slate-50/50">
+                    <TableCell className="px-4">
+                      <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                        {service.category_ref?.name || service.category || 'Umum'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="font-medium text-slate-800 px-4">
+                      {service.name}
+                    </TableCell>
+                    <TableCell className="px-4">
+                      {Array.isArray(service.parameters) && service.parameters.length > 0 ? (
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                          {service.parameters.length} parameter
                         </Badge>
-                      </TableCell>
-                      <TableCell className="font-medium text-slate-800 px-4">
-                        {service.name}
-                      </TableCell>
-                      <TableCell className="px-4">
-                        {paramCount > 0 ? (
-                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                            {paramCount} parameter
-                          </Badge>
-                        ) : (
-                          <span className="text-slate-400 text-xs">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right font-bold text-emerald-700 px-4">
-                        Rp {Number(service.price).toLocaleString("id-ID")}
-                      </TableCell>
-                      <TableCell className="text-center px-6">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedService(service);
-                            setIsDetailOpen(true);
-                          }}
-                          className="text-emerald-600 hover:bg-emerald-50 cursor-pointer"
-                        >
-                          <Eye className="h-4 w-4 mr-1" />
-                          Detail
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
+                      ) : (
+                        <span className="text-slate-400 text-xs">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-bold text-emerald-700 px-4">
+                      Rp {Number(service.price).toLocaleString("id-ID")}
+                    </TableCell>
+                    <TableCell className="text-center px-6">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedService(service);
+                          setIsDetailOpen(true);
+                        }}
+                        className="text-emerald-600 hover:bg-emerald-50 cursor-pointer"
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        Detail
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
               )}
             </TableBody>
           </Table>
         </div>
 
-        {/* Pagination info (no actual pagination since we load all) */}
-        <div className="p-4 border-t bg-slate-50/50">
-          <p className="text-xs text-slate-500 font-medium">
-            Menampilkan {filteredServices.length} dari {services.length} layanan
-          </p>
+        {/* Pagination */}
+        <div className="p-4 border-t flex flex-col md:flex-row items-center justify-between bg-slate-50/50 gap-4">
+          <div className="flex items-center gap-4">
+            <p className="text-xs text-slate-500 font-medium">Total {filteredServices.length} layanan</p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 font-medium">Tampil:</span>
+              <Select value={limit.toString()} onValueChange={(val) => {
+                setLimit(parseInt(val));
+                setPage(1);
+              }}>
+                <SelectTrigger className="h-8 w-[70px] bg-white text-xs cursor-pointer">
+                  <SelectValue placeholder={limit.toString()} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10" className="cursor-pointer">10</SelectItem>
+                  <SelectItem value="25" className="cursor-pointer">25</SelectItem>
+                  <SelectItem value="50" className="cursor-pointer">50</SelectItem>
+                  <SelectItem value="100" className="cursor-pointer">100</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="h-8 rounded-lg cursor-pointer" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex items-center px-4 text-xs font-bold bg-white border border-slate-200 rounded-lg shadow-sm">
+              {page} / {totalPages || 1}
+            </div>
+            <Button variant="outline" size="sm" className="h-8 rounded-lg cursor-pointer" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -380,33 +393,3 @@ export default function OperatorServicesPage() {
   );
 }
 
-// Stat Card Component
-function StatCard({
-  title,
-  value,
-  icon: Icon,
-  color
-}: {
-  title: string;
-  value: number | string;
-  icon: any;
-  color: string;
-}) {
-  const colorClasses: Record<string, string> = {
-    emerald: "bg-emerald-50 text-emerald-600",
-    blue: "bg-blue-50 text-blue-600",
-    amber: "bg-amber-50 text-amber-600"
-  };
-
-  return (
-    <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-      <div className="flex items-center justify-between mb-2">
-        <div className={cn("p-2 rounded-lg", colorClasses[color])}>
-          <Icon className="h-4 w-4" />
-        </div>
-      </div>
-      <p className="text-2xl font-bold text-slate-800">{value}</p>
-      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{title}</p>
-    </div>
-  );
-}

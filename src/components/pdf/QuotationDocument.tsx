@@ -99,6 +99,11 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     marginBottom: 2,
   },
+  openingText: {
+    fontSize: 9,
+    lineHeight: 1.4,
+    color: "#333",
+  },
   serviceName: {
     fontSize: 10,
     fontWeight: "bold",
@@ -137,17 +142,53 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: "#064e3b",
   },
+  termsSection: {
+    marginTop: 20,
+    padding: 10,
+    backgroundColor: "#f8fafc",
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  termsTitle: {
+    fontSize: 8,
+    fontWeight: "bold",
+    marginBottom: 5,
+    color: "#064e3b",
+    textTransform: "uppercase",
+  },
+  termsItem: {
+    fontSize: 7,
+    color: "#475569",
+    marginBottom: 2,
+    lineHeight: 1.3,
+  },
   footer: {
     marginTop: 30,
     flexDirection: "row",
     justifyContent: "space-between",
+    gap: 10,
   },
   signBox: {
-    width: "35%",
+    flex: 1,
     textAlign: "center",
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 4,
   },
-  signSpace: {
-    height: 50,
+  signTitle: {
+    fontSize: 8,
+    marginBottom: 40,
+    color: "#64748b",
+  },
+  signName: {
+    fontSize: 9,
+    fontWeight: "bold",
+    color: "#1e293b",
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+    paddingTop: 4,
   },
   note: {
     marginTop: 20,
@@ -190,6 +231,13 @@ export const QuotationDocument = ({ data }: any) => {
           </View>
         </View>
 
+        <View style={{ marginBottom: 15 }}>
+          <Text style={[styles.openingText, { fontWeight: "bold" }]}>Dengan Hormat,</Text>
+          <Text style={styles.openingText}>
+            Menindaklanjuti permintaan penawaran harga perihal tersebut di atas, dengan ini kami sampaikan rincian penawaran harga sebagai berikut:
+          </Text>
+        </View>
+
         {/* Table Content */}
         <View style={styles.table}>
           <View style={styles.tableHeader}>
@@ -220,10 +268,11 @@ export const QuotationDocument = ({ data }: any) => {
               <View key={`item-${index}`} style={styles.tableRow} wrap={false}>
                 <Text style={styles.colNo}>{index + 1}</Text>
                 <View style={styles.colDesc}>
-                  <Text style={styles.categoryText}>{categoryName}</Text>
                   <Text style={styles.serviceName}>{itemName}</Text>
+                  {(item.service?.regulation || item.service?.regulation_ref?.name) && (
+                    <Text style={styles.regulation}>Regulasi: {item.service?.regulation || item.service?.regulation_ref?.name}</Text>
+                  )}
                   {parameterList && <Text style={styles.parameters}>Parameter: {parameterList}</Text>}
-                  {item.service?.regulation && <Text style={styles.regulation}>Acuan: {item.service.regulation}</Text>}
                 </View>
                 <Text style={styles.colQty}>{item.qty}</Text>
                 <Text style={styles.colPrice}>{Number(item.price_snapshot).toLocaleString("id-ID")}</Text>
@@ -292,19 +341,31 @@ export const QuotationDocument = ({ data }: any) => {
           </View>
         </View>
 
+        {/* Syarat & Ketentuan */}
+        <View style={styles.termsSection} wrap={false}>
+          <Text style={styles.termsTitle}>Syarat & Ketentuan:</Text>
+          <Text style={styles.termsItem}>1. Masa berlaku penawaran harga adalah 30 hari sejak tanggal diterbitkan.</Text>
+          <Text style={styles.termsItem}>2. Harga belum termasuk PPN 11% (kecuali disebutkan sebaliknya pada rincian di atas).</Text>
+          <Text style={styles.termsItem}>3. Waktu pengerjaan (TAT) adalah 10-14 hari kerja setelah sampel diterima di laboratorium dalam kondisi baik.</Text>
+          <Text style={styles.termsItem}>4. Pembayaran dilakukan via transfer bank maksimal 14 hari setelah invoice diterima.</Text>
+          <Text style={styles.termsItem}>5. Pembatalan sepihak setelah sampling/pekerjaan dimulai akan dikenakan biaya operasional penuh.</Text>
+        </View>
+
         <Text style={styles.note}>* Dokumen ini sah dan diterbitkan secara elektronik oleh sistem WahfaLab.</Text>
 
         {/* Signatures */}
         <View style={styles.footer} wrap={false}>
           <View style={styles.signBox}>
-            <Text>Dicetak Oleh,</Text>
-            <View style={styles.signSpace} />
-            <Text style={{ fontWeight: "bold" }}>( WahfaLab Administration )</Text>
+            <Text style={styles.signTitle}>Penerima / Pelanggan,</Text>
+            <Text style={styles.signName}>( ____________________ )</Text>
           </View>
           <View style={styles.signBox}>
-            <Text>Penerima / Pelanggan,</Text>
-            <View style={styles.signSpace} />
-            <Text style={{ fontWeight: "bold" }}>( ____________________ )</Text>
+            <Text style={styles.signTitle}>Diperiksa Oleh,</Text>
+            <Text style={styles.signName}>( ____________________ )</Text>
+          </View>
+          <View style={styles.signBox}>
+            <Text style={styles.signTitle}>Disetujui Oleh,</Text>
+            <Text style={styles.signName}>( WahfaLab Admin )</Text>
           </View>
         </View>
       </Page>

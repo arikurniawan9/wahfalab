@@ -32,6 +32,7 @@ interface InvoiceData {
     category_name?: string | null;
     service_name?: string | null;
     parameters?: string | null;
+    regulation?: string | null;
     quantity: number;
     unit_price: number;
     subtotal: number;
@@ -181,6 +182,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1e293b',
   },
+  regulationText: {
+    fontSize: 7,
+    color: '#0f172a',
+    marginTop: 2,
+    backgroundColor: '#f1f5f9',
+    padding: 2,
+  },
   parameterText: {
     fontSize: 7,
     color: '#64748b',
@@ -276,19 +284,40 @@ const styles = StyleSheet.create({
     lineHeight: 1.4,
   },
   footer: {
-    position: 'absolute',
-    bottom: 30,
-    left: 40,
-    right: 40,
+    marginTop: 30,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
     borderTopWidth: 1,
     borderTopColor: '#f1f5f9',
-    borderTopStyle: 'solid',
     paddingTop: 10,
+  },
+  signBox: {
+    flex: 1,
     textAlign: 'center',
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 4,
+  },
+  signTitle: {
+    fontSize: 8,
+    marginBottom: 40,
+    color: '#64748b',
+  },
+  signName: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#1e293b',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    paddingTop: 4,
   },
   footerText: {
     fontSize: 7,
     color: '#94a3b8',
+    textAlign: 'center',
+    marginTop: 10,
   },
 });
 
@@ -416,6 +445,13 @@ export const InvoicePDF: React.FC<InvoicePDFProps> = ({ data }) => {
           </View>
         </View>
 
+        <View style={{ marginBottom: 15 }}>
+          <Text style={{ fontSize: 9, marginBottom: 4, fontWeight: "bold", color: "#1e293b" }}>Dengan Hormat,</Text>
+          <Text style={{ fontSize: 9, lineHeight: 1.4, color: "#334155" }}>
+            Menindaklanjuti permintaan penawaran harga perihal tersebut di atas, dengan ini kami sampaikan rincian penawaran harga sebagai berikut:
+          </Text>
+        </View>
+
         {/* Items Table */}
         <View style={styles.section}>
           <Text style={[styles.infoSectionTitle, { marginBottom: 5 }]}>Rincian Layanan & Pengujian</Text>
@@ -439,10 +475,10 @@ export const InvoicePDF: React.FC<InvoicePDFProps> = ({ data }) => {
                 >
                   <Text style={styles.col1}>{index + 1}</Text>
                   <View style={styles.col2}>
-                    {item.category_name && (
-                      <Text style={styles.categoryText}>{item.category_name}</Text>
-                    )}
                     <Text style={styles.serviceNameText}>{item.service_name || 'Layanan'}</Text>
+                    {item.regulation && (
+                      <Text style={styles.regulationText}>Regulasi: {item.regulation}</Text>
+                    )}
                     {item.parameters && (
                       <Text style={styles.parameterText}>Parameter: {item.parameters}</Text>
                     )}
@@ -477,17 +513,34 @@ export const InvoicePDF: React.FC<InvoicePDFProps> = ({ data }) => {
 
         {/* Payment Info & Notes */}
         <View style={styles.notes}>
-          <Text style={styles.notesTitle}>Instruksi Pembayaran:</Text>
-          <Text style={styles.notesText}>• Pembayaran dilakukan melalui transfer ke rekening perusahaan.</Text>
-          <Text style={styles.notesText}>• Mohon lampirkan nomor invoice {data.invoice_number} pada berita transfer.</Text>
-          <Text style={styles.notesText}>• Harap konfirmasi pembayaran kepada admin kami setelah transfer berhasil.</Text>
+          <Text style={styles.notesTitle}>Syarat, Ketentuan & Instruksi Pembayaran:</Text>
+          <Text style={styles.notesText}>• Pembayaran dilakukan melalui transfer ke rekening perusahaan dalam jangka waktu maksimal 14 hari.</Text>
+          <Text style={styles.notesText}>• Mohon lampirkan nomor invoice {data.invoice_number} pada berita transfer untuk memudahkan verifikasi.</Text>
+          <Text style={styles.notesText}>• Harap konfirmasi pembayaran kepada admin kami segera setelah transfer berhasil dilakukan.</Text>
+          <Text style={styles.notesText}>• Invoice ini dianggap sah dan merupakan bukti tagihan resmi dari WahfaLab.</Text>
+          <Text style={styles.notesText}>• Keterlambatan pembayaran dapat mengakibatkan penundaan penerbitan Laporan Hasil Uji (LHU).</Text>
         </View>
 
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Terima kasih atas kepercayaan Anda menggunakan layanan WahfaLab</Text>
-          <Text style={[styles.footerText, { marginTop: 2, fontSize: 6 }]}>Dokumen ini diterbitkan secara elektronik dan sah tanpa tanda tangan basah.</Text>
+        {/* Footer / Signatures */}
+        <View style={styles.footer} wrap={false}>
+          <View style={styles.signBox}>
+            <Text style={styles.signTitle}>Pelanggan,</Text>
+            <Text style={styles.signName}>( ____________________ )</Text>
+          </View>
+          <View style={styles.signBox}>
+            <Text style={styles.signTitle}>Hormat Kami,</Text>
+            <Text style={styles.signName}>( ____________________ )</Text>
+          </View>
+          <View style={styles.signBox}>
+            <Text style={styles.signTitle}>Disetujui Oleh,</Text>
+            <Text style={styles.signName}>( WahfaLab Admin )</Text>
+          </View>
         </View>
+
+        <Text style={styles.footerText}>
+          Terima kasih atas kepercayaan Anda menggunakan layanan WahfaLab. 
+          Dokumen ini diterbitkan secara elektronik dan sah tanpa tanda tangan basah.
+        </Text>
       </Page>
     </Document>
   );

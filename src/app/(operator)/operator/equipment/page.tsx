@@ -41,12 +41,18 @@ import {
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 
 export default function OperatorEquipmentPage() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
 
   const loadData = async () => {
     setLoading(true);
@@ -75,6 +81,9 @@ export default function OperatorEquipmentPage() {
     const matchesFilter = filterCategory === "all" || item.category === filterCategory;
     return matchesSearch && matchesFilter;
   });
+
+  const totalPages = Math.ceil(filteredData.length / limit);
+  const paginatedData = filteredData.slice((page - 1) * limit, page * limit);
 
   const categories = Array.from(new Set(data.map((i: any) => i.category).filter(Boolean)));
 
@@ -195,28 +204,25 @@ export default function OperatorEquipmentPage() {
           </TableHeader>
           <TableBody>
             {loading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  <TableCell className="px-6"><div className="h-4 w-4 bg-slate-200 animate-pulse rounded" /></TableCell>
-                  <TableCell className="px-4"><div className="h-4 w-40 bg-slate-200 animate-pulse rounded" /></TableCell>
-                  <TableCell className="px-4"><div className="h-4 w-32 bg-slate-200 animate-pulse rounded" /></TableCell>
-                  <TableCell className="px-4"><div className="h-4 w-48 bg-slate-200 animate-pulse rounded" /></TableCell>
-                  <TableCell className="px-4 text-center"><div className="h-6 w-20 bg-slate-200 animate-pulse rounded-full mx-auto" /></TableCell>
-                  <TableCell className="px-4 text-right"><div className="h-4 w-20 bg-slate-200 animate-pulse rounded ml-auto" /></TableCell>
-                  <TableCell className="px-4 text-center"><div className="h-4 w-16 bg-slate-200 animate-pulse rounded mx-auto" /></TableCell>
-                </TableRow>
-              ))
-            ) : filteredData.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-20">
+                  <div className="flex flex-col items-center justify-center">
+                    <ChemicalLoader />
+                    <p className="mt-4 text-emerald-800 font-bold uppercase tracking-widest text-[10px] animate-pulse">Memuat Katalog Alat...</p>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : paginatedData.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center py-20 text-slate-400 font-medium">
                   Data tidak ditemukan.
                 </TableCell>
               </TableRow>
             ) : (
-              filteredData.map((item: any, idx: number) => (
+              paginatedData.map((item: any, idx: number) => (
                 <TableRow key={item.id} className="hover:bg-emerald-50/5 transition-colors">
                   <TableCell className="px-6 text-center text-slate-400 text-xs font-bold">
-                    {idx + 1}
+                    {(page - 1) * limit + idx + 1}
                   </TableCell>
                   <TableCell className="px-4">
                     <div className="flex items-center gap-2">
@@ -260,6 +266,41 @@ export default function OperatorEquipmentPage() {
             )}
           </TableBody>
         </Table>
+
+        {/* Pagination */}
+        <div className="p-4 border-t flex flex-col md:flex-row items-center justify-between bg-slate-50/50 gap-4">
+          <div className="flex items-center gap-4">
+            <p className="text-xs text-slate-500 font-medium">Total {filteredData.length} alat</p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 font-medium">Tampil:</span>
+              <Select value={limit.toString()} onValueChange={(val) => {
+                setLimit(parseInt(val));
+                setPage(1);
+              }}>
+                <SelectTrigger className="h-8 w-[70px] bg-white text-xs cursor-pointer">
+                  <SelectValue placeholder={limit.toString()} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10" className="cursor-pointer">10</SelectItem>
+                  <SelectItem value="30" className="cursor-pointer">30</SelectItem>
+                  <SelectItem value="50" className="cursor-pointer">50</SelectItem>
+                  <SelectItem value="100" className="cursor-pointer">100</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="h-8 rounded-lg cursor-pointer" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex items-center px-4 text-xs font-bold bg-white border border-slate-200 rounded-lg shadow-sm">
+              {page} / {totalPages || 1}
+            </div>
+            <Button variant="outline" size="sm" className="h-8 rounded-lg cursor-pointer" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );
