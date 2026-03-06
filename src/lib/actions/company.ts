@@ -2,7 +2,19 @@
 
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import fs from 'fs'
+import path from 'path'
+
+// Helper to make string URL friendly
+function slugify(text: string) {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')     // Replace spaces with -
+    .replace(/[^\w-]+/g, '')  // Remove all non-word chars
+    .replace(/--+/g, '-');    // Replace multiple - with single -
+}
 
 export async function getCompanyProfile() {
   try {
@@ -98,80 +110,71 @@ export async function updateCompanyProfile(data: {
 
 export async function uploadCompanyLogo(file: File) {
   try {
-    const supabase = await createClient()
+    const profile = await getCompanyProfile();
+    const companyName = profile?.company_name || 'wahfalab';
     
-    // Upload ke Supabase Storage
-    const fileExt = file.name.split('.').pop()
-    const fileName = `company-logo-${Date.now()}.${fileExt}`
+    // Create slug from company name
+    const slug = slugify(companyName);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${slug}-logo-${Date.now()}.${fileExt}`;
     
-    const arrayBuffer = await file.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
+    // Local directory path
+    const uploadDir = path.join(process.cwd(), 'public', 'img');
     
-    // Coba bucket 'company-assets', jika tidak ada gunakan 'public' atau buat bucket
-    const bucketName = 'company-assets'
-    
-    const { data, error } = await supabase.storage
-      .from(bucketName)
-      .upload(fileName, buffer, {
-        contentType: file.type,
-        upsert: true
-      })
-
-    if (error) {
-      // Jika bucket tidak ditemukan, coba gunakan bucket 'public' sebagai fallback
-      if (error.message.includes('Bucket not found') || error.statusCode === '404') {
-        console.log('Bucket not found, trying to use default storage...')
-        // Return error yang lebih informatif
-        return { 
-          error: 'Bucket storage belum dibuat. Silakan buat bucket "company-assets" di Supabase Dashboard terlebih dahulu.',
-          bucketName 
-        }
-      }
-      throw error
+    // Ensure directory exists
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
     }
 
-    // Get public URL
-    const { data: { publicUrl } } = supabase.storage
-      .from(bucketName)
-      .getPublicUrl(fileName)
+    const filePath = path.join(uploadDir, fileName);
+    
+    // Convert File to Buffer
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    // Write file locally
+    fs.writeFileSync(filePath, buffer);
 
-    // Update company profile with new logo
-    await updateCompanyProfile({ logo_url: publicUrl })
+    // Path for web access
+    const publicUrl = `/img/${fileName}`;
 
-    return { success: true, url: publicUrl }
+    // Update company profile with new local logo path
+    await updateCompanyProfile({ logo_url: publicUrl });
+
+    return { success: true, url: publicUrl };
   } catch (error: any) {
-    console.error('Error uploading logo:', error)
-    return { error: error.message }
+    console.error('Error uploading logo locally:', error);
+    return { error: error.message };
   }
 }
 
 export async function deleteCompanyLogo() {
   try {
-    const profile = await getCompanyProfile()
+    const profile = await getCompanyProfile();
     
-    if (profile?.logo_url) {
-      // Extract filename from URL
-      const urlParts = profile.logo_url.split('/')
-      const fileName = urlParts[urlParts.length - 1]
+    if (profile?.logo_url && profile.logo_url.startsWith('/img/')) {
+      const fileName = profile.logo_url.replace('/img/', '');
+      const filePath = path.join(process.cwd(), 'public', 'img', fileName);
       
-      const supabase = await createClient()
-      const bucketName = 'company-assets'
-      
-      const { error } = await supabase.storage
-        .from(bucketName)
-        .remove([fileName])
-      
-      if (error && !error.message.includes('Bucket not found')) {
-        console.error('Error removing from storage:', error)
+      // Delete local file if exists
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
       }
     }
 
-    // Update database
-    await updateCompanyProfile({ logo_url: undefined })
+    // Update database, setting logo_url back to null
+    const existing = await prisma.companyProfile.findFirst();
+    if (existing) {
+      await prisma.companyProfile.update({
+        where: { id: existing.id },
+        data: { logo_url: null }
+      });
+    }
 
-    return { success: true }
+    revalidatePath('/admin/settings/company');
+    return { success: true };
   } catch (error: any) {
-    console.error('Error deleting logo:', error)
-    return { error: error.message }
+    console.error('Error deleting local logo:', error);
+    return { error: error.message };
   }
 }

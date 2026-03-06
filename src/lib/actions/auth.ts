@@ -146,7 +146,13 @@ export async function getProfile() {
   })
 }
 
-export async function updateProfile(formData: { full_name: string; email: string }) {
+export async function updateProfile(formData: { 
+  full_name: string; 
+  email: string;
+  avatar_url?: string;
+  phone?: string;
+  address?: string;
+}) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -161,6 +167,8 @@ export async function updateProfile(formData: { full_name: string; email: string
       data: {
         full_name: formData.full_name,
         email: formData.email,
+        phone: formData.phone,
+        address: formData.address,
       }
     })
 
@@ -169,6 +177,7 @@ export async function updateProfile(formData: { full_name: string; email: string
       email: formData.email,
       data: {
         full_name: formData.full_name,
+        avatar_url: formData.avatar_url,
       }
     })
 

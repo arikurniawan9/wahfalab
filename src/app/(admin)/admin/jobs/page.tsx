@@ -46,14 +46,20 @@ import {
   CreditCard,
   Keyboard,
   Info,
-  UserPlus
+  UserPlus,
+  ArrowUpRight,
+  LayoutDashboard,
+  Activity,
+  Layers,
+  ArrowRightCircle,
+  Maximize2,
+  MoreHorizontal
 } from "lucide-react";
 import { LoadingOverlay, LoadingButton } from "@/components/ui";
-import { TableSkeleton, PageSkeleton } from "@/components/ui/skeleton";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { getJobOrders, getJobStats, getFieldOfficers, getCustomers, deleteJobOrderWithPhotos } from "@/lib/actions/jobs";
 import { getFieldAssistants } from "@/lib/actions/field-assistant";
 import { createSamplingAssignment } from "@/lib/actions/sampling";
-import { createTravelOrder } from "@/lib/actions/travel-order";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -90,91 +96,147 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { format } from "date-fns";
+import { id } from "date-fns/locale";
 
-// Stat Card Component Premium
-function StatCard({ title, value, subValue, icon: Icon, color, onClick, active }: any) {
-  const colors: any = {
-    blue: "bg-blue-50 text-blue-600 border-blue-100",
-    amber: "bg-amber-50 text-amber-600 border-amber-100",
-    indigo: "bg-indigo-50 text-indigo-600 border-indigo-100",
-    purple: "bg-purple-50 text-purple-600 border-purple-100",
-    emerald: "bg-emerald-50 text-emerald-600 border-emerald-100",
-    slate: "bg-slate-50 text-slate-600 border-slate-100",
-    red: "bg-red-50 text-red-600 border-red-100",
-    violet: "bg-violet-50 text-violet-600 border-violet-100",
-    orange: "bg-orange-50 text-orange-600 border-orange-100",
+// --- PREMIUM COMPONENTS ---
+
+/**
+ * Premium Stat Card with glassmorphism and animated indicators
+ */
+function PremiumStatCard({ title, value, subValue, icon: Icon, color, onClick, active }: any) {
+  const colorVariants: any = {
+    emerald: "from-emerald-500/10 to-emerald-500/5 text-emerald-600 border-emerald-500/20",
+    blue: "from-blue-500/10 to-blue-500/5 text-blue-600 border-blue-500/20",
+    amber: "from-amber-500/10 to-amber-500/5 text-amber-600 border-amber-500/20",
+    indigo: "from-indigo-500/10 to-indigo-500/5 text-indigo-600 border-indigo-500/20",
+    rose: "from-rose-500/10 to-rose-500/5 text-rose-600 border-rose-500/20",
+    slate: "from-slate-500/10 to-slate-500/5 text-slate-600 border-slate-500/20",
+  };
+
+  const iconColors: any = {
+    emerald: "bg-emerald-500 text-white",
+    blue: "bg-blue-500 text-white",
+    amber: "bg-amber-500 text-white",
+    indigo: "bg-indigo-500 text-white",
+    rose: "bg-rose-500 text-white",
+    slate: "bg-slate-500 text-white",
   };
 
   return (
-    <Card
-      className={cn(
-        "border-none shadow-sm transition-all duration-300 cursor-pointer overflow-hidden flex flex-col justify-center rounded-2xl",
-        active ? "ring-2 ring-emerald-500 shadow-xl scale-[1.02]" : "hover:shadow-md hover:translate-y-[-2px]",
-        colors[color]
-      )}
+    <div 
       onClick={onClick}
+      className={cn(
+        "relative group cursor-pointer transition-all duration-500 p-[1px] rounded-[2rem] overflow-hidden",
+        active ? "bg-gradient-to-br from-emerald-500 to-teal-500 shadow-2xl scale-[1.02]" : "hover:scale-[1.02]"
+      )}
     >
-      <CardContent className="p-4 flex items-center gap-4">
-        <div className={cn("p-3 rounded-2xl bg-white shadow-sm shrink-0")}>
-          <Icon className="h-5 w-5" />
+      <div className={cn(
+        "bg-white h-full w-full rounded-[1.95rem] p-6 flex flex-col justify-between transition-all duration-500",
+        active ? "bg-opacity-95" : "bg-opacity-100 hover:bg-slate-50"
+      )}>
+        <div className="flex justify-between items-start mb-4">
+          <div className={cn(
+            "h-12 w-12 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-500 group-hover:rotate-12",
+            active ? "bg-emerald-600 text-white" : iconColors[color] || "bg-slate-100 text-slate-500"
+          )}>
+            <Icon className="h-6 w-6" />
+          </div>
+          {active && <div className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />}
         </div>
-        <div className="min-w-0">
-          <p className="text-[9px] font-black uppercase opacity-60 tracking-widest leading-none mb-1">{title}</p>
-          <p className="text-xl font-black tracking-tight leading-none text-slate-900">{value}</p>
-          {subValue && <p className="text-[8px] font-bold opacity-50 uppercase tracking-tighter mt-1">{subValue}</p>}
+        
+        <div>
+          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">{title}</h3>
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-black text-slate-900 tracking-tighter">{value}</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{subValue}</span>
+          </div>
         </div>
-      </CardContent>
-    </Card>
+        
+        <div className="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between">
+          <span className="text-[8px] font-bold text-emerald-600 uppercase tracking-widest">View Details</span>
+          <ArrowUpRight className="h-3 w-3 text-slate-300 group-hover:text-emerald-500 transition-colors" />
+        </div>
+      </div>
+    </div>
   );
 }
 
-// Workflow Timeline Component Premium
-function WorkflowTimeline({ status }: any) {
+/**
+ * Professional Workflow Stepper
+ */
+function ProfessionalStepper({ status }: any) {
   const stages = [
-    { id: 1, name: "Order", icon: FileText, complete: true },
-    { id: 2, name: "Sampling", icon: MapPin, complete: ["analysis_ready", "analysis", "analysis_done", "reporting", "completed"].includes(status) },
-    { id: 3, name: "Analisis", icon: FlaskConical, complete: ["analysis_done", "reporting", "completed"].includes(status) },
-    { id: 4, name: "Reporting", icon: FileText, complete: ["completed"].includes(status) },
-    { id: 5, name: "Selesai", icon: CheckCircle, complete: status === "completed" },
+    { id: 'scheduled', label: "Order", icon: FileText },
+    { id: 'sampling', label: "Sampling", icon: MapPin },
+    { id: 'analysis', label: "Analisis", icon: FlaskConical },
+    { id: 'reporting', label: "Reporting", icon: FileText },
+    { id: 'completed', label: "Selesai", icon: CheckCircle },
   ];
 
-  const getStatusColor = (stage: any) => {
-    if (stage.complete) return "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-900/10";
-    if (stage.id === stages.findIndex(s => !s.complete) + 1) return "bg-amber-500 text-white border-amber-500 animate-pulse shadow-md shadow-amber-900/10";
-    return "bg-slate-50 text-slate-300 border-slate-100";
+  const currentIdx = stages.findIndex(s => s.id === status);
+  const effectiveIdx = status === 'analysis_ready' ? 1 : status === 'analysis_done' ? 3 : currentIdx;
+  
+  // Custom logic for intermediate states
+  const getStageStatus = (idx: number) => {
+    if (status === 'completed') return 'complete';
+    
+    const stageOrder = ['scheduled', 'sampling', 'analysis_ready', 'analysis', 'analysis_done', 'reporting', 'completed'];
+    const currentPos = stageOrder.indexOf(status);
+    
+    // Mapping stage indices to status ranges
+    if (idx === 0) return currentPos >= 0 ? 'complete' : 'pending';
+    if (idx === 1) return currentPos >= 1 ? (currentPos === 1 ? 'active' : 'complete') : 'pending';
+    if (idx === 2) return currentPos >= 2 ? (currentPos >= 2 && currentPos <= 4 ? (currentPos === 3 ? 'active' : 'complete') : 'complete') : 'pending';
+    if (idx === 3) return currentPos >= 5 ? (currentPos === 5 ? 'active' : 'complete') : 'pending';
+    if (idx === 4) return currentPos === 6 ? 'active' : 'pending';
+    
+    return 'pending';
   };
 
   return (
-    <div className="flex items-center gap-1.5 min-w-[220px]">
-      {stages.map((stage, index) => (
-        <React.Fragment key={stage.id}>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className={cn(
-                  "w-7 h-7 rounded-xl border flex items-center justify-center transition-all duration-500",
-                  getStatusColor(stage)
-                )}>
-                  <stage.icon className="h-3.5 w-3.5" />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent className="rounded-lg border-emerald-50 shadow-xl"><p className="text-[9px] font-black uppercase tracking-widest">{stage.name}</p></TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          {index < stages.length - 1 && (
-            <div className={cn(
-              "w-3 h-0.5 transition-all duration-1000 rounded-full",
-              stage.complete ? "bg-emerald-500" : "bg-slate-100"
-            )} />
-          )}
-        </React.Fragment>
-      ))}
+    <div className="flex items-center gap-1 group/stepper">
+      {stages.map((stage, i) => {
+        const stageStatus = getStageStatus(i);
+        return (
+          <React.Fragment key={stage.id}>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className={cn(
+                    "relative h-9 w-9 rounded-2xl flex items-center justify-center transition-all duration-500 border-2",
+                    stageStatus === 'complete' ? "bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/20" :
+                    stageStatus === 'active' ? "bg-white border-emerald-500 text-emerald-600 animate-pulse shadow-md" :
+                    "bg-slate-50 border-slate-100 text-slate-300 group-hover/stepper:border-slate-200"
+                  )}>
+                    <stage.icon className="h-4 w-4" />
+                    {stageStatus === 'complete' && (
+                      <div className="absolute -top-1 -right-1 h-4 w-4 bg-white rounded-full flex items-center justify-center shadow-sm">
+                        <CheckCircle className="h-3 w-3 text-emerald-500" />
+                      </div>
+                    )}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="bg-slate-900 text-white border-none rounded-xl py-2 px-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest">{stage.label}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            {i < stages.length - 1 && (
+              <div className={cn(
+                "h-[3px] w-4 rounded-full transition-all duration-1000",
+                stageStatus === 'complete' ? "bg-emerald-500" : "bg-slate-100"
+              )} />
+            )}
+          </React.Fragment>
+        );
+      })}
     </div>
   );
 }
 
 const statusOptions = [
-  { value: "all", label: "Semua Status", color: "bg-slate-100 text-slate-700", icon: Briefcase },
+  { value: "all", label: "Semua", color: "bg-slate-900 text-white", icon: Layers },
   { value: "scheduled", label: "Order", color: "bg-blue-50 text-blue-700 border-blue-100", icon: Clock },
   { value: "sampling", label: "Sampling", color: "bg-amber-50 text-amber-700 border-amber-100", icon: MapPin },
   { value: "analysis_ready", label: "Siap Analisis", color: "bg-emerald-50 text-emerald-700 border-emerald-100", icon: ClipboardCheck },
@@ -198,7 +260,6 @@ export default function AdminJobProgressPage() {
   const [showFilters, setShowFilters] = useState(false);
 
   const [selectedJob, setSelectedJob] = useState<any>(null);
-  const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -302,149 +363,357 @@ export default function AdminJobProgressPage() {
     finally { setDeleting(false); }
   };
 
-  const getStatusLabel = (status: string) => {
-    const opt = statusOptions.find(o => o.value === status);
-    return opt ? opt.label : status.toUpperCase();
-  };
-
   const getStatusBadge = (status: string) => {
     const opt = statusOptions.find(o => o.value === status);
     const StatusIcon = opt?.icon || Clock;
     return (
-      <Badge variant="outline" className={cn(
-        "px-3 py-1 rounded-full font-black text-[9px] uppercase tracking-widest border gap-2",
-        opt?.color || "bg-slate-100"
+      <div className={cn(
+        "inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border font-black text-[9px] uppercase tracking-widest transition-all",
+        opt?.color || "bg-slate-100 text-slate-500 border-slate-200"
       )}>
-        <StatusIcon className="h-3 w-3" /> {opt?.label || status}
-      </Badge>
+        <StatusIcon className="h-3 w-3" />
+        {opt?.label || status}
+      </div>
     );
   };
 
   return (
-    <div className="p-4 md:p-10 bg-slate-50/30 min-h-screen space-y-10 pb-24 md:pb-10 font-[family-name:var(--font-geist-sans)]">
-      {/* Header Premium */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight">Progress Pekerjaan</h1>
-          <p className="text-slate-500 text-sm font-medium">Monitoring operasional laboratorium secara end-to-end.</p>
+    <div className="p-4 md:p-8 bg-slate-50/20 min-h-screen space-y-8 pb-24 md:pb-12 font-[family-name:var(--font-geist-sans)] max-w-[1600px] mx-auto">
+      {/* Premium Header Section */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6 border-b border-slate-100 pb-8">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em]">
+            <Activity className="h-4 w-4" /> Pemantauan Real-time
+          </div>
+          <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight leading-none">Infrastruktur Pekerjaan</h1>
+          <p className="text-slate-400 text-sm font-medium">Pengelolaan alur kerja operasional laboratorium WahfaLab.</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => loadData()} className="h-11 px-5 rounded-xl border-slate-200 bg-white hover:bg-slate-50 transition-all font-bold uppercase text-[10px] tracking-widest">
-            <History className="h-4 w-4 mr-2 text-emerald-600" /> Refresh Data
+        
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col items-end mr-4 hidden sm:flex">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sinkronisasi Database</span>
+            <span className="text-xs font-bold text-emerald-600 flex items-center gap-1.5">
+              <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Update sistem aktif
+            </span>
+          </div>
+          <Button variant="outline" onClick={() => loadData()} className="h-14 px-8 rounded-2xl bg-white border-slate-200 hover:border-emerald-500 hover:text-emerald-600 transition-all font-black uppercase text-[10px] tracking-widest shadow-sm">
+            <History className={cn("h-4 w-4 mr-2 text-emerald-600", loading && "animate-spin")} /> Segarkan Sistem
           </Button>
         </div>
       </div>
 
-      {/* Stats Dashboard */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
-        <StatCard title="Total" value={stats.total || 0} icon={Briefcase} color="slate" active={filterStatus === 'all'} onClick={() => setFilterStatus('all')} />
-        <StatCard title="Order" value={stats.scheduled || 0} icon={Clock} color="blue" active={filterStatus === 'scheduled'} onClick={() => setFilterStatus('scheduled')} />
-        <StatCard title="Sampling" value={stats.sampling || 0} icon={MapPin} color="amber" active={filterStatus === 'sampling'} onClick={() => setFilterStatus('sampling')} />
-        <StatCard title="Analisis" value={(stats.analysis_ready || 0) + (stats.analysis || 0)} icon={FlaskConical} color="indigo" active={filterStatus === 'analysis'} onClick={() => setFilterStatus('analysis')} />
-        <StatCard title="Reporting" value={stats.reporting || 0} icon={FileText} color="purple" active={filterStatus === 'reporting'} onClick={() => setFilterStatus('reporting')} />
-        <StatCard title="Selesai" value={stats.completed || 0} icon={CheckCircle} color="emerald" active={filterStatus === 'completed'} onClick={() => setFilterStatus('completed')} />
+      {/* Premium Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-6">
+        <PremiumStatCard 
+          title="Total Alur Kerja" 
+          value={stats.total || 0} 
+          subValue="Pelacakan Aktif" 
+          icon={Layers} 
+          color="slate" 
+          active={filterStatus === 'all'} 
+          onClick={() => setFilterStatus('all')} 
+        />
+        <PremiumStatCard 
+          title="Terjadwal" 
+          value={stats.scheduled || 0} 
+          subValue="Order Baru" 
+          icon={Clock} 
+          color="blue" 
+          active={filterStatus === 'scheduled'} 
+          onClick={() => setFilterStatus('scheduled')} 
+        />
+        <PremiumStatCard 
+          title="Sampling" 
+          value={stats.sampling || 0} 
+          subValue="Di Lokasi" 
+          icon={MapPin} 
+          color="amber" 
+          active={filterStatus === 'sampling'} 
+          onClick={() => setFilterStatus('sampling')} 
+        />
+        <PremiumStatCard 
+          title="Laboratorium" 
+          value={(stats.analysis_ready || 0) + (stats.analysis || 0)} 
+          subValue="Pengujian Lab" 
+          icon={FlaskConical} 
+          color="indigo" 
+          active={filterStatus === 'analysis'} 
+          onClick={() => setFilterStatus('analysis')} 
+        />
+        <PremiumStatCard 
+          title="Pelaporan" 
+          value={stats.reporting || 0} 
+          subValue="Verifikasi Hasil" 
+          icon={FileText} 
+          color="rose" 
+          active={filterStatus === 'reporting'} 
+          onClick={() => setFilterStatus('reporting')} 
+        />
+        <PremiumStatCard 
+          title="Selesai" 
+          value={stats.completed || 0} 
+          subValue="Terarsip" 
+          icon={ShieldCheck} 
+          color="emerald" 
+          active={filterStatus === 'completed'} 
+          onClick={() => setFilterStatus('completed')} 
+        />
       </div>
 
-      {/* Main Table Container */}
-      <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
-        <div className="p-6 border-b bg-white flex flex-col lg:flex-row gap-4 items-center">
-          <div className="relative flex-1 w-full">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
+      {/* Main Table Container with Glass Effect */}
+      <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/60 border border-slate-100 overflow-hidden transition-all duration-700">
+        {/* Table Toolbar */}
+        <div className="p-8 border-b bg-white flex flex-col xl:flex-row gap-6 items-center">
+          <div className="relative flex-1 w-full group">
+            <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
+              <Search className="h-5 w-5 text-slate-300 group-focus-within:text-emerald-500 transition-colors" />
+            </div>
             <Input
-              placeholder="Cari nomor job, penawaran, atau klien..."
+              placeholder="Cari berdasarkan Kode Pelacakan, Penawaran, atau Nama Klien..."
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="pl-12 h-12 bg-slate-50 border-none rounded-2xl font-medium text-sm focus-visible:ring-emerald-500"
+              className="pl-14 h-16 bg-slate-50 border-none rounded-2xl font-bold text-sm focus-visible:ring-2 focus-visible:ring-emerald-500/20 placeholder:text-slate-300 placeholder:font-medium transition-all"
             />
           </div>
-          <div className="flex gap-2 w-full lg:w-auto">
-            <Button variant="outline" onClick={() => setShowFilters(!showFilters)} className={cn("h-12 px-6 rounded-2xl border-slate-100 font-black uppercase text-[10px] tracking-widest transition-all", showFilters ? "bg-emerald-600 text-white hover:bg-emerald-700 border-emerald-600" : "bg-slate-50 hover:bg-slate-100")}>
-              <Filter className="h-4 w-4 mr-2" /> Filter Lanjutan
+          
+          <div className="flex items-center gap-3 w-full xl:w-auto">
+            <div className="flex bg-slate-100 p-1.5 rounded-2xl">
+              {statusOptions.slice(0, 4).map(opt => (
+                <Button 
+                  key={opt.value}
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => setFilterStatus(opt.value)}
+                  className={cn(
+                    "h-10 px-4 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all",
+                    filterStatus === opt.value ? "bg-white text-emerald-700 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                  )}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-10 w-10 p-0 rounded-xl text-slate-400">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 shadow-2xl border-slate-50">
+                  {statusOptions.slice(4).map(opt => (
+                    <DropdownMenuItem 
+                      key={opt.value} 
+                      onClick={() => setFilterStatus(opt.value)}
+                      className={cn(
+                        "rounded-xl p-3 text-[10px] font-black uppercase tracking-widest",
+                        filterStatus === opt.value ? "bg-emerald-50 text-emerald-700" : "text-slate-600"
+                      )}
+                    >
+                      {opt.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            <Button 
+              variant="outline" 
+              onClick={() => setShowFilters(!showFilters)} 
+              className={cn(
+                "h-14 px-8 rounded-2xl border-none font-black uppercase text-[10px] tracking-widest transition-all shadow-sm", 
+                showFilters ? "bg-emerald-950 text-white hover:bg-slate-900" : "bg-slate-50 hover:bg-slate-100 text-slate-600"
+              )}
+            >
+              <Filter className="h-4 w-4 mr-3" /> Filter
             </Button>
           </div>
         </div>
 
+        {/* Advanced Filters Panel */}
         {showFilters && (
-          <div className="p-6 bg-slate-50/50 border-b border-slate-100 grid grid-cols-1 md:grid-cols-4 gap-4 animate-in slide-in-from-top-4 duration-300">
-            <div className="space-y-1.5"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Klien</label>
+          <div className="p-8 bg-slate-50/50 border-b border-slate-100 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-in slide-in-from-top-6 duration-500">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                <User className="h-3 w-3" /> Database Klien
+              </label>
               <Select value={filters.customerId} onValueChange={(v) => setFilters({...filters, customerId: v})}>
-                <SelectTrigger className="bg-white border-slate-200 rounded-xl h-10 text-xs font-bold"><SelectValue placeholder="Semua Klien" /></SelectTrigger>
-                <SelectContent className="rounded-xl">{customers.map(c => <SelectItem key={c.id} value={c.id} className="text-xs font-bold">{c.full_name}</SelectItem>)}</SelectContent>
+                <SelectTrigger className="bg-white border-none rounded-2xl h-14 text-xs font-black uppercase tracking-tight shadow-sm px-5">
+                  <SelectValue placeholder="Semua Klien" />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl border-none shadow-2xl max-h-80">
+                  {customers.map(c => <SelectItem key={c.id} value={c.id} className="text-[10px] font-black uppercase py-3">{c.full_name}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Petugas Sampling</label>
+            
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                <ShieldCheck className="h-3 w-3" /> Personel Lapangan
+              </label>
               <Select value={filters.fieldOfficerId} onValueChange={(v) => setFilters({...filters, fieldOfficerId: v})}>
-                <SelectTrigger className="bg-white border-slate-200 rounded-xl h-10 text-xs font-bold"><SelectValue placeholder="Semua Petugas" /></SelectTrigger>
-                <SelectContent className="rounded-xl">{fieldOfficers.map(o => <SelectItem key={o.id} value={o.id} className="text-xs font-bold">{o.full_name}</SelectItem>)}</SelectContent>
+                <SelectTrigger className="bg-white border-none rounded-2xl h-14 text-xs font-black uppercase tracking-tight shadow-sm px-5">
+                  <SelectValue placeholder="Semua Petugas" />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl border-none shadow-2xl max-h-80">
+                  {fieldOfficers.map(o => <SelectItem key={o.id} value={o.id} className="text-[10px] font-black uppercase py-4">{o.full_name}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Dari Tanggal</label><Input type="date" value={filters.dateFrom} onChange={(e) => setFilters({...filters, dateFrom: e.target.value})} className="bg-white border-slate-200 rounded-xl h-10 text-xs font-bold" /></div>
-            <div className="space-y-1.5 flex items-end"><Button variant="ghost" onClick={() => { setFilters({dateFrom:"", dateTo:"", fieldOfficerId:"", customerId:""}); setPage(1); }} className="text-rose-500 font-black text-[9px] uppercase tracking-widest h-10 hover:bg-rose-50 rounded-xl w-full">Reset Filter</Button></div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                <Calendar className="h-3 w-3" /> Tanggal Awal
+              </label>
+              <Input 
+                type="date" 
+                value={filters.dateFrom} 
+                onChange={(e) => setFilters({...filters, dateFrom: e.target.value})} 
+                className="bg-white border-none rounded-2xl h-14 text-xs font-black uppercase shadow-sm px-5" 
+              />
+            </div>
+
+            <div className="flex items-end gap-3">
+              <Button 
+                variant="ghost" 
+                onClick={() => { setFilters({dateFrom:"", dateTo:"", fieldOfficerId:"", customerId:""}); setPage(1); }} 
+                className="text-rose-600 font-black text-[10px] uppercase tracking-widest h-14 hover:bg-rose-50 rounded-2xl flex-1 transition-all"
+              >
+                Reset
+              </Button>
+              <Button 
+                onClick={() => loadData()}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-widest h-14 rounded-2xl flex-1 shadow-lg shadow-emerald-900/10 transition-all"
+              >
+                Terapkan
+              </Button>
+            </div>
           </div>
         )}
 
-        <div className="overflow-x-auto">
+        {/* Premium Data Table */}
+        <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200">
           <Table>
-            <TableHeader className="bg-slate-50/50">
-              <TableRow className="border-b border-slate-100">
-                <TableHead className="px-8 py-6 font-black uppercase tracking-widest text-[9px] text-slate-400">Pekerjaan</TableHead>
-                <TableHead className="px-4 py-6 font-black uppercase tracking-widest text-[9px] text-slate-400">Alur Progres</TableHead>
-                <TableHead className="px-4 py-6 font-black uppercase tracking-widest text-[9px] text-slate-400">Informasi Klien</TableHead>
-                <TableHead className="px-4 py-6 font-black uppercase tracking-widest text-[9px] text-slate-400 text-center">Status</TableHead>
-                <TableHead className="px-8 py-6 font-black uppercase tracking-widest text-[9px] text-slate-400 text-center">Aksi</TableHead>
+            <TableHeader className="bg-slate-50/30">
+              <TableRow className="border-b border-slate-50">
+                <TableHead className="px-10 py-8 font-black uppercase tracking-[0.2em] text-[10px] text-slate-400 w-[200px]">ID Infrastruktur</TableHead>
+                <TableHead className="px-6 py-8 font-black uppercase tracking-[0.2em] text-[10px] text-slate-400">Progres Alur Kerja</TableHead>
+                <TableHead className="px-6 py-8 font-black uppercase tracking-[0.2em] text-[10px] text-slate-400">Profil Klien</TableHead>
+                <TableHead className="px-6 py-8 font-black uppercase tracking-[0.2em] text-[10px] text-slate-400 text-center">Status</TableHead>
+                <TableHead className="px-10 py-8 font-black uppercase tracking-[0.2em] text-[10px] text-slate-400 text-right">Kontrol</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={5} className="p-0"><TableSkeleton rows={limit} className="p-8" /></TableCell></TableRow>
-              ) : data.items.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-32 bg-slate-50/30">
-                  <Briefcase className="h-12 w-12 text-slate-100 mx-auto mb-4" />
-                  <p className="text-slate-400 font-black uppercase tracking-widest text-[10px]">Tidak ada data progress ditemukan</p>
-                </TableCell></TableRow>
-              ) : (
-                data.items.map((job: any) => (
-                  <TableRow key={job.id} className="hover:bg-emerald-50/20 transition-all group">
-                    <TableCell className="px-8 py-6">
-                      <div className="space-y-1">
-                        <span className="font-black text-emerald-950 uppercase tracking-tighter text-sm block">{job.tracking_code}</span>
-                        <div className="flex items-center gap-2 text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                          <FileText className="h-3 w-3" /> {job.quotation?.quotation_number}
+                Array.from({ length: 5 }).map((_, i) => (
+                  <TableRow key={i} className="border-b border-slate-50">
+                    <TableCell colSpan={5} className="px-10 py-10">
+                      <div className="flex items-center gap-6">
+                        <div className="h-16 w-16 bg-slate-100 animate-pulse rounded-2xl" />
+                        <div className="space-y-3 flex-1">
+                          <div className="h-4 w-1/4 bg-slate-100 animate-pulse rounded-full" />
+                          <div className="h-3 w-1/2 bg-slate-50 animate-pulse rounded-full" />
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="px-4 py-6"><WorkflowTimeline status={job.status} /></TableCell>
-                    <TableCell className="px-4 py-6">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="font-black text-slate-700 uppercase tracking-tight text-[11px]">{job.quotation?.profile?.full_name}</span>
-                        <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate max-w-[150px]">{job.quotation?.profile?.company_name || "PERSONAL CLIENT"}</span>
+                  </TableRow>
+                ))
+              ) : data.items.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-40 bg-white">
+                    <div className="relative inline-block">
+                      <div className="absolute inset-0 bg-emerald-100 rounded-full blur-3xl opacity-20 animate-pulse" />
+                      <Briefcase className="h-20 w-20 text-slate-100 relative z-10 mx-auto mb-6" />
+                    </div>
+                    <p className="text-slate-400 font-black uppercase tracking-[0.3em] text-[11px]">Sistem Kosong • Tidak ada pekerjaan aktif</p>
+                    <Button variant="link" className="mt-4 text-emerald-600 font-black uppercase text-[10px]" onClick={() => loadData()}>Hubungkan Ulang Sistem</Button>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                data.items.map((job: any) => (
+                  <TableRow key={job.id} className="border-b border-slate-50 hover:bg-emerald-50/10 transition-all duration-300 group">
+                    <TableCell className="px-10 py-8">
+                      <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 rounded-2xl bg-emerald-50 flex items-center justify-center border border-emerald-100/50 group-hover:scale-110 transition-transform duration-500">
+                          <Layers className="h-5 w-5 text-emerald-600" />
+                        </div>
+                        <div className="space-y-1">
+                          <span className="font-black text-slate-900 uppercase tracking-tighter text-base block group-hover:text-emerald-700 transition-colors">
+                            {job.tracking_code}
+                          </span>
+                          <div className="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-[0.15em]">
+                            <FileText className="h-3 w-3" /> {job.quotation?.quotation_number}
+                          </div>
+                        </div>
                       </div>
                     </TableCell>
-                    <TableCell className="px-4 py-6 text-center">{getStatusBadge(job.status)}</TableCell>
-                    <TableCell className="px-8 py-6 text-center">
-                      <div className="flex justify-center gap-2">
-                        <Link href={`/admin/jobs/${job.id}`}>
-                          <Button variant="ghost" size="icon" className="h-10 w-10 rounded-2xl bg-slate-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all shadow-sm">
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </Link>
+                    
+                    <TableCell className="px-6 py-8">
+                      <ProfessionalStepper status={job.status} />
+                    </TableCell>
+                    
+                    <TableCell className="px-6 py-8">
+                      <div className="flex items-center gap-4">
+                        <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center border-2 border-white shadow-sm ring-1 ring-slate-100">
+                          <span className="text-xs font-black text-slate-500">{(job.quotation?.profile?.full_name || 'U').charAt(0)}</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="font-black text-slate-800 uppercase tracking-tight text-[11px] leading-tight mb-0.5">
+                            {job.quotation?.profile?.full_name}
+                          </span>
+                          <span className="text-[8px] font-black text-slate-400 uppercase tracking-[0.1em] flex items-center gap-1.5">
+                            <Briefcase className="h-2.5 w-2.5" /> {job.quotation?.profile?.company_name || "Klien Personal"}
+                          </span>
+                        </div>
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell className="px-6 py-8 text-center">
+                      <div className="scale-90 transform origin-center">
+                        {getStatusBadge(job.status)}
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell className="px-10 py-8 text-right">
+                      <div className="flex justify-end gap-3">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Link href={`/admin/jobs/${job.id}`}>
+                                <Button variant="ghost" size="icon" className="h-12 w-12 rounded-2xl bg-slate-50 text-slate-400 hover:bg-emerald-600 hover:text-white transition-all duration-500 shadow-sm border border-slate-100/50">
+                                  <Maximize2 className="h-5 w-5" />
+                                </Button>
+                              </Link>
+                            </TooltipTrigger>
+                            <TooltipContent className="bg-emerald-900 text-white rounded-xl py-2 px-3"><p className="text-[9px] font-black uppercase">Buka Pemantauan</p></TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-2xl bg-slate-50 text-slate-400 hover:text-emerald-600 transition-all shadow-sm">
-                              <MoreVertical className="h-4 w-4" />
+                            <Button variant="ghost" size="icon" className="h-12 w-12 rounded-2xl bg-white text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-500 shadow-sm border border-slate-100">
+                              <MoreVertical className="h-5 w-5" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-64 p-2 rounded-2xl border-emerald-50 shadow-2xl">
-                            <DropdownMenuLabel className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-3 py-2">Navigasi Cepat</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => openAssignDialog(job)} className="rounded-xl p-3 text-[10px] font-bold uppercase tracking-widest" disabled={job.status !== 'scheduled'}>
-                              <UserPlus className="mr-3 h-4 w-4 text-emerald-500" /> Tugaskan Petugas
+                          <DropdownMenuContent align="end" className="w-72 p-3 rounded-[2rem] border-none shadow-2xl bg-white/95 backdrop-blur-xl">
+                            <DropdownMenuLabel className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 py-3">Kontrol Infrastruktur</DropdownMenuLabel>
+                            <DropdownMenuSeparator className="bg-slate-50" />
+                            <DropdownMenuItem onClick={() => openAssignDialog(job)} className="rounded-2xl p-4 text-[11px] font-black uppercase tracking-widest text-slate-700 hover:bg-emerald-50 focus:bg-emerald-50 focus:text-emerald-700 transition-colors" disabled={job.status !== 'scheduled'}>
+                              <div className="h-8 w-8 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center mr-4">
+                                <UserPlus className="h-4 w-4" />
+                              </div>
+                              Tugaskan Personel
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="rounded-xl p-3 text-[10px] font-bold uppercase tracking-widest">
-                              <Printer className="mr-3 h-4 w-4 text-blue-500" /> Cetak Surat Jalan
+                            <DropdownMenuItem className="rounded-2xl p-4 text-[11px] font-black uppercase tracking-widest text-slate-700 hover:bg-blue-50 focus:bg-blue-50 focus:text-blue-700 transition-colors">
+                              <div className="h-8 w-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center mr-4">
+                                <Printer className="h-4 w-4" />
+                              </div>
+                              Cetak Manifes
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => { setSelectedJob(job); setIsDeleteDialogOpen(true); }} className="rounded-xl p-3 text-[10px] font-bold uppercase tracking-widest text-rose-600">
-                              <Trash2 className="mr-3 h-4 w-4" /> Hapus Pekerjaan
+                            <DropdownMenuSeparator className="bg-slate-50" />
+                            <DropdownMenuItem onClick={() => { setSelectedJob(job); setIsDeleteDialogOpen(true); }} className="rounded-2xl p-4 text-[11px] font-black uppercase tracking-widest text-rose-600 hover:bg-rose-50 focus:bg-rose-50 transition-colors">
+                              <div className="h-8 w-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center mr-4">
+                                <Trash2 className="h-4 w-4" />
+                              </div>
+                              Hentikan Pekerjaan
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -457,36 +726,147 @@ export default function AdminJobProgressPage() {
           </Table>
         </div>
 
-        <div className="p-6 border-t flex flex-col md:flex-row items-center justify-between bg-slate-50/50 gap-6">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total {data.total} Pekerjaan</p>
-          <div className="flex gap-3">
-            <Button variant="outline" size="icon" className="h-10 w-10 rounded-2xl bg-white border-slate-200 hover:bg-emerald-50 hover:text-emerald-600 transition-all" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
-            <div className="flex items-center px-6 text-[10px] font-black bg-white border border-slate-200 rounded-2xl shadow-sm text-emerald-900 tracking-[0.2em]">{page} / {data.pages}</div>
-            <Button variant="outline" size="icon" className="h-10 w-10 rounded-2xl bg-white border-slate-200 hover:bg-emerald-50 hover:text-emerald-600 transition-all" disabled={page === data.pages} onClick={() => setPage(p => p + 1)}><ChevronRight className="h-4 w-4" /></Button>
+        {/* Premium Pagination */}
+        <div className="p-8 border-t flex flex-col sm:flex-row items-center justify-between bg-slate-50/30 gap-6">
+          <div className="flex items-center gap-4">
+            <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Registri Global</span>
+            <div className="h-8 px-4 rounded-xl bg-white border border-slate-100 flex items-center shadow-sm">
+              <span className="text-[10px] font-black text-slate-900">{data.total} ENTRI DITEMUKAN</span>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" className="h-12 w-12 rounded-2xl bg-white border-slate-200 hover:border-emerald-500 hover:text-emerald-600 transition-all shadow-sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+            
+            <div className="flex items-center h-12 px-8 bg-white border border-slate-200 rounded-2xl shadow-sm">
+              <span className="text-xs font-black text-slate-900 tracking-[0.2em]">{page} / {data.pages}</span>
+            </div>
+            
+            <Button variant="outline" size="icon" className="h-12 w-12 rounded-2xl bg-white border-slate-200 hover:border-emerald-500 hover:text-emerald-600 transition-all shadow-sm" disabled={page === data.pages} onClick={() => setPage(p => p + 1)}>
+              <ChevronRight className="h-5 w-5" />
+            </Button>
           </div>
         </div>
       </div>
 
-      {/* Delete Confirmation */}
+      {/* TERMINATION DIALOG - PREMIUM REDESIGN */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent className="rounded-[2.5rem] border-none shadow-2xl p-10">
-          <AlertDialogHeader>
-            <div className="w-20 h-20 rounded-3xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-6 border border-rose-100 shadow-inner">
-              <Trash2 className="h-10 w-10" />
+        <AlertDialogContent className="rounded-[3rem] border-none shadow-2xl p-0 overflow-hidden bg-white max-w-md">
+          <div className="bg-rose-600 p-12 flex flex-col items-center text-white relative">
+            <div className="absolute top-0 left-0 w-full h-full opacity-10 bg-[url('/img/noise.png')] pointer-events-none" />
+            <div className="w-24 h-24 rounded-[2rem] bg-white/20 backdrop-blur-xl flex items-center justify-center mb-6 border border-white/30 shadow-2xl animate-in zoom-in duration-500">
+              <Trash2 className="h-12 w-12 text-white" />
             </div>
-            <AlertDialogTitle className="text-2xl font-black uppercase tracking-tight text-center text-slate-900">Konfirmasi Hapus</AlertDialogTitle>
-            <AlertDialogDescription className="text-center text-slate-500 font-medium py-4">
-              Hapus pekerjaan <strong className="text-slate-900">{selectedJob?.tracking_code}</strong>? Seluruh data progres dan foto sampling akan dihapus permanen.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col sm:flex-row gap-4 mt-6">
-            <AlertDialogCancel className="rounded-2xl h-14 flex-1 font-black text-slate-400 uppercase text-[10px] tracking-widest border-none hover:bg-slate-50">Batal</AlertDialogCancel>
-            <LoadingButton loading={deleting} onClick={confirmDelete} className="bg-rose-600 hover:bg-rose-700 rounded-2xl h-14 flex-1 font-black text-white uppercase text-[10px] tracking-widest shadow-xl shadow-rose-900/20">Ya, Hapus Permanen</LoadingButton>
-          </AlertDialogFooter>
+            <AlertDialogTitle className="text-3xl font-black uppercase tracking-tighter text-center leading-none">Terminasi</AlertDialogTitle>
+            <AlertDialogDescription className="text-rose-100 font-bold uppercase text-[10px] tracking-[0.2em] mt-3 opacity-80">Protokol Penghapusan Infrastruktur</AlertDialogDescription>
+          </div>
+          <div className="p-12 space-y-8 bg-white">
+            <p className="text-center text-slate-500 font-bold text-xs uppercase leading-relaxed">
+              Anda akan menghapus infrastruktur pekerjaan <strong className="text-slate-900 tracking-tight">{selectedJob?.tracking_code}</strong>. Tindakan ini akan memusnahkan seluruh aset progres dan foto sampling secara permanen.
+            </p>
+            <div className="flex flex-col gap-3">
+              <LoadingButton loading={deleting} onClick={confirmDelete} className="bg-slate-950 hover:bg-rose-600 text-white rounded-[1.5rem] h-16 w-full font-black uppercase text-[11px] tracking-widest shadow-xl transition-all active:scale-95">
+                Konfirmasi Terminasi
+              </LoadingButton>
+              <AlertDialogCancel className="rounded-[1.5rem] h-16 w-full font-black text-slate-400 uppercase text-[11px] tracking-widest border-none hover:bg-slate-50 transition-all">
+                Batalkan Protokol
+              </AlertDialogCancel>
+            </div>
+          </div>
         </AlertDialogContent>
       </AlertDialog>
 
-      <LoadingOverlay isOpen={submitting} title="Sedang Memproses..." description="Mohon tunggu, sistem sedang memperbarui database" />
+      {/* ASSIGNMENT DIALOG - PREMIUM REDESIGN */}
+      <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
+        <DialogContent className="rounded-[3rem] border-none shadow-2xl p-0 overflow-hidden bg-white max-w-2xl">
+          <div className="bg-emerald-900 p-10 flex flex-col items-center text-white relative">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500 rounded-full blur-[80px] opacity-20" />
+            <div className="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center mb-4 border border-white/10 shadow-inner">
+              <UserPlus className="h-8 w-8 text-emerald-400" />
+            </div>
+            <DialogTitle className="text-2xl font-black uppercase tracking-tight text-white">Penugasan Personel</DialogTitle>
+            <DialogDescription className="text-emerald-400 font-bold uppercase text-[9px] tracking-[0.3em] mt-1 opacity-80">Tugaskan Tim Sampling ke Pekerjaan: {selectedJob?.tracking_code}</DialogDescription>
+          </div>
+          
+          <div className="p-10 space-y-8 bg-white max-h-[60vh] overflow-y-auto scrollbar-thin">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <ShieldCheck className="h-3 w-3" /> Petugas Utama
+                </label>
+                <Select value={assignFormData.field_officer_id} onValueChange={(v) => setAssignFormData({...assignFormData, field_officer_id: v})}>
+                  <SelectTrigger className="h-16 rounded-2xl bg-slate-50 border-none font-black text-xs px-6">
+                    <SelectValue placeholder="Pilih Petugas Utama" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl border-none shadow-2xl">
+                    {fieldOfficers.map(o => <SelectItem key={o.id} value={o.id} className="text-[11px] font-black uppercase py-4">{o.full_name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <Calendar className="h-3 w-3" /> Tanggal Target
+                </label>
+                <Input 
+                  type="date" 
+                  value={assignFormData.scheduled_date} 
+                  onChange={(e) => setAssignFormData({...assignFormData, scheduled_date: e.target.value})} 
+                  className="h-16 rounded-2xl bg-slate-50 border-none font-black text-xs px-6" 
+                />
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <Clock className="h-3 w-3" /> Waktu Penugasan
+                </label>
+                <Input 
+                  type="time" 
+                  value={assignFormData.scheduled_time} 
+                  onChange={(e) => setAssignFormData({...assignFormData, scheduled_time: e.target.value})} 
+                  className="h-16 rounded-2xl bg-slate-50 border-none font-black text-xs px-6" 
+                />
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <MapPin className="h-3 w-3" /> Koordinat / Lokasi
+                </label>
+                <Input 
+                  placeholder="Alamat penugasan" 
+                  value={assignFormData.location} 
+                  onChange={(e) => setAssignFormData({...assignFormData, location: e.target.value})} 
+                  className="h-16 rounded-2xl bg-slate-50 border-none font-black text-xs px-6" 
+                />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                <Info className="h-3 w-3" /> Instruksi Penugasan
+              </label>
+              <textarea 
+                className="w-full h-32 bg-slate-50 border-none rounded-3xl p-6 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-emerald-500/20 transition-all placeholder:text-slate-300"
+                placeholder="Instruksi tambahan untuk tim lapangan..."
+                value={assignFormData.notes}
+                onChange={(e) => setAssignFormData({...assignFormData, notes: e.target.value})}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="p-10 bg-slate-50/50 border-t border-slate-100">
+            <Button variant="ghost" onClick={() => setIsAssignDialogOpen(false)} className="h-16 rounded-2xl px-8 font-black text-slate-400 uppercase text-[11px] tracking-widest border-none hover:bg-slate-200 transition-all">Batal</Button>
+            <LoadingButton loading={submitting} onClick={handleAssignSubmit} className="h-16 rounded-2xl px-12 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[11px] tracking-widest shadow-xl shadow-emerald-900/10 transition-all active:scale-95">
+              Konfirmasi Penugasan
+            </LoadingButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <LoadingOverlay isOpen={submitting} title="Memproses Infrastruktur" description="Sinkronisasi data penugasan dengan database global..." />
     </div>
   );
 }
+

@@ -260,39 +260,7 @@ export async function deleteQuotation(id: string, requesterId?: string, requeste
       throw new Error('Penawaran tidak ditemukan')
     }
 
-    // Check if requester is operator - requires approval
-    if (requesterId && requesterRole === 'operator') {
-      // Create approval request instead of deleting
-      await prisma.approvalRequest.create({
-        data: {
-          request_type: 'delete',
-          entity_type: 'quotation',
-          entity_id: id,
-          requester_id: requesterId,
-          reason: `Operator meminta penghapusan penawaran ${quotation?.quotation_number}`,
-          old_data: quotation as any,
-          status: 'pending'
-        }
-      })
-
-      // Audit log
-      await audit.logAudit({
-        action: 'delete_requested',
-        entity_type: 'quotation',
-        entity_id: id,
-        user_id: requesterId,
-        old_data: quotation,
-        metadata: { reason: 'Operator request' }
-      })
-
-      revalidatePath('/operator/quotations')
-      return {
-        success: true,
-        message: 'Permintaan penghapusan berhasil dibuat. Menunggu persetujuan admin.'
-      }
-    }
-
-    // Admin can delete directly
+    // Admin/Operator can delete directly
     // 1. Hapus penugasan sampling terkait jika ada (melalui JobOrder)
     const jobOrders = await prisma.jobOrder.findMany({ where: { quotation_id: id } });
     const jobIds = jobOrders.map(j => j.id);
@@ -311,7 +279,7 @@ export async function deleteQuotation(id: string, requesterId?: string, requeste
     await audit.deleteQuotation(quotation)
 
     revalidatePath('/admin/quotations');
-    return { success: true };
+    return { success: true, message: 'Penawaran berhasil dihapus' };
   } catch (error) {
     console.error('Delete Error:', error);
     throw new Error('Gagal menghapus penawaran dan data terkait');
@@ -335,7 +303,7 @@ export async function deleteManyQuotations(ids: string[]) {
     });
 
     revalidatePath('/admin/quotations');
-    return { success: true };
+    return { success: true, message: 'Data-data penawaran berhasil dihapus' };
   } catch (error) {
     console.error('Bulk Delete Error:', error);
     throw new Error('Gagal menghapus beberapa data');

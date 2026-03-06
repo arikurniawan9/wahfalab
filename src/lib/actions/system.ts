@@ -16,15 +16,25 @@ export async function getSystemStats() {
       logs,
       financialRecords,
       assistants,
-      customers
+      customers,
+      staff
     ] = await Promise.all([
       prisma.quotation.count(),
       prisma.jobOrder.count(),
       prisma.auditLog.count(),
       prisma.financialRecord.count(),
       prisma.fieldAssistant.count(),
-      prisma.profile.count({ where: { role: 'client' } })
+      prisma.profile.count({ where: { role: 'client' } }),
+      prisma.profile.count({ 
+        where: { 
+          role: { 
+            in: ['operator', 'analyst', 'field_officer', 'reporting', 'finance', 'content_manager'] 
+          } 
+        } 
+      })
     ]);
+
+    const total_records = quotations + jobs + logs + financialRecords + assistants + customers + staff;
 
     return {
       quotations,
@@ -32,11 +42,34 @@ export async function getSystemStats() {
       logs,
       financialRecords,
       assistants,
-      customers
+      customers,
+      staff,
+      total_records
     };
   } catch (error) {
     console.error('Stats Error:', error);
     return null;
+  }
+}
+
+/**
+ * Get recent system maintenance activities from audit logs
+ */
+export async function getRecentMaintenanceLogs() {
+  try {
+    const logs = await prisma.auditLog.findMany({
+      where: {
+        action: {
+          in: ['export_system_data', 'restore_system_data', 'cleanup_category', 'factory_reset', 'login', 'logout']
+        }
+      },
+      orderBy: { created_at: 'desc' },
+      take: 5
+    });
+    return serializeData(logs);
+  } catch (error) {
+    console.error('Maintenance Logs Error:', error);
+    return [];
   }
 }
 
@@ -50,6 +83,7 @@ export async function exportSystemData(categories?: string[]) {
     // Define what tables belong to which category
     const categoryMap: Record<string, string[]> = {
       users: ['profiles', 'bankAccounts'],
+      staff: ['profiles'],
       quotations: ['quotations', 'quotationItems'],
       jobs: ['jobOrders', 'samplingAssignments', 'fieldAssistants', 'travelOrders', 'labAnalyses', 'sampleHandovers'],
       finance: ['invoices', 'payments', 'financialRecords'],
@@ -68,14 +102,18 @@ export async function exportSystemData(categories?: string[]) {
       });
     }
 
+    // Role definitions for filtering
+    const staffRoles = ['operator', 'analyst', 'field_officer', 'reporting', 'finance', 'content_manager'];
+
     const [
-      profiles, quotations, quotationItems, jobOrders, samplingAssignments,
+      profilesRaw, quotations, quotationItems, jobOrders, samplingAssignments,
       fieldAssistants, travelOrders, labAnalyses, sampleHandovers, invoices,
       payments, financialRecords, auditLogs, serviceCategories, services,
       equipment, regulations, regulationParameters, operationalCatalogs,
       operationalHistory, bankAccounts, notifications, approvalRequests
     ] = await Promise.all([
-      tablesToFetch.has('profiles') ? prisma.profile.findMany() : Promise.resolve([]),
+      // Only fetch profiles if needed, and handle filtering based on categories
+      (tablesToFetch.has('profiles')) ? prisma.profile.findMany() : Promise.resolve([]),
       tablesToFetch.has('quotations') ? prisma.quotation.findMany() : Promise.resolve([]),
       tablesToFetch.has('quotationItems') ? prisma.quotationItem.findMany() : Promise.resolve([]),
       tablesToFetch.has('jobOrders') ? prisma.jobOrder.findMany() : Promise.resolve([]),
@@ -99,6 +137,22 @@ export async function exportSystemData(categories?: string[]) {
       tablesToFetch.has('notifications') ? prisma.notification.findMany() : Promise.resolve([]),
       tablesToFetch.has('approvalRequests') ? prisma.approvalRequest.findMany() : Promise.resolve([])
     ]);
+
+    // FILTER PROFILES BASED ON CATEGORIES
+    let profiles = profilesRaw;
+    if (!isFull) {
+      const wantUsers = categories?.includes('users');
+      const wantStaff = categories?.includes('staff');
+
+      if (wantUsers && !wantStaff) {
+        profiles = profilesRaw.filter(p => p.role === 'client');
+      } else if (wantStaff && !wantUsers) {
+        profiles = profilesRaw.filter(p => staffRoles.includes(p.role));
+      } else if (wantUsers && wantStaff) {
+        profiles = profilesRaw.filter(p => p.role === 'client' || staffRoles.includes(p.role));
+      }
+      // If none, but profiles was fetched (shouldn't happen with current logic), it remains as is or empty
+    }
 
     const backupData = {
       version: '1.2',
@@ -170,6 +224,15 @@ export async function cleanupSpecificCategory(category: string) {
       case 'customers':
         await prisma.profile.deleteMany({
           where: { role: 'client' }
+        });
+        break;
+      case 'staff':
+        await prisma.profile.deleteMany({
+          where: { 
+            role: { 
+              in: ['operator', 'analyst', 'field_officer', 'reporting', 'finance', 'content_manager'] 
+            } 
+          }
         });
         break;
       default:

@@ -1,18 +1,6 @@
-// ============================================================================
-// OPTIMIZED USERS PAGE - v2.0
-// Fitur Optimasi:
-// 1. ✅ Loading Modal saat menyimpan
-// 2. ✅ AlertDialog untuk konfirmasi hapus
-// 3. ✅ Export/Import CSV
-// 4. ✅ Empty state yang lebih menarik
-// 5. ✅ Filter by role
-// 6. ✅ Badge "ANDA" untuk user yang sedang login
-// 7. ✅ Bulk delete dengan validasi (tidak bisa hapus diri sendiri)
-// ============================================================================
-
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import {
   Table,
   TableBody,
@@ -21,71 +9,64 @@ import {
   TableHeader,
   TableRow
 } from "@/components/ui/table";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Plus,
   Pencil,
   Trash2,
   ChevronLeft,
   ChevronRight,
   Search,
-  Download,
-  Upload,
   User,
-  Users as UsersIcon,
-  DollarSign,
-  FlaskConical,
   FileText,
   Users,
-  Shield,
-  LayoutDashboard
+  ShieldAlert,
+  UserCheck,
+  Mail,
+  Lock,
+  X,
+  Filter,
+  Phone,
+  Eye,
+  Activity,
+  MapPin,
+  Settings2,
+  Save,
+  RefreshCw,
+  UserPlus,
+  ShieldCheck,
+  Download,
+  ListTree,
+  FlaskConical,
+  LayoutDashboard,
+  DollarSign,
+  Contact2
 } from "lucide-react";
-import { ChemicalLoader } from "@/components/ui";
-import { LoadingOverlay, LoadingButton, TableSkeleton, EmptyState } from "@/components/ui";
+import { LoadingOverlay, LoadingButton, TableSkeleton } from "@/components/ui";
 import { getUsers, createOrUpdateUser, deleteUser, deleteManyUsers } from "@/lib/actions/users";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-  DialogDescription
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle
-} from "@/components/ui/alert-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { Label } from "@/components/ui/label";
+import { format } from "date-fns";
+import { id } from "date-fns/locale";
+import { Textarea } from "@/components/ui/textarea";
 
 const roleOptions = [
-  { value: "admin", label: "Administrator", color: "bg-red-100 text-red-700 border-red-200", icon: Shield },
-  { value: "operator", label: "Petugas / Operator", color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: UsersIcon },
-  { value: "content_manager", label: "Content Manager", color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: LayoutDashboard },
-  { value: "client", label: "Customer / Client", color: "bg-slate-100 text-slate-700 border-slate-200", icon: User },
-  { value: "field_officer", label: "Petugas Lapangan", color: "bg-blue-100 text-blue-700 border-blue-200", icon: User },
-  { value: "analyst", label: "Analis Laboratorium", color: "bg-violet-100 text-violet-700 border-violet-200", icon: FlaskConical },
-  { value: "reporting", label: "Staff Reporting", color: "bg-amber-100 text-amber-700 border-amber-200", icon: FileText },
-  { value: "finance", label: "Bagian Keuangan", color: "bg-purple-100 text-purple-700 border-purple-200", icon: DollarSign }
+  { value: "admin", label: "Administrator", color: "bg-rose-50 text-rose-700 border-rose-100", icon: ShieldAlert },
+  { value: "operator", label: "Operator", color: "bg-emerald-50 text-emerald-700 border-emerald-100", icon: FileText },
+  { value: "content_manager", label: "Content Manager", color: "bg-blue-50 text-blue-700 border-blue-100", icon: FileText },
+  { value: "field_officer", label: "Petugas Lapangan", color: "bg-amber-50 text-amber-700 border-amber-100", icon: User },
+  { value: "analyst", label: "Analis Laboratorium", color: "bg-violet-50 text-violet-700 border-violet-100", icon: FlaskConical },
+  { value: "reporting", label: "Staff Reporting", color: "bg-indigo-50 text-indigo-700 border-indigo-100", icon: FileText },
+  { value: "finance", label: "Keuangan", color: "bg-purple-50 text-purple-700 border-purple-100", icon: DollarSign }
 ];
 
 export default function UserManagementPage() {
@@ -95,24 +76,27 @@ export default function UserManagementPage() {
   const [limit, setLimit] = useState(10);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<any>(null);
+  
+  const [isRegDialogOpen, setIsRegDialogOpen] = useState(false);
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
+  
+  const [viewingUser, setViewingUser] = useState<any>(null);
+  const [editData, setEditData] = useState<any>({});
+  
   const [submitting, setSubmitting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
-  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
-  const [importData, setImportData] = useState<string>("");
   const [filterRole, setFilterRole] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<string>("name");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   const supabase = createClient();
-
-  const { register, handleSubmit, reset, setValue, watch } = useForm({
+  const { register, handleSubmit, reset, setValue: setRegValue } = useForm({
     defaultValues: {
       full_name: "",
       email: "",
-      password: "",
+      password: "123456",
+      phone: "",
+      address: "",
       role: "operator"
     }
   });
@@ -121,421 +105,184 @@ export default function UserManagementPage() {
     setLoading(true);
     try {
       const [result, { data: { user } }] = await Promise.all([
-        getUsers(page, limit, search),
+        getUsers(page, limit, search, filterRole, 'client'),
         supabase.auth.getUser()
       ]);
-
-      // Filter out client role - only show staff users
-      const filteredUsers = result.users.filter((u: any) => u.role !== 'client');
-      const filteredResult = {
-        ...result,
-        users: filteredUsers,
-        total: filteredUsers.length // Update total to exclude customers
-      };
-
-      setData(filteredResult);
+      setData(result);
       setCurrentUser(user);
       setSelectedIds([]);
-    } catch (error: any) {
-      toast.error("Gagal memuat data pengguna", {
-        description: error?.message || "Silakan refresh halaman"
-      });
-    } finally {
-      setLoading(false);
-    }
+    } catch (error: any) { toast.error("Gagal memuat data"); } 
+    finally { setLoading(false); }
   };
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      loadUsers();
-    }, 500);
+    const timer = setTimeout(() => { loadUsers(); }, 300);
     return () => clearTimeout(timer);
-  }, [page, limit, search]);
+  }, [page, limit, search, filterRole]);
 
-  const onSubmit = async (formData: any) => {
+  const onRegisterSubmit = async (formData: any) => {
     setSubmitting(true);
     try {
-      await createOrUpdateUser(formData, editingUser?.id);
-      setIsDialogOpen(false);
+      // Ensure default password is sent
+      await createOrUpdateUser({ ...formData, password: '123456' });
+      setIsRegDialogOpen(false);
       reset();
-      setEditingUser(null);
       loadUsers();
-      toast.success(editingUser ? "User berhasil diperbarui" : "User baru berhasil dibuat", {
-        description: `${formData.full_name} (${formData.role})`
+      toast.success("Staff baru terdaftar", {
+        description: "Password akses default: 123456"
       });
-    } catch (error: any) {
-      toast.error(error.message || "Gagal menyimpan data", {
-        description: "Silakan coba lagi"
+    } catch (error: any) { toast.error(error.message); } 
+    finally { setSubmitting(false); }
+  };
+
+  const onQuickUpdate = async () => {
+    setSubmitting(true);
+    try {
+      const payload = { ...editData };
+      if (!payload.password) delete payload.password;
+      const result = await createOrUpdateUser(payload, viewingUser.id);
+      if (result.error) throw new Error(result.error);
+      toast.success("Data berhasil diperbarui");
+      setIsEditMode(false);
+      loadUsers();
+      setViewingUser({ ...viewingUser, ...payload, password: "" });
+    } catch (error: any) { toast.error(error.message); } 
+    finally { setSubmitting(false); }
+  };
+
+  const handleCancelEdit = () => {
+    if (viewingUser) {
+      setEditData({
+        full_name: viewingUser.full_name || "",
+        email: viewingUser.email || "",
+        phone: viewingUser.phone || "",
+        address: viewingUser.address || "",
+        role: viewingUser.role || "operator",
+        password: ""
       });
-    } finally {
-      setSubmitting(false);
     }
+    setIsEditMode(false);
   };
 
-  const handleEdit = (user: any) => {
-    setEditingUser(user);
-    setValue("full_name", user.full_name);
-    setValue("email", user.email);
-    setValue("role", user.role);
-    setIsDialogOpen(true);
-  };
-
-  const handleDelete = (id: string) => {
-    setDeleteUserId(id);
+  const openDetail = (user: any) => {
+    setViewingUser(user);
+    setEditData({
+      full_name: user.full_name || "",
+      email: user.email || "",
+      phone: user.phone || "",
+      address: user.address || "",
+      role: user.role || "operator",
+      password: ""
+    });
+    setIsEditMode(false);
+    setIsDetailDialogOpen(true);
   };
 
   const confirmDelete = async () => {
     if (!deleteUserId) return;
     try {
-      await deleteUser(deleteUserId);
+      if (deleteUserId === "bulk") {
+        await deleteManyUsers(selectedIds);
+        toast.success(`${selectedIds.length} staff dihapus`);
+      } else {
+        await deleteUser(deleteUserId);
+        toast.success("Akses dicabut");
+      }
       loadUsers();
-      toast.success("User berhasil dihapus", {
-        description: "Data telah dihapus dari sistem"
-      });
       setDeleteUserId(null);
-    } catch (error: any) {
-      toast.error("Gagal menghapus user", {
-        description: error?.message || "Silakan coba lagi"
-      });
-    }
-  };
-
-  const handleBulkDelete = () => {
-    if (selectedIds.includes(currentUser?.id)) {
-      toast.error("Anda tidak bisa menghapus akun sendiri", {
-        description: "Hapus user lain terlebih dahulu"
-      });
-      return;
-    }
-    setDeleteUserId("bulk");
-  };
-
-  const confirmBulkDelete = async () => {
-    try {
-      await deleteManyUsers(selectedIds);
-      loadUsers();
-      toast.success(`${selectedIds.length} user berhasil dihapus`);
-      setDeleteUserId(null);
-    } catch (error: any) {
-      toast.error("Gagal menghapus user", {
-        description: error?.message || "Silakan coba lagi"
-      });
-    }
+      setIsDetailDialogOpen(false);
+    } catch (error) { toast.error("Gagal hapus user"); }
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === data.users.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(data.users.filter((u: any) => u.id !== currentUser?.id).map((u: any) => u.id));
-    }
+    if (selectedIds.length === data.users.length) setSelectedIds([]);
+    else setSelectedIds(data.users.map((u: any) => u.id).filter((id: string) => id !== currentUser?.id));
   };
 
   const toggleSelect = (id: string) => {
-    if (selectedIds.includes(id)) {
-      setSelectedIds(selectedIds.filter(i => i !== id));
-    } else {
-      setSelectedIds([...selectedIds, id]);
-    }
+    if (selectedIds.includes(id)) setSelectedIds(selectedIds.filter(sid => sid !== id));
+    else setSelectedIds([...selectedIds, id]);
   };
 
-  // Export CSV
   const handleExport = () => {
-    const headers = ["Nama Lengkap", "Email", "Role", "Tanggal Dibuat"];
-    const csvData = data.users.map((user: any) => [
-      user.full_name,
-      user.email,
-      user.role,
-      new Date(user.created_at).toISOString().split('T')[0]
-    ]);
-    
-    const csv = [
-      headers.join(","),
-      ...csvData.map((row: string[]) => row.map(cell => `"${cell}"`).join(","))
-    ].join("\n");
-    
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `users-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    
-    toast.success("Data berhasil diexport", {
-      description: "File CSV telah diunduh"
-    });
+    const csvData = data.users.map((u: any) => ({
+      Nama: u.full_name, Email: u.email, Role: u.role, Phone: u.phone || '-', Address: u.address || '-'
+    }));
+    const csvContent = "data:text/csv;charset=utf-8," + Object.keys(csvData[0]).join(",") + "\n" + csvData.map((row: any) => Object.values(row).join(",")).join("\n");
+    const link = document.createElement("a");
+    link.setAttribute("href", encodeURI(csvContent));
+    link.setAttribute("download", `staff_wahfalab_${Date.now()}.csv`);
+    link.click();
+    toast.success("Export berhasil");
   };
 
-  // Import CSV
-  const handleImport = async () => {
-    try {
-      const lines = importData.trim().split("\n");
-      
-      for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(",").map(v => v.trim().replace(/"/g, ""));
-        await createOrUpdateUser({
-          full_name: values[0],
-          email: values[1],
-          password: "default123", // Default password
-          role: values[2] || "operator"
-        });
-      }
-      
-      toast.success("Import berhasil", {
-        description: `${lines.length - 1} user berhasil diimport`
-      });
-      setIsImportDialogOpen(false);
-      setImportData("");
-      loadUsers();
-    } catch (error: any) {
-      toast.error("Gagal import data", {
-        description: error?.message || "Format CSV tidak valid"
-      });
-    }
-  };
-
-  // Filter & Sort
-  const getFilteredAndSortedData = () => {
-    let filtered = [...data.users];
-    
-    // Search
-    if (search) {
-      filtered = filtered.filter(user => 
-        user.full_name.toLowerCase().includes(search.toLowerCase()) ||
-        user.email?.toLowerCase().includes(search.toLowerCase())
-      );
-    }
-    
-    // Filter by role
-    if (filterRole !== "all") {
-      filtered = filtered.filter(user => user.role === filterRole);
-    }
-    
-    // Sort
-    filtered.sort((a, b) => {
-      let comparison = 0;
-      if (sortBy === "name") {
-        comparison = a.full_name.localeCompare(b.full_name);
-      } else if (sortBy === "email") {
-        comparison = (a.email || "").localeCompare(b.email || "");
-      } else if (sortBy === "created_at") {
-        comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      }
-      return sortOrder === "asc" ? comparison : -comparison;
-    });
-    
-    return filtered;
-  };
-
-  const filteredUsers = getFilteredAndSortedData();
-
-  const getRoleBadgeColor = (role: string) => {
-    const option = roleOptions.find(opt => opt.value === role);
-    return option?.color || "bg-slate-100 text-slate-700 border-slate-200";
-  };
-
-  const getRoleIcon = (role: string) => {
-    const option = roleOptions.find(opt => opt.value === role);
-    const Icon = option?.icon || User;
-    return <Icon className="h-3 w-3 mr-1" />;
-  };
-
-  const getRoleLabel = (role: string) => {
-    const option = roleOptions.find(opt => opt.value === role);
-    return option?.label || role;
+  const getRoleInfo = (role: string) => {
+    return roleOptions.find(opt => opt.value === role) || roleOptions[1];
   };
 
   return (
-    <div className="p-4 md:p-10 pb-24 md:pb-10">
+    <div className="p-4 md:p-8 bg-slate-50 min-h-screen font-[family-name:var(--font-geist-sans)] max-w-7xl mx-auto">
       {/* Header */}
-      <div className="mb-10">
-        <h1 className="text-2xl font-bold text-emerald-900 font-[family-name:var(--font-montserrat)] uppercase flex items-center gap-3">
-          <UsersIcon className="h-6 w-6 text-emerald-600" />
-          Manajemen Pengguna
-        </h1>
-        <p className="text-slate-500 text-sm mt-1">
-          Kelola data admin, petugas, dan staf operasional laboratorium.
-        </p>
-      </div>
-
-      {/* Filters & Actions Bar */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6 shadow-sm flex flex-col md:flex-row gap-4 items-center">
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-500" />
-          <Input
-            placeholder="Cari nama atau email..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            className="pl-10 h-11 focus-visible:ring-emerald-500 rounded-lg"
-          />
+      <div className="mb-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-emerald-900 rounded-2xl shadow-[0_10px_20px_rgba(6,78,59,0.2)]"><Users className="h-6 w-6 text-emerald-400" /></div>
+          <div><h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight leading-none">Internal Personnel</h1><p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.3em] mt-1.5 opacity-70">Control Center & System Access</p></div>
         </div>
-
-        <div className="flex items-center gap-2 w-full md:w-auto justify-end">
-          {selectedIds.length > 0 && (
-            <Button
-              variant="destructive"
-              size="icon"
-              onClick={handleBulkDelete}
-              className="h-11 w-11 rounded-lg cursor-pointer shadow-sm hover:shadow-md hover:scale-105 transition-all duration-200 animate-in fade-in zoom-in duration-200"
-              title={`Hapus ${selectedIds.length} user terpilih`}
-            >
-              <Trash2 className="h-5 w-5" />
-              <span className="sr-only">Hapus ({selectedIds.length})</span>
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={handleExport}
-            className="h-11 w-11 rounded-lg cursor-pointer shadow-sm hover:bg-emerald-50 hover:border-emerald-200 hover:scale-105 transition-all duration-200"
-            title="Export CSV"
-          >
-            <Download className="h-5 w-5" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => setIsImportDialogOpen(true)}
-            className="h-11 w-11 rounded-lg cursor-pointer shadow-sm hover:bg-emerald-50 hover:border-emerald-200 hover:scale-105 transition-all duration-200"
-            title="Import CSV"
-          >
-            <Upload className="h-5 w-5" />
-          </Button>
-          <Button
-            onClick={() => {
-              reset();
-              setEditingUser(null);
-              setIsDialogOpen(true);
-            }}
-            size="icon"
-            className="bg-emerald-600 hover:bg-emerald-700 h-11 w-11 cursor-pointer shadow-md hover:shadow-lg hover:scale-105 transition-all duration-200"
-            title="Tambah User"
-          >
-            <Plus className="h-5 w-5" />
-          </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={handleExport} className="h-11 w-11 rounded-xl bg-white border-slate-200 shadow-sm hover:shadow-md transition-all text-slate-600 hover:text-emerald-600" title="Export CSV"><Download className="h-4 w-4" /></Button>
+          <Button variant="outline" size="icon" className="h-11 w-11 rounded-xl bg-white border-slate-200 shadow-sm hover:shadow-md transition-all text-slate-600 hover:text-blue-600" onClick={loadUsers} title="Refresh Data"><RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} /></Button>
         </div>
       </div>
 
-      {/* Table Section Header */}
-      <div className="bg-white rounded-3xl shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
-        <div className="p-5 border-b bg-emerald-50/10 flex items-center justify-between gap-4">
-          <div className="text-sm font-medium text-slate-600">
-            Daftar Staff & Pengguna Internal
+      <div className="rounded-[2.5rem] bg-white shadow-[0_20px_60px_rgba(0,0,0,0.04)] border border-slate-100 overflow-hidden relative">
+        {selectedIds.length > 0 && (
+          <div className="absolute top-0 left-0 right-0 z-20 h-16 bg-slate-900 text-white flex items-center justify-between px-8 animate-in slide-in-from-top duration-300">
+            <div className="flex items-center gap-4"><div className="h-8 w-8 rounded-lg bg-emerald-500 text-slate-900 flex items-center justify-center font-black text-xs">{selectedIds.length}</div><p className="text-[10px] font-black uppercase tracking-widest">Personnel Selected</p></div>
+            <div className="flex items-center gap-3"><Button variant="ghost" onClick={() => setSelectedIds([])} className="text-white/60 hover:text-white text-[9px] font-black uppercase">Cancel</Button><Button onClick={() => setDeleteUserId("bulk")} className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl h-10 px-6 font-black text-[9px] uppercase tracking-widest shadow-xl shadow-rose-900/20 active:scale-95 transition-all"><Trash2 className="h-3.5 w-3.5 mr-2" /> Delete Permanently</Button></div>
           </div>
-          <div className="text-sm text-slate-500">
-            {filteredUsers.length} dari {data.total} pengguna
+        )}
+
+        <div className="p-6 bg-slate-50/80 border-b border-slate-100 flex flex-col md:flex-row gap-4 items-center">
+          <div className="relative flex-1 w-full group"><Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors" /><Input placeholder="Cari nama, email, atau penugasan..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-12 h-12 bg-white border-none rounded-2xl font-bold text-sm focus-visible:ring-emerald-500 transition-all shadow-sm" /></div>
+          <div className="flex gap-3 w-full md:w-auto">
+            <Select value={limit.toString()} onValueChange={(val) => { setLimit(parseInt(val)); setPage(1); }}><SelectTrigger className="w-full md:w-32 h-12 rounded-2xl border-none bg-white font-black uppercase text-[9px] tracking-widest shadow-sm"><ListTree className="h-3.5 w-3.5 mr-2 text-slate-400" /><SelectValue placeholder="Limit" /></SelectTrigger><SelectContent className="rounded-2xl border-none shadow-2xl"><SelectItem value="10" className="text-[10px] font-bold uppercase tracking-widest">10 Baris</SelectItem><SelectItem value="25" className="text-[10px] font-bold uppercase tracking-widest">25 Baris</SelectItem><SelectItem value="50" className="text-[10px] font-bold uppercase tracking-widest">50 Baris</SelectItem><SelectItem value="100" className="text-[10px] font-bold uppercase tracking-widest">100 Baris</SelectItem></SelectContent></Select>
+            <Button size="icon" onClick={() => { reset(); setIsRegDialogOpen(true); }} className="h-12 w-12 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xl shadow-emerald-900/20 active:scale-95 transition-all" title="Registrasi Staff Baru"><UserPlus className="h-5 w-5" /></Button>
           </div>
         </div>
 
-        {/* Desktop View */}
-        <div className="hidden md:block">
+        <div className="overflow-x-auto bg-white">
           <Table>
-            <TableHeader>
-              <TableRow className="bg-slate-50/50">
-                <TableHead className="w-12 px-6">
-                  <Checkbox
-                    checked={data.users.length > 0 && selectedIds.length === data.users.filter((u: any) => u.id !== currentUser?.id).length}
-                    onCheckedChange={toggleSelectAll}
-                  />
-                </TableHead>
-                <TableHead className="font-bold text-emerald-900 px-4">Nama</TableHead>
-                <TableHead className="font-bold text-emerald-900 px-4">Email</TableHead>
-                <TableHead className="font-bold text-emerald-900 px-4">Role</TableHead>
-                <TableHead className="font-bold text-emerald-900 px-4">Tanggal Dibuat</TableHead>
-                <TableHead className="text-center font-bold text-emerald-900 px-6">Aksi</TableHead>
+            <TableHeader className="bg-slate-50/50">
+              <TableRow className="border-b border-slate-100">
+                <TableHead className="w-[60px] px-8 py-5 text-center"><Checkbox checked={selectedIds.length === data.users.length && data.users.length > 0} onCheckedChange={toggleSelectAll} /></TableHead>
+                <TableHead className="px-6 py-5 font-black uppercase tracking-widest text-[9px] text-slate-400">Staff Profile</TableHead>
+                <TableHead className="px-6 py-5 font-black uppercase tracking-widest text-[9px] text-slate-400">Access Role</TableHead>
+                <TableHead className="px-6 py-5 font-black uppercase tracking-widest text-[9px] text-slate-400">WhatsApp</TableHead>
+                <TableHead className="px-8 py-5 text-right font-black uppercase tracking-widest text-[9px] text-slate-400">Manage</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-20">
-                    <TableSkeleton rows={5} />
-                  </TableCell>
-                </TableRow>
-              ) : filteredUsers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-20">
-                    <EmptyState
-                      title="Tidak ada data user"
-                      description="Mulai dengan menambahkan user pertama Anda"
-                      action={
-                        <Button
-                          onClick={() => setIsDialogOpen(true)}
-                          className="bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
-                        >
-                          <Plus className="mr-2 h-4 w-4" /> Tambah User
-                        </Button>
-                      }
-                    />
-                  </TableCell>
-                </TableRow>
+                <TableRow><TableCell colSpan={5} className="p-0"><TableSkeleton rows={limit} className="p-8" /></TableCell></TableRow>
               ) : (
-                filteredUsers.map((user: any) => {
+                data.users.map((user: any) => {
+                  const roleInfo = getRoleInfo(user.role);
                   const isSelf = currentUser?.id === user.id;
                   return (
-                    <TableRow key={user.id} className="hover:bg-emerald-50/10 transition-colors">
-                      <TableCell className="px-6">
-                        <Checkbox
-                          checked={selectedIds.includes(user.id)}
-                          onCheckedChange={() => toggleSelect(user.id)}
-                          disabled={isSelf}
-                        />
-                      </TableCell>
-                      <TableCell className="px-4">
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
-                            <User className="h-4 w-4" />
+                    <TableRow key={user.id} className={cn("hover:bg-slate-50 transition-all group border-b border-slate-50 last:border-none", selectedIds.includes(user.id) && "bg-emerald-50/30")}>
+                      <TableCell className="px-8 py-5 text-center"><Checkbox checked={selectedIds.includes(user.id)} onCheckedChange={() => toggleSelect(user.id)} disabled={isSelf} /></TableCell>
+                      <TableCell className="px-6 py-5">
+                        <div className="flex items-center gap-4">
+                          <div className="relative">
+                            <div className="h-11 w-11 rounded-2xl bg-slate-100 flex items-center justify-center border border-slate-200 shrink-0 text-slate-500 font-black text-sm uppercase overflow-hidden shadow-sm">{user.avatar_url ? <img src={user.avatar_url} className="h-full w-full object-cover" /> : (user.full_name || 'U').charAt(0)}</div>
+                            <div className={cn("absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-white shadow-sm", user.is_online ? "bg-emerald-500 animate-pulse" : "bg-slate-300")} />
                           </div>
-                          <div>
-                            <span className="font-bold text-slate-800">{user.full_name}</span>
-                            {isSelf && (
-                              <Badge variant="outline" className="ml-2 bg-emerald-50 text-emerald-600 border-emerald-200 text-[10px]">
-                                ANDA
-                              </Badge>
-                            )}
-                          </div>
+                          <div className="flex flex-col min-w-0"><span className="text-[13px] font-black text-slate-900 truncate flex items-center gap-2">{user.full_name} {isSelf && <Badge className="bg-emerald-500/10 text-emerald-600 border-none text-[7px] font-black uppercase px-1.5 h-4 tracking-tighter">YOU</Badge>}</span><span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{user.email}</span></div>
                         </div>
                       </TableCell>
-                      <TableCell className="text-slate-600 px-4">{user.email || "-"}</TableCell>
-                      <TableCell className="px-4">
-                        <Badge variant="outline" className={cn("capitalize", getRoleBadgeColor(user.role))}>
-                          {getRoleIcon(user.role)}
-                          {getRoleLabel(user.role)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-slate-500 text-sm px-4">
-                        {new Date(user.created_at).toLocaleDateString("id-ID", {
-                          day: 'numeric',
-                          month: 'long',
-                          year: 'numeric'
-                        })}
-                      </TableCell>
-                      <TableCell className="text-center px-6">
-                        <div className="flex justify-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 cursor-pointer"
-                            onClick={() => handleEdit(user)}
-                            disabled={isSelf}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-red-500 hover:bg-red-50 cursor-pointer"
-                            onClick={() => handleDelete(user.id)}
-                            disabled={isSelf}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+                      <TableCell className="px-6 py-5"><div className="flex flex-col gap-1.5"><Badge variant="outline" className={cn("px-2.5 py-0.5 rounded-md font-black text-[8px] tracking-[0.1em] flex items-center gap-1.5 w-fit border-none", roleInfo.color)}><roleInfo.icon className="h-2.5 w-2.5" />{roleInfo.label}</Badge>{user.last_sign_in_at && <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest ml-1">Sesi: {format(new Date(user.last_sign_in_at), "HH:mm • dd MMM")}</span>}</div></TableCell>
+                      <TableCell className="px-6 py-5">{user.phone ? <a href={`https://wa.me/${user.phone.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-emerald-600 hover:text-emerald-700 transition-colors group/wa"><div className="p-2 bg-emerald-50 rounded-xl group-hover/wa:bg-emerald-100 transition-colors"><Phone className="h-3 w-3" /></div><span className="text-[11px] font-black tracking-tighter">{user.phone}</span></a> : <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest italic ml-1">Not Set</span>}</TableCell>
+                      <TableCell className="px-8 py-5 text-right"><Button variant="ghost" size="sm" onClick={() => openDetail(user)} className="h-10 px-5 rounded-xl font-black text-[9px] uppercase tracking-widest text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all gap-2"><Settings2 className="h-4 w-4" /> Manage</Button></TableCell>
                     </TableRow>
                   );
                 })
@@ -544,300 +291,133 @@ export default function UserManagementPage() {
           </Table>
         </div>
 
-        {/* Mobile View */}
-        <div className="md:hidden divide-y divide-slate-100">
-          {loading ? (
-            <div className="p-10 text-center flex flex-col items-center justify-center">
-              <div className="flex justify-center mb-4">
-                <ChemicalLoader />
-              </div>
-            </div>
-          ) : filteredUsers.length === 0 ? (
-            <div className="p-10 text-center flex flex-col items-center gap-4">
-              <div className="h-16 w-16 rounded-full bg-emerald-50 flex items-center justify-center">
-                <User className="h-8 w-8 text-emerald-300" />
-              </div>
-              <div>
-                <p className="text-base font-semibold text-slate-700">Tidak ada data user</p>
-                <p className="text-xs text-slate-500 mt-1">Mulai dengan menambahkan user</p>
-              </div>
-              <Button
-                onClick={() => setIsDialogOpen(true)}
-                className="bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
-              >
-                <Plus className="mr-2 h-4 w-4" /> Tambah User
-              </Button>
-            </div>
-          ) : (
-            filteredUsers.map((user: any) => {
-              const isSelf = currentUser?.id === user.id;
-              const isSelected = selectedIds.includes(user.id);
-              return (
-                <div
-                  key={user.id}
-                  className={cn("p-4 space-y-3 transition-colors", isSelected ? 'bg-emerald-50/50' : 'bg-white active:bg-slate-50')}
-                  onClick={() => !isSelf && toggleSelect(user.id)}
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="flex gap-3">
-                      <Checkbox
-                        checked={isSelected}
-                        onCheckedChange={() => toggleSelect(user.id)}
-                        disabled={isSelf}
-                        className="mt-1"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
-                          <User className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-slate-900 flex items-center">
-                            {user.full_name}
-                            {isSelf && <Badge className="ml-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none text-[9px]">ANDA</Badge>}
-                          </h4>
-                          <p className="text-xs text-slate-500 mt-0.5">{user.email || "-"}</p>
-                        </div>
-                      </div>
-                    </div>
-                    <Badge variant="outline" className={cn("capitalize", getRoleBadgeColor(user.role))}>
-                      {getRoleIcon(user.role)}
-                      {getRoleLabel(user.role)}
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between items-center pt-2">
-                    <span className="text-[10px] text-slate-400">
-                      Terdaftar: {new Date(user.created_at).toLocaleDateString("id-ID")}
-                    </span>
-                    <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 cursor-pointer"
-                        onClick={() => handleEdit(user)}
-                        disabled={isSelf}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-red-500 hover:bg-red-50 cursor-pointer"
-                        onClick={() => handleDelete(user.id)}
-                        disabled={isSelf}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* Pagination */}
-        <div className="p-4 border-t flex flex-col md:flex-row items-center justify-between bg-slate-50/50 gap-4">
-          <div className="flex items-center gap-4">
-            <p className="text-xs text-slate-500 font-medium">
-              Total {data.total} pengguna
-            </p>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 font-medium">Tampil:</span>
-              <Select value={limit.toString()} onValueChange={(val) => {
-                setLimit(parseInt(val));
-                setPage(1);
-              }}>
-                <SelectTrigger className="h-8 w-[70px] bg-white text-xs cursor-pointer">
-                  <SelectValue placeholder={limit.toString()} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="10" className="cursor-pointer">10</SelectItem>
-                  <SelectItem value="30" className="cursor-pointer">30</SelectItem>
-                  <SelectItem value="50" className="cursor-pointer">50</SelectItem>
-                  <SelectItem value="100" className="cursor-pointer">100</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+        <div className="p-6 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Database Capacity: {data.total} Personnel Registered</p>
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 rounded-lg cursor-pointer"
-              disabled={page === 1}
-              onClick={() => setPage(p => p - 1)}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div className="flex items-center px-4 text-xs font-bold bg-white border border-slate-200 rounded-lg shadow-sm">
-              {page} / {data.pages}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 rounded-lg cursor-pointer"
-              disabled={page === data.pages}
-              onClick={() => setPage(p => p + 1)}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+            <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl bg-white border-slate-200" disabled={page === 1} onClick={() => setPage(p => Math.max(1, p - 1))}><ChevronLeft className="h-4 w-4" /></Button>
+            <div className="flex items-center px-5 text-[10px] font-black bg-white border border-slate-200 rounded-xl text-slate-700 tracking-widest shadow-sm">{page} / {data.pages}</div>
+            <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl bg-white border-slate-200" disabled={page === data.pages} onClick={() => setPage(p => Math.min(data.pages, p + 1))}><ChevronRight className="h-4 w-4" /></Button>
           </div>
         </div>
       </div>
 
-      {/* Add/Edit Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={(open) => {
-        setIsDialogOpen(open);
-        if (!open) {
-          reset();
-          setEditingUser(null);
-        }
-      }}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle className="text-emerald-900 flex items-center gap-2">
-              <User className="h-5 w-5" />
-              {editingUser ? "Edit" : "Tambah"} User Baru
-            </DialogTitle>
-            <DialogDescription>
-              Masukkan informasi pengguna di bawah ini.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-semibold">Nama Lengkap</label>
-              <Input {...register("full_name")} placeholder="Masukkan nama lengkap" required className="focus-visible:ring-emerald-500" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold">Email</label>
-              <Input {...register("email")} type="email" placeholder="email@wahfalab.com" required className="focus-visible:ring-emerald-500" />
-            </div>
-            {!editingUser && (
-              <div className="space-y-2">
-                <label className="text-sm font-semibold">Password</label>
-                <Input {...register("password")} type="password" placeholder="Minimal 6 karakter" required className="focus-visible:ring-emerald-500" />
+      {/* DETAIL MODAL */}
+      <Dialog open={isDetailDialogOpen} onOpenChange={(open) => { setIsDetailDialogOpen(open); if (!open) setIsEditMode(false); }}>
+        <DialogContent showCloseButton={false} className="max-w-xl rounded-[2.5rem] border-none p-0 overflow-hidden shadow-2xl bg-white">
+          <div className="bg-slate-900 p-8 text-white relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/10 rounded-full -mr-24 -mt-24 blur-3xl z-0" />
+            <div className="flex items-center justify-between relative z-10">
+              <div className="flex items-center gap-6">
+                <div className="relative">
+                  <div className="h-20 w-20 rounded-2xl bg-white/10 flex items-center justify-center border-2 border-white/10 shadow-xl text-2xl font-black overflow-hidden text-slate-300">{viewingUser?.avatar_url ? <img src={viewingUser.avatar_url} className="h-full w-full object-cover" /> : (viewingUser?.full_name || 'U').charAt(0).toUpperCase()}</div>
+                  <div className={cn("absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-slate-900", viewingUser?.is_online ? "bg-emerald-500 animate-pulse" : "bg-slate-500")} />
+                </div>
+                <div className="space-y-1 text-left">
+                  <Badge className="bg-emerald-500 text-white border-none text-[7px] font-black uppercase px-1.5 h-4 mb-1 tracking-widest">Personnel Detail</Badge>
+                  <DialogTitle className="text-xl font-black uppercase tracking-tight leading-none text-white">{viewingUser?.full_name}</DialogTitle>
+                  <div className="flex items-center gap-2 mt-1">
+                    {isEditMode ? (
+                      <Select value={editData.role} onValueChange={(val) => setEditData({...editData, role: val})}><SelectTrigger className="h-7 px-3 rounded-lg bg-white/10 border-none text-white font-black text-[8px] uppercase w-40"><SelectValue placeholder="Role" /></SelectTrigger><SelectContent className="rounded-xl border-none shadow-2xl">{roleOptions.map(opt => (<SelectItem key={opt.value} value={opt.value} className="text-[10px] font-bold uppercase">{opt.label}</SelectItem>))}</SelectContent></Select>
+                    ) : (
+                      <Badge variant="outline" className={cn("px-2 py-0 h-4 rounded-md font-black text-[7px] uppercase tracking-widest border-none", getRoleInfo(viewingUser?.role || "").color)}>{getRoleInfo(viewingUser?.role || "").label}</Badge>
+                    )}
+                  </div>
+                </div>
               </div>
-            )}
-            <div className="space-y-2">
-              <label className="text-sm font-semibold">Role</label>
-              <Select
-                onValueChange={(val) => setValue("role", val)}
-                defaultValue={editingUser?.role || "operator"}
-              >
-                <SelectTrigger className="focus:ring-emerald-500 cursor-pointer">
-                  <SelectValue placeholder="Pilih Role" />
-                </SelectTrigger>
-                <SelectContent>
-                  {roleOptions.filter(opt => opt.value !== 'client').map((option) => (
-                    <SelectItem key={option.value} value={option.value} className="cursor-pointer">
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2 self-start">{!isEditMode && <Button type="button" variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setIsEditMode(true); }} className="text-white/30 hover:text-white hover:bg-white/10 rounded-lg h-9 w-9 transition-all active:scale-90"><Pencil className="h-4 w-4" /></Button>}<Button type="button" variant="ghost" size="icon" onClick={() => setIsDetailDialogOpen(false)} className="text-white/30 hover:text-white hover:bg-white/10 rounded-lg h-9 w-9 transition-all active:scale-90"><X className="h-4 w-4" /></Button></div>
             </div>
-            <DialogFooter className="pt-4">
-              <LoadingButton
-                type="submit"
-                className="w-full bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
-                loading={submitting}
-                loadingText="Menyimpan..."
-              >
-                {editingUser ? "Simpan Perubahan" : "Buat User"}
+          </div>
+          <div className="p-8 space-y-8 bg-white">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-6">
+                <QuickEditItem icon={User} label="Full Identity Name" value={isEditMode ? editData.full_name : viewingUser?.full_name} isEdit={isEditMode} onChange={(val: string) => setEditData({...editData, full_name: val})} />
+                <QuickEditItem icon={Mail} label="Business Email" value={isEditMode ? editData.email : viewingUser?.email} isEdit={isEditMode} onChange={(val: string) => setEditData({...editData, email: val})} />
+                <QuickEditItem icon={Phone} label="Direct WhatsApp" value={isEditMode ? editData.phone : (viewingUser?.phone || "N/A")} isEdit={isEditMode} onChange={(val: string) => setEditData({...editData, phone: val})} />
+              </div>
+              <div className="space-y-6">
+                <div className="space-y-2"><span className="text-[8px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2"><MapPin className="h-2.5 w-2.5" /> Domicile Address</span>{isEditMode ? <Textarea value={editData.address} onChange={(e) => setEditData({...editData, address: e.target.value})} className="min-h-[100px] rounded-2xl bg-white border border-slate-200 font-bold text-xs p-4 focus-visible:ring-emerald-500 transition-all resize-none shadow-sm" /> : <p className="text-[11px] font-bold text-slate-600 leading-relaxed uppercase bg-slate-50/50 p-4 rounded-2xl border border-slate-50">{viewingUser?.address || "No address data."}</p>}</div>
+                {isEditMode && (<div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-300"><span className="text-[8px] font-black uppercase text-rose-500 tracking-widest flex items-center gap-2 font-bold"><Lock className="h-2.5 w-2.5" /> Force Reset Password</span><Input type="password" placeholder="Set new password..." value={editData.password} onChange={(e) => setEditData({...editData, password: e.target.value})} className="h-11 rounded-2xl bg-rose-50/30 border-none font-bold text-xs px-4 focus-visible:ring-rose-500 shadow-inner" /></div>)}
+                <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 space-y-3 shadow-sm"><div className="flex justify-between items-center"><span className="text-[8px] font-black text-slate-400 uppercase">Live Connectivity</span><span className={cn("text-[8px] font-black uppercase", viewingUser?.is_online ? "text-emerald-600" : "text-slate-400")}>{viewingUser?.is_online ? "ONLINE" : "OFFLINE"}</span></div><div className="flex justify-between items-center"><span className="text-[8px] font-black text-slate-400 uppercase">Last Interaction</span><span className="text-[10px] font-bold text-slate-700">{viewingUser?.last_sign_in_at ? format(new Date(viewingUser.last_sign_in_at), "HH:mm • dd MMM yy") : "-"}</span></div></div>
+              </div>
+            </div>
+          </div>
+          <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+            <Button variant="outline" onClick={() => setDeleteUserId(viewingUser.id)} disabled={currentUser?.id === viewingUser?.id || submitting} className="rounded-2xl h-11 px-6 border-rose-100 text-rose-600 hover:bg-rose-50 font-black uppercase text-[10px] tracking-widest transition-all gap-2 shadow-sm"><Trash2 className="h-4 w-4" /> Revoke Access</Button>
+            <div className="flex gap-3">{isEditMode ? (<><Button variant="ghost" onClick={handleCancelEdit} disabled={submitting} className="h-11 rounded-2xl font-black uppercase text-[10px] text-slate-400 hover:bg-slate-200 px-6">Cancel</Button><LoadingButton onClick={onQuickUpdate} loading={submitting} className="h-11 px-8 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest shadow-xl shadow-emerald-900/20 active:scale-95 transition-all gap-2"><Save className="h-4 w-4" /> Commit Changes</LoadingButton></>) : (<Button onClick={() => setIsDetailDialogOpen(false)} className="h-11 px-10 rounded-2xl bg-slate-900 text-white font-black uppercase text-[10px] tracking-widest shadow-xl active:scale-95 transition-all">Close</Button>)}</div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* REGISTRATION DIALOG - POWERFUL & COMPLETE */}
+      <Dialog open={isRegDialogOpen} onOpenChange={setIsRegDialogOpen}>
+        <DialogContent showCloseButton={false} className="max-w-2xl rounded-[2.5rem] border-none p-0 overflow-hidden shadow-[0_50px_100px_rgba(0,0,0,0.3)] bg-white">
+          <div className="bg-slate-900 p-6 md:p-7 text-white relative overflow-hidden shrink-0">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/10 rounded-full -mr-24 -mt-24 blur-3xl" />
+            <div className="flex items-center gap-5 relative z-10">
+              <div className="h-12 w-12 md:h-14 md:w-14 rounded-xl bg-white/10 flex items-center justify-center border border-white/10 shadow-inner">
+                <UserPlus className="h-6 w-6 md:h-7 md:w-7 text-emerald-400" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg md:text-xl font-black uppercase tracking-widest leading-none text-white">Personnel Access</DialogTitle>
+                <DialogDescription className="text-[9px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1.5 opacity-80">
+                  Register new internal team personnel
+                </DialogDescription>
+              </div>
+            </div>
+            <Button variant="ghost" size="icon" onClick={() => setIsRegDialogOpen(false)} className="absolute right-4 top-4 text-white/30 hover:text-white rounded-lg h-9 w-9 transition-all active:scale-90"><X className="h-4 w-4" /></Button>
+          </div>
+
+          <form onSubmit={handleSubmit(onRegisterSubmit)} className="p-8 space-y-8 bg-white">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
+              <div className="space-y-5">
+                <div className="flex items-center gap-2 border-b border-slate-50 pb-2">
+                  <Contact2 className="h-3.5 w-3.5 text-emerald-600" />
+                  <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Main Profile</span>
+                </div>
+                <div className="space-y-4">
+                  <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Full Name</Label><Input {...register("full_name")} className="h-11 px-4 rounded-xl bg-slate-50 border-none font-bold text-sm focus-visible:ring-emerald-500 shadow-inner" placeholder="e.g. Alexander Pierce" required /></div>
+                  <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Strategic Role</Label><Select onValueChange={(val) => setRegValue("role", val)} defaultValue="operator"><SelectTrigger className="h-11 px-4 rounded-xl bg-slate-50 border-none font-bold text-sm shadow-inner focus:ring-emerald-500"><SelectValue placeholder="Assign Role" /></SelectTrigger><SelectContent className="rounded-xl border-none shadow-2xl bg-white">{roleOptions.map(opt => (<SelectItem key={opt.value} value={opt.value} className="text-xs font-bold uppercase py-2.5 border-b border-slate-50 last:border-none hover:bg-emerald-50">{opt.label}</SelectItem>))}</SelectContent></Select></div>
+                  <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">WhatsApp</Label><Input {...register("phone")} className="h-11 px-4 rounded-xl bg-slate-50 border-none font-bold text-sm shadow-inner focus-visible:ring-emerald-500" placeholder="628..." /></div>
+                </div>
+              </div>
+
+              <div className="space-y-5">
+                <div className="flex items-center gap-2 border-b border-slate-50 pb-2">
+                  <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
+                  <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Access & Security</span>
+                </div>
+                <div className="space-y-4">
+                  <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Business Email</Label><Input type="email" {...register("email")} className="h-11 px-4 rounded-xl bg-slate-50 border-none font-bold text-sm focus-visible:ring-blue-500 shadow-inner" placeholder="name@wahfalab.com" required /></div>
+                  <div className="p-3 bg-rose-50 rounded-xl border border-rose-100 flex items-center gap-2">
+                    <Lock className="h-3.5 w-3.5 text-rose-600" />
+                    <p className="text-[8px] font-bold text-rose-800 uppercase leading-tight">Password default '123456' akan diberikan otomatis.</p>
+                  </div>
+                  <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Home Address</Label><Textarea {...register("address")} className="min-h-[85px] px-4 py-3 rounded-xl bg-slate-50 border-none font-bold text-xs focus-visible:ring-emerald-500 transition-all resize-none shadow-inner" placeholder="Complete address..." /></div>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-slate-50 flex gap-4">
+              <Button type="button" variant="ghost" onClick={() => setIsRegDialogOpen(false)} className="flex-1 h-12 rounded-xl font-black text-slate-400 uppercase text-[10px] tracking-widest border-none hover:bg-slate-100 transition-all">Cancel</Button>
+              <LoadingButton type="submit" loading={submitting} className="flex-[2] h-12 bg-slate-900 hover:bg-black text-white rounded-xl font-black uppercase text-[10px] tracking-[0.2em] shadow-xl active:scale-95 transition-all">
+                <UserPlus className="h-4 w-4 mr-2" /> Execute Registration
               </LoadingButton>
-            </DialogFooter>
+            </div>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation AlertDialog */}
-      <AlertDialog open={deleteUserId !== null} onOpenChange={(open) => !open && setDeleteUserId(null)}>
-        <AlertDialogContent className="sm:max-w-[425px]">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
-              <Trash2 className="h-5 w-5" />
-              Konfirmasi Hapus
-            </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="pt-4 text-sm text-muted-foreground">
-                {deleteUserId === "bulk" ? (
-                  <>
-                    <p>Apakah Anda yakin ingin menghapus <strong className="text-slate-900">{selectedIds.length} user</strong> terpilih?</p>
-                    <p className="mt-2 text-sm text-amber-600 font-medium">⚠️ Tindakan ini tidak dapat dibatalkan.</p>
-                  </>
-                ) : (
-                  <>
-                    <p>Apakah Anda yakin ingin menghapus user ini?</p>
-                    <p className="mt-2 text-sm text-amber-600 font-medium">⚠️ Data akan dihapus permanen dari sistem.</p>
-                  </>
-                )}
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2">
-            <AlertDialogCancel className="cursor-pointer">Batal</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={deleteUserId === "bulk" ? confirmBulkDelete : confirmDelete}
-              className="bg-red-600 hover:bg-red-700 cursor-pointer"
-            >
-              <Trash2 className="mr-2 h-4 w-4" /> Hapus
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <AlertDialog open={!!deleteUserId} onOpenChange={(open) => !open && setDeleteUserId(null)}><AlertDialogContent className="rounded-[3rem] border-none p-12 shadow-2xl sm:max-w-sm bg-white"><AlertDialogHeader><div className="h-20 w-20 bg-rose-50 text-rose-600 rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-inner border border-rose-100"><ShieldAlert className="h-10 w-10" /></div><AlertDialogTitle className="text-xl font-black text-center text-slate-900 uppercase tracking-tight">Access Revocation</AlertDialogTitle><AlertDialogDescription className="text-center text-slate-400 font-bold uppercase text-[10px] mt-3 leading-relaxed tracking-widest">{deleteUserId === "bulk" ? `Permanently remove ${selectedIds.length} personnel?` : "Revoking this personnel's access will terminate all system sessions immediately."}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter className="mt-10 gap-4"><AlertDialogCancel className="h-12 rounded-2xl font-black text-[10px] uppercase flex-1 border-none bg-slate-100">Abort</AlertDialogCancel><Button onClick={confirmDelete} className="h-12 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-black text-[10px] flex-1 shadow-xl shadow-rose-900/20 active:scale-95 transition-all uppercase">Execute</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>
+      <LoadingOverlay isOpen={submitting} title="Syncing..." />
+    </div>
+  );
+}
 
-      {/* Import Dialog */}
-      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Upload className="h-5 w-5" />
-              Import Data CSV
-            </DialogTitle>
-            <DialogDescription>
-              Paste data CSV dengan format: Nama Lengkap, Email, Role
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="bg-slate-50 p-3 rounded-lg text-xs font-mono">
-              <p className="font-semibold mb-1">Format:</p>
-              <p>Nama Lengkap,Email,Role</p>
-              <p className="text-slate-500">John Doe,john@example.com,operator</p>
-              <p className="text-slate-500">Jane Smith,jane@example.com,client</p>
-            </div>
-            <textarea
-              className="w-full h-40 p-3 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-              placeholder="Paste CSV data here..."
-              value={importData}
-              onChange={(e) => setImportData(e.target.value)}
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsImportDialogOpen(false)}
-              className="cursor-pointer"
-            >
-              Batal
-            </Button>
-            <Button
-              onClick={handleImport}
-              className="bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
-            >
-              <Upload className="mr-2 h-4 w-4" /> Import
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Loading Overlay */}
-      <LoadingOverlay
-        isOpen={submitting}
-        title="Menyimpan Data..."
-        description="Mohon tunggu sebentar"
-        variant="default"
-      />
+function QuickEditItem({ icon: Icon, label, value, isEdit, onChange }: any) {
+  return (
+    <div className="space-y-2">
+      <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2"><Icon className="h-3 w-3" /> {label}</span>
+      {isEdit ? <Input value={value} onChange={(e) => onChange(e.target.value)} className="h-11 rounded-2xl bg-white border border-slate-200 font-bold text-xs px-4 focus-visible:ring-emerald-500 transition-all shadow-inner" /> : <p className="text-[11px] font-black text-slate-700 uppercase truncate px-1">{value || "-"}</p>}
     </div>
   );
 }

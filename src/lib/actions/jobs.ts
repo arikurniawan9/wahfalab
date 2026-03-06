@@ -61,6 +61,7 @@ export async function getJobOrders(
   // Customer filter
   if (filters?.customerId) {
     where.quotation = {
+      ...(where.quotation || {}),
       profile_id: filters.customerId
     }
   }
@@ -68,7 +69,7 @@ export async function getJobOrders(
   // Service type filter
   if (filters?.serviceType) {
     where.quotation = {
-      ...where.quotation,
+      ...(where.quotation || {}),
       items: {
         some: {
           service: {
@@ -79,132 +80,136 @@ export async function getJobOrders(
     }
   }
 
-  const [items, total] = await Promise.all([
-    prisma.jobOrder.findMany({
-      where,
-      skip,
-      take: limit,
-      select: {
-        id: true,
-        tracking_code: true,
-        status: true,
-        notes: true,
-        certificate_url: true,
-        created_at: true,
-        analysis_started_at: true,
-        analysis_done_at: true,
-        reporting_done_at: true,
-        invoice: {
-          select: {
-            id: true,
-            status: true,
-            amount: true,
-            invoice_number: true
-          }
-        },
-        payment: {
-          select: {
-            id: true,
-            payment_status: true,
-            amount: true,
-            transfer_reference: true,
-            payment_proof_url: true,
-            paid_at: true
-          }
-        },
-        sampling_assignment: {
-          select: {
-            id: true,
-            status: true,
-            scheduled_date: true,
-            actual_date: true,
-            field_officer: {
-              select: {
-                id: true,
-                full_name: true
-              }
-            },
-            assistants: {
-              select: {
-                id: true,
-                full_name: true
-              }
-            },
-            travel_order: {
-              select: {
-                id: true,
-                document_number: true
+  try {
+    const [items, total] = await Promise.all([
+      prisma.jobOrder.findMany({
+        where,
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          tracking_code: true,
+          status: true,
+          notes: true,
+          certificate_url: true,
+          created_at: true,
+          analysis_started_at: true,
+          analysis_done_at: true,
+          reporting_done_at: true,
+          invoice: {
+            select: {
+              id: true,
+              status: true,
+              amount: true,
+              invoice_number: true
+            }
+          },
+          payment: {
+            select: {
+              id: true,
+              payment_status: true,
+              amount: true,
+              transfer_reference: true,
+              payment_proof_url: true,
+              paid_at: true
+            }
+          },
+          sampling_assignment: {
+            select: {
+              id: true,
+              status: true,
+              scheduled_date: true,
+              actual_date: true,
+              field_officer: {
+                select: {
+                  id: true,
+                  full_name: true
+                }
+              },
+              assistants: {
+                select: {
+                  id: true,
+                  full_name: true
+                }
+              },
+              travel_order: {
+                select: {
+                  id: true,
+                  document_number: true
+                }
               }
             }
-          }
-        },
-        quotation: {
-          select: {
-            id: true,
-            quotation_number: true,
-            total_amount: true,
-            perdiem_price: true,
-            perdiem_qty: true,
-            perdiem_name: true,
-            transport_price: true,
-            transport_qty: true,
-            transport_name: true,
-            profile: {
-              select: {
-                id: true,
-                full_name: true,
-                company_name: true,
-                email: true,
-                phone: true,
-                address: true
+          },
+          quotation: {
+            select: {
+              id: true,
+              quotation_number: true,
+              total_amount: true,
+              perdiem_price: true,
+              perdiem_qty: true,
+              perdiem_name: true,
+              transport_price: true,
+              transport_qty: true,
+              transport_name: true,
+              profile: {
+                select: {
+                  id: true,
+                  full_name: true,
+                  company_name: true,
+                  email: true,
+                  phone: true,
+                  address: true
+                }
+              },
+              items: {
+                select: {
+                  id: true,
+                  qty: true,
+                  price_snapshot: true,
+                  parameter_snapshot: true,
+                  service: {
+                    select: {
+                      id: true,
+                      name: true,
+                      category: true
+                    }
+                  },
+                  equipment: {
+                    select: {
+                      id: true,
+                      name: true
+                    }
+                  }
+                }
               }
-            },
-            items: {
-              select: {
-                id: true,
-                qty: true,
-                price_snapshot: true,
-                parameter_snapshot: true,
-                service: {
-                  select: {
-                    id: true,
-                    name: true,
-                    category: true
-                  }
-                },
-                equipment: {
-                  select: {
-                    id: true,
-                    name: true
-                  }
+            }
+          },
+          lab_analysis: {
+            select: {
+              id: true,
+              analyst: {
+                select: {
+                  id: true,
+                  full_name: true
                 }
               }
             }
           }
         },
-        lab_analysis: {
-          select: {
-            id: true,
-            analyst: {
-              select: {
-                id: true,
-                full_name: true
-              }
-            }
-          }
-        }
-      },
-      orderBy: { created_at: 'desc' }
-    }),
-    prisma.jobOrder.count({ where })
-  ])
+        orderBy: { created_at: 'desc' }
+      }),
+      prisma.jobOrder.count({ where })
+    ])
 
-  // Deeply serialize decimals and dates to avoid Client Component errors
-  return JSON.parse(JSON.stringify(serializeData({ 
-    items, 
-    total, 
-    pages: Math.ceil(total / limit) 
-  })));
+    return serializeData({ 
+      items, 
+      total, 
+      pages: Math.ceil(total / limit) 
+    });
+  } catch (error) {
+    console.error('Error fetching job orders:', error);
+    return { items: [], total: 0, pages: 0, error: 'Gagal mengambil data' };
+  }
 }
 
 /**
@@ -266,17 +271,6 @@ export async function getJobStats() {
       prisma.jobOrder.count({ where: { status: 'completed' } }),
     ])
     
-    const overdue = await prisma.jobOrder.count({
-      where: {
-        status: {
-          notIn: ['completed', 'scheduled']
-        },
-        created_at: {
-          lt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000) // Older than 14 days
-        }
-      }
-    })
-    
     return serializeData({
       total,
       scheduled,
@@ -285,12 +279,11 @@ export async function getJobStats() {
       analysis,
       analysisDone,
       reporting,
-      completed,
-      overdue
+      completed
     })
   } catch (error) {
     console.error('Error getting job stats:', error)
-    return { error: 'Failed to get stats' }
+    return { total: 0, scheduled: 0, sampling: 0, analysisReady: 0, analysis: 0, analysisDone: 0, reporting: 0, completed: 0 }
   }
 }
 

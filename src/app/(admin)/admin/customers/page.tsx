@@ -1,11 +1,6 @@
-// ============================================================================
-// CUSTOMERS DATA PAGE
-// Halaman khusus untuk mengelola data customer/pelanggan
-// ============================================================================
-
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import {
   Table,
   TableBody,
@@ -14,12 +9,12 @@ import {
   TableHeader,
   TableRow
 } from "@/components/ui/table";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
-  Plus,
   Pencil,
   Trash2,
   ChevronLeft,
@@ -27,46 +22,39 @@ import {
   Search,
   User,
   Users,
-  Building,
+  Building2,
   Mail,
   Phone,
   Calendar,
   Eye,
   MapPin,
   Download,
-  Upload
+  UserPlus,
+  RefreshCw,
+  ExternalLink,
+  ShieldCheck,
+  ShieldAlert,
+  X,
+  ListTree,
+  Building,
+  Contact2,
+  Save,
+  Settings2,
+  Lock,
+  Info
 } from "lucide-react";
-import { LoadingOverlay, LoadingButton, TableSkeleton, EmptyState } from "@/components/ui";
+import { LoadingOverlay, LoadingButton, TableSkeleton } from "@/components/ui";
 import { getUsers, createOrUpdateUser, deleteUser, deleteManyUsers } from "@/lib/actions/users";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle
-} from "@/components/ui/alert-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
-import Link from "next/link";
+import { format } from "date-fns";
+import { id } from "date-fns/locale";
+import { Textarea } from "@/components/ui/textarea";
 
 export default function CustomersDataPage() {
   const [data, setData] = useState<any>({ users: [], total: 0, pages: 1 });
@@ -74,368 +62,198 @@ export default function CustomersDataPage() {
   const [limit, setLimit] = useState(10);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<any>(null);
+  
+  // Modals state
+  const [isRegDialogOpen, setIsRegDialogOpen] = useState(false);
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
+  
+  const [viewingCustomer, setViewingCustomer] = useState<any>(null);
+  const [editData, setEditData] = useState<any>({});
+  
   const [submitting, setSubmitting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<string>("name");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-  const [viewingCustomer, setViewingCustomer] = useState<any>(null);
-  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
-  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
-  const [importData, setImportData] = useState<string>("");
 
-  const { register, handleSubmit, reset, setValue } = useForm();
-
-  useEffect(() => {
-    loadData();
-  }, [page]);
+  const { register, handleSubmit, reset, setValue: setRegValue } = useForm({
+    defaultValues: {
+      full_name: "",
+      email: "",
+      company_name: "",
+      phone: "",
+      address: ""
+    }
+  });
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const allUsersResult = await getUsers(1, 1000, '');
-      const allCustomers = allUsersResult.users.filter((u: any) => u.role === 'client');
-      
-      // Filter berdasarkan search
-      let filteredUsers = allCustomers;
-      if (search) {
-        const searchLower = search.toLowerCase();
-        filteredUsers = allCustomers.filter((u: any) => 
-          u.full_name?.toLowerCase().includes(searchLower) ||
-          u.email?.toLowerCase().includes(searchLower) ||
-          u.company_name?.toLowerCase().includes(searchLower)
-        );
-      }
-      
-      // Pagination manual
-      const startIndex = (page - 1) * limit;
-      const paginatedUsers = filteredUsers.slice(startIndex, startIndex + limit);
-      
-      setData({
-        users: paginatedUsers,
-        total: filteredUsers.length,
-        pages: Math.ceil(filteredUsers.length / limit)
-      });
-    } catch (error) {
-      console.error('Load customers error:', error);
-      toast.error("Gagal memuat data customer");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const onSubmit = async (formData: any) => {
-    setSubmitting(true);
-
-    try {
-      console.log('Submitting customer data:', formData);
-      console.log('Editing user:', editingUser?.id);
-      
-      await createOrUpdateUser(formData, editingUser?.id);
-
-      toast.success(editingUser ? "Customer berhasil diupdate" : "Customer berhasil ditambahkan");
-      setIsDialogOpen(false);
-      reset();
-      setEditingUser(null);
-      loadData();
-    } catch (error: any) {
-      console.error('Submit customer error:', error);
-      toast.error(error.message || "Terjadi kesalahan");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleEdit = (user: any) => {
-    setEditingUser(user);
-    setValue("full_name", user.full_name || "");
-    setValue("email", user.email || "");
-    setValue("role", "client");
-    setValue("company_name", user.company_name || "");
-    setValue("phone", user.phone || "");
-    setValue("address", user.address || "");
-    setIsDialogOpen(true);
-  };
-
-  const handleDelete = async () => {
-    if (!deleteUserId) return;
-
-    try {
-      if (deleteUserId === "bulk") {
-        await deleteManyUsers(selectedIds);
-        toast.success(`${selectedIds.length} customer berhasil dihapus`);
-      } else {
-        await deleteUser(deleteUserId);
-        toast.success("Customer berhasil dihapus");
-      }
-      setDeleteUserId(null);
+      const result = await getUsers(page, limit, search, 'client');
+      setData(result);
       setSelectedIds([]);
-      loadData();
-    } catch (error) {
-      toast.error("Gagal menghapus customer");
-    }
+    } catch (error) { toast.error("Gagal memuat data pelanggan"); } 
+    finally { setLoading(false); }
   };
 
-  const handleViewDetail = (user: any) => {
-    setViewingCustomer(user);
+  useEffect(() => {
+    const timer = setTimeout(() => { loadData(); }, 300);
+    return () => clearTimeout(timer);
+  }, [page, limit, search]);
+
+  const onRegisterSubmit = async (formData: any) => {
+    setSubmitting(true);
+    try {
+      // Set default password '123456' for new customers
+      await createOrUpdateUser({ ...formData, role: 'client', password: '123456' });
+      setIsRegDialogOpen(false);
+      reset();
+      loadData();
+      toast.success("Pelanggan baru terdaftar", {
+        description: "Akses login default: 123456"
+      });
+    } catch (error: any) { toast.error(error.message); } 
+    finally { setSubmitting(false); }
+  };
+
+  const onQuickUpdate = async () => {
+    setSubmitting(true);
+    try {
+      const payload = { ...editData, role: 'client' };
+      if (!payload.password) delete payload.password;
+      const result = await createOrUpdateUser(payload, viewingCustomer.id);
+      if (result.error) throw new Error(result.error);
+      toast.success("Data pelanggan diperbarui");
+      setIsEditMode(false);
+      loadData();
+      setViewingCustomer({ ...viewingCustomer, ...payload, password: "" });
+    } catch (error: any) { toast.error(error.message); } 
+    finally { setSubmitting(false); }
+  };
+
+  const handleCancelEdit = () => {
+    if (viewingCustomer) {
+      setEditData({
+        full_name: viewingCustomer.full_name || "",
+        email: viewingCustomer.email || "",
+        company_name: viewingCustomer.company_name || "",
+        phone: viewingCustomer.phone || "",
+        address: viewingCustomer.address || "",
+        password: ""
+      });
+    }
+    setIsEditMode(false);
+  };
+
+  const openDetail = (customer: any) => {
+    setViewingCustomer(customer);
+    setEditData({
+      full_name: customer.full_name || "",
+      email: customer.email || "",
+      company_name: customer.company_name || "",
+      phone: customer.phone || "",
+      address: customer.address || "",
+      password: ""
+    });
+    setIsEditMode(false);
     setIsDetailDialogOpen(true);
   };
 
+  const confirmDelete = async () => {
+    if (!deleteUserId) return;
+    try {
+      if (deleteUserId === "bulk") {
+        await deleteManyUsers(selectedIds);
+        toast.success(`${selectedIds.length} pelanggan berhasil dihapus`);
+      } else {
+        await deleteUser(deleteUserId);
+        toast.success("Data pelanggan dihapus");
+      }
+      loadData();
+      setDeleteUserId(null);
+      setIsDetailDialogOpen(false);
+    } catch (error) { toast.error("Gagal hapus data"); }
+  };
+
   const toggleSelectAll = () => {
-    if (selectedIds.length === data.users.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(data.users.map((u: any) => u.id));
-    }
+    if (selectedIds.length === data.users.length) setSelectedIds([]);
+    else setSelectedIds(data.users.map((u: any) => u.id));
   };
 
   const toggleSelect = (id: string) => {
-    if (selectedIds.includes(id)) {
-      setSelectedIds(selectedIds.filter((sid) => sid !== id));
-    } else {
-      setSelectedIds([...selectedIds, id]);
-    }
-  };
-
-  const handleBulkDelete = () => {
-    setDeleteUserId("bulk");
+    if (selectedIds.includes(id)) setSelectedIds(selectedIds.filter(sid => sid !== id));
+    else setSelectedIds([...selectedIds, id]);
   };
 
   const handleExport = () => {
-    const headers = ["Nama Lengkap", "Email", "Perusahaan", "Telepon", "Alamat", "Tanggal Dibuat"];
-    const csvData = data.users.map((user: any) => [
-      user.full_name,
-      user.email,
-      user.company_name || "-",
-      user.phone || "-",
-      user.address || "-",
-      new Date(user.created_at).toISOString().split('T')[0]
-    ]);
-
-    const csv = [
-      headers.join(","),
-      ...csvData.map((row: string[]) => row.map(cell => `"${cell}"`).join(","))
-    ].join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `customers-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-
-    toast.success("Data berhasil diexport", {
-      description: "File CSV telah diunduh"
-    });
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
-    }).format(amount);
-  };
-
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('id-ID', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    });
+    const csvData = data.users.map((u: any) => ({
+      Nama: u.full_name, Email: u.email, Perusahaan: u.company_name || '-', Phone: u.phone || '-', Alamat: u.address || '-'
+    }));
+    const csvContent = "data:text/csv;charset=utf-8," + Object.keys(csvData[0]).join(",") + "\n" + csvData.map((row: any) => Object.values(row).join(",")).join("\n");
+    const link = document.body.appendChild(document.createElement("a"));
+    link.href = encodeURI(csvContent);
+    link.download = `customers_wahfalab_${Date.now()}.csv`;
+    link.click();
+    document.body.removeChild(link);
+    toast.success("Export berhasil");
   };
 
   return (
-    <div className="p-4 md:p-8 max-w-[1600px] mx-auto">
+    <div className="p-4 md:p-6 bg-slate-50 min-h-screen font-[family-name:var(--font-geist-sans)] max-w-7xl mx-auto">
       {/* Header */}
-      <div className="mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-emerald-900 font-[family-name:var(--font-montserrat)] uppercase flex items-center gap-3">
-            <Users className="h-6 w-6 text-emerald-600" />
-            Data Customer
-          </h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Kelola data pelanggan dan customer laboratorium
-          </p>
+      <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-slate-900 rounded-xl shadow-sm"><Building2 className="h-5 w-5 text-blue-400" /></div>
+          <div><h1 className="text-xl font-black text-slate-900 uppercase tracking-tight leading-none">Customer Database</h1><p className="text-slate-400 text-[9px] font-bold uppercase tracking-[0.3em] mt-1 opacity-70">Client Relations & Records</p></div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={handleExport} className="h-10 w-10 rounded-xl bg-white border-slate-200 shadow-sm text-slate-600 hover:text-blue-600 transition-all" title="Export CSV"><Download className="h-4 w-4" /></Button>
+          <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl bg-white border-slate-200 shadow-sm text-slate-600 hover:text-emerald-600 transition-all" onClick={loadData} title="Refresh Data"><RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} /></Button>
         </div>
       </div>
 
-      {/* Filters & Actions Bar */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm mb-6">
-        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-          <div className="relative flex-1 w-full md:max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-500" />
-            <Input
-              placeholder="Cari nama, email, atau perusahaan..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="pl-10 h-11 focus-visible:ring-emerald-500 rounded-lg"
-            />
+      <Card className="rounded-3xl bg-white shadow-xl shadow-slate-200/40 border border-slate-100 overflow-hidden relative">
+        {selectedIds.length > 0 && (
+          <div className="absolute top-0 left-0 right-0 z-20 h-14 bg-slate-900 text-white flex items-center justify-between px-6 animate-in slide-in-from-top duration-300">
+            <div className="flex items-center gap-3"><div className="h-7 w-7 rounded bg-blue-500 text-white flex items-center justify-center font-black text-xs">{selectedIds.length}</div><p className="text-[9px] font-black uppercase tracking-widest">Clients Selected</p></div>
+            <div className="flex items-center gap-2"><Button variant="ghost" onClick={() => setSelectedIds([])} className="text-white/60 hover:text-white text-[8px] font-black uppercase">Cancel</Button><Button onClick={() => setDeleteUserId("bulk")} className="bg-rose-600 hover:bg-rose-700 text-white rounded-lg h-8 px-4 font-black text-[8px] uppercase tracking-widest active:scale-95 transition-all">Remove Selection</Button></div>
           </div>
+        )}
 
-          <div className="flex items-center gap-2 w-full md:w-auto justify-end">
-            <Button
-              onClick={() => setIsDialogOpen(true)}
-              size="icon"
-              className="bg-emerald-600 hover:bg-emerald-700 h-11 w-11 cursor-pointer shadow-md hover:shadow-lg hover:scale-105 transition-all duration-200"
-              title="Tambah Customer"
-            >
-              <Plus className="h-5 w-5" />
-            </Button>
-            {selectedIds.length > 0 && (
-              <Button
-                variant="destructive"
-                size="icon"
-                onClick={handleBulkDelete}
-                className="h-11 w-11 rounded-lg cursor-pointer shadow-sm hover:shadow-md hover:scale-105 transition-all duration-200 animate-in fade-in zoom-in duration-200"
-                title={`Hapus ${selectedIds.length} customer terpilih`}
-              >
-                <Trash2 className="h-5 w-5" />
-                <span className="sr-only">Hapus ({selectedIds.length})</span>
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleExport}
-              className="h-11 w-11 rounded-lg cursor-pointer shadow-sm hover:bg-emerald-50 hover:border-emerald-200 hover:scale-105 transition-all duration-200"
-              title="Export CSV"
-            >
-              <Download className="h-5 w-5" />
-            </Button>
+        <div className="p-4 bg-slate-50/50 border-b border-slate-100 flex flex-col md:flex-row gap-3 items-center">
+          <div className="relative flex-1 w-full group"><Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" /><Input placeholder="Cari nama, email, atau perusahaan..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-12 h-11 bg-white border-none rounded-xl font-bold text-sm shadow-sm" /></div>
+          <div className="flex gap-2 w-full md:w-auto">
+            <Select value={limit.toString()} onValueChange={(val) => { setLimit(parseInt(val)); setPage(1); }}><SelectTrigger className="w-full md:w-32 h-11 rounded-xl border-none bg-white font-black uppercase text-[9px] tracking-widest shadow-sm"><ListTree className="h-3.5 w-3.5 mr-2 text-slate-400" /><SelectValue placeholder="Limit" /></SelectTrigger><SelectContent className="rounded-xl border-none shadow-2xl"><SelectItem value="10" className="text-[9px] font-bold uppercase">10 Baris</SelectItem><SelectItem value="25" className="text-[9px] font-bold uppercase">25 Baris</SelectItem><SelectItem value="50" className="text-[9px] font-bold uppercase">50 Baris</SelectItem></SelectContent></Select>
+            <Button size="icon" onClick={() => { reset(); setIsRegDialogOpen(true); }} className="h-11 w-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg active:scale-95 transition-all" title="Registrasi Customer Baru"><UserPlus className="h-4 w-4" /></Button>
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto mt-4">
+        <div className="overflow-x-auto bg-white">
           <Table>
-            <TableHeader>
-              <TableRow className="bg-slate-50/50">
-                <TableHead className="w-12 px-6">
-                  <Checkbox
-                    checked={selectedIds.length > 0 && selectedIds.length === data.users.length}
-                    onCheckedChange={toggleSelectAll}
-                  />
-                </TableHead>
-                <TableHead className="font-bold text-emerald-900 px-4">Customer</TableHead>
-                <TableHead className="font-bold text-emerald-900 px-4">Email</TableHead>
-                <TableHead className="font-bold text-emerald-900 px-4">Perusahaan</TableHead>
-                <TableHead className="font-bold text-emerald-900 px-4">Telepon</TableHead>
-                <TableHead className="font-bold text-emerald-900 px-4">Tanggal Daftar</TableHead>
-                <TableHead className="text-center font-bold text-emerald-900 px-6">Aksi</TableHead>
+            <TableHeader className="bg-slate-50/30">
+              <TableRow className="border-b border-slate-100">
+                <TableHead className="w-[50px] px-6 py-4 text-center"><Checkbox checked={selectedIds.length === data.users.length && data.users.length > 0} onCheckedChange={toggleSelectAll} /></TableHead>
+                <TableHead className="px-6 py-4 font-black uppercase tracking-widest text-[8px] text-slate-400">Customer Name</TableHead>
+                <TableHead className="px-6 py-4 font-black uppercase tracking-widest text-[8px] text-slate-400">Corporate Identity</TableHead>
+                <TableHead className="px-6 py-4 font-black uppercase tracking-widest text-[8px] text-slate-400">Direct Contact</TableHead>
+                <TableHead className="px-6 py-4 text-right font-black uppercase tracking-widest text-[8px] text-slate-400">Manage</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-20">
-                    <TableSkeleton rows={5} />
-                  </TableCell>
-                </TableRow>
-              ) : data.users.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-20">
-                    <EmptyState
-                      title="Tidak ada customer"
-                      description="Mulai dengan menambahkan customer pertama"
-                      action={
-                        <Button
-                          onClick={() => setIsDialogOpen(true)}
-                          className="bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
-                        >
-                          <Plus className="mr-2 h-4 w-4" /> Tambah Customer
-                        </Button>
-                      }
-                    />
-                  </TableCell>
-                </TableRow>
+                <TableRow><TableCell colSpan={5} className="p-0"><TableSkeleton rows={limit} className="p-6" /></TableCell></TableRow>
               ) : (
                 data.users.map((user: any) => (
-                  <TableRow key={user.id} className="hover:bg-emerald-50/10 transition-colors">
-                    <TableCell className="px-6">
-                      <Checkbox
-                        checked={selectedIds.includes(user.id)}
-                        onCheckedChange={() => toggleSelect(user.id)}
-                      />
-                    </TableCell>
-                    <TableCell className="px-4">
+                  <TableRow key={user.id} className={cn("hover:bg-slate-50 transition-all border-b border-slate-50 last:border-none", selectedIds.includes(user.id) && "bg-blue-50/20")}>
+                    <TableCell className="px-6 py-4 text-center"><Checkbox checked={selectedIds.includes(user.id)} onCheckedChange={() => toggleSelect(user.id)} /></TableCell>
+                    <TableCell className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
-                          <User className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <p className="font-bold text-slate-800">{user.full_name}</p>
-                          {user.company_name && (
-                            <p className="text-xs text-slate-500">{user.company_name}</p>
-                          )}
-                        </div>
+                        <div className="h-9 w-9 rounded-xl bg-blue-50 flex items-center justify-center border border-blue-100 shrink-0 text-blue-600 font-black text-xs uppercase shadow-sm">{(user.full_name || 'C').charAt(0)}</div>
+                        <div className="flex flex-col min-w-0"><span className="text-[12px] font-black text-slate-900 truncate">{user.full_name}</span><span className="text-[9px] font-bold text-slate-400 uppercase truncate">{user.email}</span></div>
                       </div>
                     </TableCell>
-                    <TableCell className="px-4">
-                      <div className="flex items-center gap-2 text-sm text-slate-600">
-                        <Mail className="h-4 w-4 text-slate-400" />
-                        {user.email}
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-4">
-                      {user.company_name ? (
-                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
-                          <Building className="h-3 w-3 mr-1" />
-                          Perusahaan
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
-                          <User className="h-3 w-3 mr-1" />
-                          Personal
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="px-4">
-                      <div className="flex items-center gap-2 text-sm text-slate-600">
-                        <Phone className="h-4 w-4 text-slate-400" />
-                        {user.phone || '-'}
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-4">
-                      <div className="flex items-center gap-2 text-sm text-slate-600">
-                        <Calendar className="h-4 w-4 text-slate-400" />
-                        {formatDate(user.created_at)}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center px-6">
-                      <div className="flex items-center justify-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleViewDetail(user)}
-                          className="text-blue-600 hover:bg-blue-50 cursor-pointer"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleEdit(user)}
-                          className="text-emerald-600 hover:bg-emerald-50 cursor-pointer"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setDeleteUserId(user.id)}
-                          className="text-red-600 hover:bg-red-50 cursor-pointer"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                    <TableCell className="px-6 py-4"><div className="flex items-center gap-2"><Building className="h-3 w-3 text-slate-400" /><span className="text-[10px] font-bold text-slate-600 uppercase truncate max-w-[150px]">{user.company_name || "Personal"}</span></div></TableCell>
+                    <TableCell className="px-6 py-4"><div className="flex items-center gap-2 text-emerald-600"><Phone className="h-3 w-3" /><span className="text-[10px] font-black">{user.phone || "-"}</span></div></TableCell>
+                    <TableCell className="px-6 py-4 text-right"><Button variant="ghost" size="sm" onClick={() => openDetail(user)} className="h-8 px-3 rounded-lg font-black text-[8px] uppercase tracking-widest text-slate-400 hover:text-blue-600 transition-all gap-1.5"><Settings2 className="h-3 w-3" /> Manage</Button></TableCell>
                   </TableRow>
                 ))
               )}
@@ -443,345 +261,112 @@ export default function CustomersDataPage() {
           </Table>
         </div>
 
-        {/* Pagination */}
-        {data.total > 0 && (
-          <div className="flex flex-col md:flex-row items-center justify-between p-5 border-t bg-slate-50/50 gap-4">
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-slate-600">
-                Menampilkan <strong className="text-slate-900">{Math.min(data.users.length, data.total)}</strong> dari <strong className="text-slate-900">{data.total}</strong> customer
-              </span>
-              
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-600">Tampilkan:</span>
-                <Select
-                  value={limit.toString()}
-                  onValueChange={(value) => {
-                    setLimit(Number(value));
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger className="w-[80px] h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="10">10</SelectItem>
-                    <SelectItem value="20">20</SelectItem>
-                    <SelectItem value="50">50</SelectItem>
-                    <SelectItem value="100">100</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(1)}
-                disabled={page === 1}
-                className="cursor-pointer"
-              >
-                First
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="cursor-pointer"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              
-              <div className="flex items-center gap-1">
-                <span className="text-sm font-medium px-3 py-1 bg-white rounded-md border">
-                  Halaman {page} dari {data.pages}
-                </span>
-              </div>
-              
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.min(data.pages, p + 1))}
-                disabled={page === data.pages}
-                className="cursor-pointer"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(data.pages)}
-                disabled={page === data.pages}
-                className="cursor-pointer"
-              >
-                Last
-              </Button>
-            </div>
+        <div className="p-4 bg-slate-50/50 flex items-center justify-between border-t border-slate-100">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{data.total} Registered Clients</p>
+          <div className="flex gap-1.5">
+            <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg bg-white border-slate-200" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft className="h-3.5 w-3.5" /></Button>
+            <div className="flex items-center px-3 text-[9px] font-black bg-white border border-slate-200 rounded-lg text-slate-700">{page} / {data.pages}</div>
+            <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg bg-white border-slate-200" disabled={page === data.pages} onClick={() => setPage(p => p + 1)}><ChevronRight className="h-3.5 w-3.5" /></Button>
           </div>
-        )}
-      </div>
+        </div>
+      </Card>
 
-      {/* Add/Edit Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={(open) => {
-        setIsDialogOpen(open);
-        if (!open) {
-          reset();
-          setEditingUser(null);
-        }
-      }}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle className="text-emerald-900 flex items-center gap-2">
-              <User className="h-5 w-5" />
-              {editingUser ? "Edit" : "Tambah"} Customer Baru
-            </DialogTitle>
-            <DialogDescription>
-              Masukkan informasi customer di bawah ini.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="full_name">Nama Lengkap *</Label>
-              <Input 
-                id="full_name"
-                {...register("full_name", { required: true })} 
-                placeholder="Masukkan nama lengkap" 
-                className="focus-visible:ring-emerald-500" 
-              />
+      {/* REGISTRATION DIALOG - COMPACT & AUTO-PASSWORD */}
+      <Dialog open={isRegDialogOpen} onOpenChange={setIsRegDialogOpen}>
+        <DialogContent showCloseButton={false} className="max-w-2xl rounded-2xl border-none p-0 overflow-hidden shadow-2xl bg-white">
+          <div className="bg-slate-900 px-6 py-4 text-white flex items-center justify-between border-b border-white/5">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-lg bg-blue-500/20 flex items-center justify-center border border-blue-500/20"><UserPlus className="h-5 w-5 text-blue-400" /></div>
+              <div><DialogTitle className="text-sm font-black uppercase tracking-widest text-white">Customer Authorization</DialogTitle><DialogDescription className="text-[8px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-0.5">Add new client with auto-assigned password</DialogDescription></div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email *</Label>
-              <Input 
-                id="email"
-                {...register("email", { required: true })} 
-                type="email" 
-                placeholder="email@customer.com" 
-                className="focus-visible:ring-emerald-500" 
-              />
-            </div>
-            {!editingUser && (
-              <div className="space-y-2">
-                <Label htmlFor="password">Password *</Label>
-                <Input 
-                  id="password"
-                  {...register("password", { required: true, minLength: 6 })} 
-                  type="password" 
-                  placeholder="Minimal 6 karakter" 
-                  className="focus-visible:ring-emerald-500" 
-                />
+            <Button variant="ghost" size="icon" onClick={() => setIsRegDialogOpen(false)} className="text-white/20 hover:text-white rounded-lg h-8 w-8"><X className="h-4 w-4" /></Button>
+          </div>
+
+          <form onSubmit={handleSubmit(onRegisterSubmit)} className="p-6 bg-white space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 border-b border-slate-50 pb-2"><Contact2 className="h-3 w-3 text-blue-500" /><span className="text-[9px] font-black text-slate-900 uppercase tracking-widest">Main Profile</span></div>
+                <div className="space-y-3">
+                  <div className="space-y-1"><Label className="text-[8px] font-black uppercase text-slate-400 tracking-widest ml-1">Full Identity Name</Label><Input {...register("full_name")} className="h-9 rounded-lg bg-slate-50 border-none font-bold text-xs px-3 focus-visible:ring-blue-500 shadow-inner" placeholder="e.g John Doe" required /></div>
+                  <div className="space-y-1"><Label className="text-[8px] font-black uppercase text-slate-400 tracking-widest ml-1">Company Name</Label><Input {...register("company_name")} className="h-9 rounded-lg bg-slate-50 border-none font-bold text-xs px-3 shadow-inner" placeholder="e.g PT Wahfa Corp" /></div>
+                </div>
               </div>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="company_name">Nama Perusahaan</Label>
-              <Input 
-                id="company_name"
-                {...register("company_name")} 
-                placeholder="PT. Nama Perusahaan" 
-                className="focus-visible:ring-emerald-500" 
-              />
+
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 border-b border-slate-50 pb-2"><ShieldCheck className="h-3 w-3 text-emerald-500" /><span className="text-[9px] font-black text-slate-900 uppercase tracking-widest">Access Access</span></div>
+                <div className="space-y-3">
+                  <div className="space-y-1"><Label className="text-[8px] font-black uppercase text-slate-400 tracking-widest ml-1">Login Email</Label><Input type="email" {...register("email")} className="h-9 rounded-lg bg-slate-50 border-none font-bold text-xs px-3 focus-visible:ring-blue-500 shadow-inner" placeholder="client@email.com" required /></div>
+                  <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 flex items-center gap-2">
+                    <Lock className="h-3 w-3 text-emerald-600" />
+                    <p className="text-[8px] font-bold text-emerald-800 uppercase leading-tight">Password default '123456' akan diberikan otomatis.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="md:col-span-2 space-y-4">
+                <div className="flex items-center gap-2 border-b border-slate-50 pb-2"><Phone className="h-3 w-3 text-emerald-500" /><span className="text-[9px] font-black text-slate-900 uppercase tracking-widest">Contact & Address</span></div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1"><Label className="text-[8px] font-black uppercase text-slate-400 tracking-widest ml-1">No. WhatsApp</Label><Input {...register("phone")} className="h-9 rounded-lg bg-slate-50 border-none font-bold text-xs px-3 shadow-inner" placeholder="628..." required /></div>
+                  <div className="md:col-span-2 space-y-1"><Label className="text-[8px] font-black uppercase text-slate-400 tracking-widest ml-1">Office/Home Address</Label><Textarea {...register("address")} className="min-h-[80px] rounded-lg bg-slate-50 border-none font-bold text-[10px] p-3 focus-visible:ring-blue-500 transition-all resize-none shadow-inner" placeholder="Full domicile address..." /></div>
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">Telepon</Label>
-              <Input 
-                id="phone"
-                {...register("phone")} 
-                placeholder="0812-3456-7890" 
-                className="focus-visible:ring-emerald-500" 
-              />
+
+            <div className="pt-4 border-t border-slate-50 flex gap-3">
+              <Button type="button" variant="ghost" onClick={() => setIsRegDialogOpen(false)} className="flex-1 h-10 rounded-lg font-black text-slate-400 uppercase text-[9px] tracking-widest border-none hover:bg-slate-100 transition-all">Cancel</Button>
+              <LoadingButton type="submit" loading={submitting} className="flex-[2] h-10 bg-slate-900 hover:bg-black text-white rounded-lg font-black uppercase text-[9px] tracking-[0.2em] shadow-xl active:scale-95 transition-all">Grant System Access</LoadingButton>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="address">Alamat</Label>
-              <Input 
-                id="address"
-                {...register("address")} 
-                placeholder="Alamat lengkap" 
-                className="focus-visible:ring-emerald-500" 
-              />
-            </div>
-            
-            {/* Hidden role field - always set to client */}
-            <input type="hidden" {...register("role")} value="client" />
-            
-            <DialogFooter className="pt-4">
-              <LoadingButton
-                type="submit"
-                className="w-full bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
-                loading={submitting}
-                loadingText="Menyimpan..."
-              >
-                {editingUser ? "Simpan Perubahan" : "Buat Customer"}
-              </LoadingButton>
-            </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation AlertDialog */}
-      <AlertDialog open={deleteUserId !== null} onOpenChange={(open) => !open && setDeleteUserId(null)}>
-        <AlertDialogContent className="sm:max-w-[425px]">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
-              <Trash2 className="h-5 w-5" />
-              Konfirmasi Hapus
-            </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="pt-4 text-sm text-muted-foreground">
-                {deleteUserId === "bulk" ? (
-                  <>
-                    <p className="text-lg font-semibold text-slate-700 mb-2">
-                      Hapus {selectedIds.length} customer terpilih?
-                    </p>
-                    <p>Apakah Anda yakin ingin menghapus {selectedIds.length} customer ini?</p>
-                    <p className="mt-2 text-sm text-amber-600 font-medium">⚠️ Data akan dihapus permanen dari sistem.</p>
-                  </>
-                ) : (
-                  <>
-                    <p>Apakah Anda yakin ingin menghapus customer ini?</p>
-                    <p className="mt-2 text-sm text-amber-600 font-medium">⚠️ Data akan dihapus permanen dari sistem.</p>
-                  </>
-                )}
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2">
-            <AlertDialogCancel className="cursor-pointer">Batal</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-red-600 hover:bg-red-700 cursor-pointer"
-            >
-              <Trash2 className="mr-2 h-4 w-4" /> 
-              {deleteUserId === "bulk" ? `Hapus ${selectedIds.length}` : "Hapus"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Detail Customer Dialog */}
-      <Dialog open={isDetailDialogOpen} onOpenChange={(open) => {
-        setIsDetailDialogOpen(open);
-        if (!open) {
-          setViewingCustomer(null);
-        }
-      }}>
-        <DialogContent className="sm:max-w-[550px]">
-          <DialogHeader>
-            <DialogTitle className="text-emerald-900 flex items-center gap-2">
-              <User className="h-5 w-5" />
-              Detail Customer
-            </DialogTitle>
-            <DialogDescription>
-              Informasi lengkap data customer
-            </DialogDescription>
-          </DialogHeader>
-          {viewingCustomer && (
-            <div className="space-y-6 py-4">
-              {/* Profile Section */}
-              <div className="flex items-center gap-4 pb-4 border-b">
-                <div className="h-16 w-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
-                  <User className="h-8 w-8" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-slate-800">{viewingCustomer.full_name}</h3>
-                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs mt-1">
-                    {viewingCustomer.role === 'client' ? 'Customer' : viewingCustomer.role}
-                  </Badge>
+      {/* DETAIL MODAL - COMPACT VERSION */}
+      <Dialog open={isDetailDialogOpen} onOpenChange={(open) => { setIsDetailDialogOpen(open); if (!open) setIsEditMode(false); }}>
+        <DialogContent showCloseButton={false} className="max-w-xl rounded-2xl border-none p-0 overflow-hidden shadow-2xl bg-white">
+          <div className="bg-slate-900 p-5 text-white relative">
+            <div className="flex items-center justify-between relative z-10">
+              <div className="flex items-center gap-4">
+                <div className="h-14 w-14 rounded-xl bg-white/10 flex items-center justify-center border-2 border-white/10 shadow-xl text-xl font-black overflow-hidden">{viewingCustomer?.full_name ? viewingCustomer.full_name.charAt(0).toUpperCase() : 'C'}</div>
+                <div className="space-y-0.5">
+                  <Badge className="bg-blue-500 text-white border-none text-[6px] font-black uppercase px-1 h-3 mb-1">Corporate Client</Badge>
+                  <DialogTitle className="text-lg font-black uppercase tracking-tight text-white leading-none">{viewingCustomer?.full_name}</DialogTitle>
+                  <div className="flex items-center gap-2 mt-1 text-slate-400 text-[7px] font-black uppercase tracking-widest"><Building className="h-2.5 w-2.5" /> {viewingCustomer?.company_name || "Personal"}</div>
                 </div>
               </div>
-
-              {/* Contact Information */}
-              <div className="space-y-4">
-                <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-emerald-600" />
-                  Informasi Kontak
-                </h4>
-                <div className="grid gap-3">
-                  <div className="flex items-center gap-3 text-sm">
-                    <Mail className="h-4 w-4 text-slate-400" />
-                    <span className="text-slate-600">{viewingCustomer.email}</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm">
-                    <Phone className="h-4 w-4 text-slate-400" />
-                    <span className="text-slate-600">{viewingCustomer.phone || '-'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Company Information */}
-              {(viewingCustomer.company_name || viewingCustomer.address) && (
-                <div className="space-y-4">
-                  <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                    <Building className="h-4 w-4 text-emerald-600" />
-                  Informasi Perusahaan
-                  </h4>
-                  <div className="grid gap-3">
-                    {viewingCustomer.company_name && (
-                      <div className="flex items-start gap-3 text-sm">
-                        <Building className="h-4 w-4 text-slate-400 mt-0.5" />
-                        <div>
-                          <span className="text-slate-500 block">Perusahaan</span>
-                          <span className="text-slate-800 font-medium">{viewingCustomer.company_name}</span>
-                        </div>
-                      </div>
-                    )}
-                    {viewingCustomer.address && (
-                      <div className="flex items-start gap-3 text-sm">
-                        <MapPin className="h-4 w-4 text-slate-400 mt-0.5" />
-                        <div>
-                          <span className="text-slate-500 block">Alamat</span>
-                          <span className="text-slate-800">{viewingCustomer.address}</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Registration Date */}
-              <div className="space-y-2 pt-4 border-t">
-                <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-emerald-600" />
-                  Informasi Pendaftaran
-                </h4>
-                <div className="flex items-center gap-3 text-sm">
-                  <Calendar className="h-4 w-4 text-slate-400" />
-                  <span className="text-slate-600">Terdaftar sejak: {formatDate(viewingCustomer.created_at)}</span>
-                </div>
-              </div>
+              <div className="flex gap-1.5 self-start">{!isEditMode && <Button type="button" variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setIsEditMode(true); }} className="text-white/20 hover:text-white rounded-lg h-8 w-8"><Pencil className="h-3.5 w-3.5" /></Button>}<Button type="button" variant="ghost" size="icon" onClick={() => setIsDetailDialogOpen(false)} className="text-white/20 hover:text-white rounded-lg h-8 w-8"><X className="h-3.5 w-3.5" /></Button></div>
             </div>
-          )}
-          <DialogFooter className="pt-4">
-            <Button
-              variant="outline"
-              onClick={() => setIsDetailDialogOpen(false)}
-              className="cursor-pointer"
-            >
-              Tutup
-            </Button>
-            <Button
-              onClick={() => {
-                setIsDetailDialogOpen(false);
-                handleEdit(viewingCustomer);
-              }}
-              className="bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
-            >
-              <Pencil className="mr-2 h-4 w-4" /> Edit
-            </Button>
-          </DialogFooter>
+          </div>
+          <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-5 bg-white">
+            <div className="space-y-4">
+              <QuickEditItem icon={User} label="Name" value={isEditMode ? editData.full_name : viewingCustomer?.full_name} isEdit={isEditMode} onChange={(val: string) => setEditData({...editData, full_name: val})} />
+              <QuickEditItem icon={Building} label="Company" value={isEditMode ? editData.company_name : viewingCustomer?.company_name} isEdit={isEditMode} onChange={(val: string) => setEditData({...editData, company_name: val})} />
+              <QuickEditItem icon={Mail} label="Email" value={isEditMode ? editData.email : viewingCustomer?.email} isEdit={isEditMode} onChange={(val: string) => setEditData({...editData, email: val})} />
+            </div>
+            <div className="space-y-4">
+              <QuickEditItem icon={Phone} label="WhatsApp" value={isEditMode ? editData.phone : (viewingCustomer?.phone || "-")} isEdit={isEditMode} onChange={(val: string) => setEditData({...editData, phone: val})} />
+              <div className="space-y-1"><span className="text-[7px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5"><MapPin className="h-2 w-2" /> Address</span>{isEditMode ? <Textarea value={editData.address} onChange={(e) => setEditData({...editData, address: e.target.value})} className="min-h-[60px] rounded-lg bg-slate-50 border-none font-bold text-[10px] p-2 focus-visible:ring-blue-500 transition-all resize-none shadow-inner" /> : <p className="text-[9px] font-bold text-slate-600 leading-relaxed uppercase bg-slate-50/50 p-2 rounded-lg border border-slate-100">{viewingCustomer?.address || "No address."}</p>}</div>
+              {isEditMode && (<div className="space-y-1 animate-in fade-in slide-in-from-bottom-1"><span className="text-[7px] font-black uppercase text-rose-500 tracking-widest flex items-center gap-1.5 font-bold"><Lock className="h-2 w-2" /> Force Reset</span><Input type="password" placeholder="New pass..." value={editData.password} onChange={(e) => setEditData({...editData, password: e.target.value})} className="h-8 rounded-lg bg-rose-50/30 border-none font-bold text-[10px] px-3 shadow-inner" /></div>)}
+            </div>
+          </div>
+          <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center px-5">
+            <Button variant="outline" onClick={() => setDeleteUserId(viewingCustomer.id)} className="rounded-lg h-8 px-3 border-rose-100 text-rose-600 font-black uppercase text-[7px] tracking-widest"><Trash2 className="h-3 w-3" /></Button>
+            <div className="flex gap-2">{isEditMode ? (<><Button variant="ghost" onClick={handleCancelEdit} disabled={submitting} className="h-8 font-black uppercase text-[8px] text-slate-400 rounded-lg">Cancel</Button><LoadingButton onClick={onQuickUpdate} loading={submitting} className="h-8 px-4 rounded-lg bg-blue-600 text-white font-black uppercase text-[8px] tracking-widest shadow-md">Save Changes</LoadingButton></>) : (<Button onClick={() => setIsDetailDialogOpen(false)} className="h-8 px-6 rounded-lg bg-slate-900 text-white font-black uppercase text-[8px] tracking-widest shadow-md">Close</Button>)}</div>
+          </div>
         </DialogContent>
       </Dialog>
 
-      {/* Loading Overlay */}
-      <LoadingOverlay
-        isOpen={submitting}
-        title="Menyimpan Data..."
-        description="Customer sedang disimpan"
-        variant="default"
-      />
+      {/* DELETE DIALOG */}
+      <AlertDialog open={!!deleteUserId} onOpenChange={(open) => !open && setDeleteUserId(null)}><AlertDialogContent className="rounded-2xl border-none p-8 shadow-2xl sm:max-w-sm bg-white"><AlertDialogHeader><div className="h-12 w-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-inner border border-rose-100"><ShieldAlert className="h-6 w-6" /></div><AlertDialogTitle className="text-base font-black text-center text-slate-900 uppercase">Revoke Access?</AlertDialogTitle><AlertDialogDescription className="text-center text-slate-400 font-bold uppercase text-[8px] mt-2 leading-relaxed">{deleteUserId === "bulk" ? `Hapus ${selectedIds.length} pelanggan terpilih?` : "Seluruh riwayat pelanggan ini akan tetap ada namun akses login akan dicabut."}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter className="mt-6 gap-3"><AlertDialogCancel className="h-10 rounded-lg font-black text-[8px] uppercase flex-1 border-none bg-slate-100">Batal</AlertDialogCancel><Button onClick={confirmDelete} className="h-10 rounded-lg bg-rose-600 text-white font-black text-[8px] flex-1 shadow-md uppercase">Konfirmasi</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>
+      <LoadingOverlay isOpen={submitting} title="Syncing..." />
     </div>
   );
 }
 
-function cn(...classes: (string | undefined | null | false)[]) {
-  return classes.filter(Boolean).join(' ');
+function QuickEditItem({ icon: Icon, label, value, isEdit, onChange }: any) {
+  return (
+    <div className="space-y-1">
+      <span className="text-[7px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5"><Icon className="h-2 w-2" /> {label}</span>
+      {isEdit ? <Input value={value} onChange={(e) => onChange(e.target.value)} className="h-8 rounded-lg bg-slate-50 border-none font-bold text-[10px] px-3 focus-visible:ring-blue-500 transition-all shadow-inner" /> : <p className="text-[9px] font-black text-slate-700 uppercase truncate px-1">{value || "-"}</p>}
+    </div>
+  );
 }

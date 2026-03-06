@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useTransition } from "react";
 import {
   Table,
   TableBody,
@@ -9,12 +9,16 @@ import {
   TableHeader,
   TableRow
 } from "@/components/ui/table";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import {
-  Plus,
   Pencil,
   Trash2,
+  ChevronLeft,
+  ChevronRight,
   Search,
   User,
   Users as UsersIcon,
@@ -22,12 +26,19 @@ import {
   MapPin,
   Mail,
   X,
-  ChevronLeft,
-  ChevronRight,
   ShieldCheck,
-  PlusCircle
+  RefreshCw,
+  ExternalLink,
+  ShieldAlert,
+  UserPlus,
+  Download,
+  ListTree,
+  Save,
+  Contact2,
+  Settings2,
+  Lock
 } from "lucide-react";
-import { ChemicalLoader, LoadingOverlay, LoadingButton, EmptyState } from "@/components/ui";
+import { LoadingOverlay, LoadingButton, TableSkeleton } from "@/components/ui";
 import { 
   getFieldAssistants, 
   createFieldAssistant, 
@@ -40,36 +51,56 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
   DialogDescription
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { Textarea } from "@/components/ui/textarea";
+import { format } from "date-fns";
+import { id } from "date-fns/locale";
 
 export default function AssistantManagementPage() {
   const [assistants, setAssistants] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingAssistant, setEditingAssistant] = useState<any>(null);
-  const [submitting, setSubmitting] = useState(false);
-  
-  // Pagination state
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
+  const [limit, setLimit] = useState(10);
+  const [search, setSearch] = useState("");
   
-  const [formData, setFormData] = useState({
-    full_name: "",
-    phone: "",
-    email: "",
-    address: ""
-  });
+  // Modals state
+  const [isRegDialogOpen, setIsRegDialogOpen] = useState(false);
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  
+  const [viewingAssistant, setViewingAssistant] = useState<any>(null);
+  const [editData, setEditData] = useState<any>({});
+  
+  const [submitting, setSubmitting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const loadAssistants = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getFieldAssistants();
       setAssistants(data);
+      setSelectedIds([]);
     } catch (error) {
       toast.error("Gagal memuat data asisten");
     } finally {
@@ -81,57 +112,103 @@ export default function AssistantManagementPage() {
     loadAssistants();
   }, [loadAssistants]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const onRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const formData = new FormData(e.currentTarget as HTMLFormElement);
+    const data = Object.fromEntries(formData.entries());
+    
     setSubmitting(true);
     try {
-      if (editingAssistant) {
-        await updateFieldAssistant(editingAssistant.id, formData);
-        toast.success("Asisten berhasil diperbarui");
-      } else {
-        await createFieldAssistant(formData);
-        toast.success("Asisten baru berhasil ditambahkan");
-      }
-      setIsDialogOpen(false);
-      resetForm();
+      await createFieldAssistant(data as any);
+      setIsRegDialogOpen(false);
       loadAssistants();
+      toast.success("Asisten baru terdaftar");
     } catch (error: any) {
-      toast.error(error.message || "Gagal menyimpan data");
+      toast.error(error.message);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const resetForm = () => {
-    setFormData({
-      full_name: "",
-      phone: "",
-      email: "",
-      address: ""
-    });
-    setEditingAssistant(null);
+  const onQuickUpdate = async () => {
+    setSubmitting(true);
+    try {
+      await updateFieldAssistant(viewingAssistant.id, editData);
+      toast.success("Data asisten diperbarui");
+      setIsEditMode(false);
+      loadAssistants();
+      setViewingAssistant({ ...viewingAssistant, ...editData });
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleEdit = (assistant: any) => {
-    setEditingAssistant(assistant);
-    setFormData({
-      full_name: assistant.full_name,
+  const handleCancelEdit = () => {
+    if (viewingAssistant) {
+      setEditData({
+        full_name: viewingAssistant.full_name || "",
+        phone: viewingAssistant.phone || "",
+        email: viewingAssistant.email || "",
+        address: viewingAssistant.address || ""
+      });
+    }
+    setIsEditMode(false);
+  };
+
+  const openDetail = (assistant: any) => {
+    setViewingAssistant(assistant);
+    setEditData({
+      full_name: assistant.full_name || "",
       phone: assistant.phone || "",
       email: assistant.email || "",
       address: assistant.address || ""
     });
-    setIsDialogOpen(true);
+    setIsEditMode(false);
+    setIsDetailDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Hapus data asisten ini?")) return;
+  const confirmDelete = async () => {
+    if (!deleteId) return;
     try {
-      await deleteFieldAssistant(id);
-      toast.success("Asisten berhasil dihapus");
+      if (deleteId === "bulk") {
+        for (const id of selectedIds) {
+          await deleteFieldAssistant(id);
+        }
+        toast.success(`${selectedIds.length} asisten dihapus`);
+      } else {
+        await deleteFieldAssistant(deleteId);
+        toast.success("Data dihapus");
+      }
       loadAssistants();
-    } catch (error: any) {
-      toast.error("Gagal menghapus asisten");
+      setDeleteId(null);
+      setIsDetailDialogOpen(false);
+    } catch (error) {
+      toast.error("Gagal hapus data");
     }
+  };
+
+  const handleExport = () => {
+    const csvData = filteredItems.map((a: any) => ({
+      Nama: a.full_name, Phone: a.phone || '-', Email: a.email || '-', Alamat: a.address || '-'
+    }));
+    const csvContent = "data:text/csv;charset=utf-8," + Object.keys(csvData[0]).join(",") + "\n" + csvData.map((row: any) => Object.values(row).join(",")).join("\n");
+    const link = document.createElement("a");
+    link.setAttribute("href", encodeURI(csvContent));
+    link.setAttribute("download", `assistants_wahfalab_${Date.now()}.csv`);
+    link.click();
+    toast.success("Export berhasil");
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === paginatedItems.length) setSelectedIds([]);
+    else setSelectedIds(paginatedItems.map((a: any) => a.id));
+  };
+
+  const toggleSelect = (id: string) => {
+    if (selectedIds.includes(id)) setSelectedIds(selectedIds.filter(sid => sid !== id));
+    else setSelectedIds([...selectedIds, id]);
   };
 
   const filteredItems = useMemo(() => {
@@ -142,7 +219,6 @@ export default function AssistantManagementPage() {
     );
   }, [assistants, search]);
 
-  // Paginated items
   const paginatedItems = useMemo(() => {
     const startIndex = (page - 1) * limit;
     return filteredItems.slice(startIndex, startIndex + limit);
@@ -150,155 +226,66 @@ export default function AssistantManagementPage() {
 
   const totalPages = Math.ceil(filteredItems.length / limit);
 
-  // Helper function to format WA link
-  const formatWALink = (phone: string) => {
-    // Remove all non-numeric characters
-    let cleaned = phone.replace(/\D/g, "");
-    // If starts with 0, replace with 62
-    if (cleaned.startsWith("0")) {
-      cleaned = "62" + cleaned.slice(1);
-    }
-    // If it doesn't start with 62 or +62, and is quite short, might need more logic
-    // but for ID context, 0 -> 62 is the most common
-    return `https://wa.me/${cleaned}`;
-  };
-
-  if (loading && assistants.length === 0) {
-    return (
-      <div className="flex h-[70vh] items-center justify-center">
-        <ChemicalLoader />
-      </div>
-    );
-  }
-
   return (
-    <div className="p-4 md:p-10 pb-24 md:pb-10">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-black text-emerald-900 tracking-tight flex items-center gap-3">
-            <ShieldCheck className="h-8 w-8 text-emerald-600" />
-            DATABASE ASISTEN LAPANGAN
-          </h1>
-          <p className="text-slate-500 text-xs font-bold uppercase tracking-[0.2em] opacity-80">
-            Kelola data personel asisten untuk kebutuhan administrasi & surat tugas
-          </p>
+    <div className="p-4 md:p-6 bg-slate-50 min-h-screen font-[family-name:var(--font-geist-sans)] max-w-7xl mx-auto">
+      {/* Header Ramping */}
+      <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-slate-900 rounded-xl shadow-sm"><UsersIcon className="h-5 w-5 text-amber-400" /></div>
+          <div><h1 className="text-xl font-black text-slate-900 uppercase tracking-tight leading-none">Field Personnel</h1><p className="text-slate-400 text-[9px] font-bold uppercase tracking-[0.3em] mt-1 opacity-70">Asisten Lapangan & Sampling</p></div>
         </div>
-        <Button
-          onClick={() => {
-            resetForm();
-            setIsDialogOpen(true);
-          }}
-          className="rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-2 h-11 px-6 shadow-lg shadow-emerald-900/20"
-        >
-          <PlusCircle className="h-4 w-4" />
-          Tambah Asisten
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={handleExport} className="h-10 w-10 rounded-xl bg-white border-slate-200 shadow-sm text-slate-600 hover:text-amber-600 transition-all" title="Export CSV"><Download className="h-4 w-4" /></Button>
+          <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl bg-white border-slate-200 shadow-sm text-slate-600 hover:text-blue-600 transition-all" onClick={loadAssistants} title="Refresh Data"><RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} /></Button>
+        </div>
       </div>
 
-      {/* Main Table Container */}
-      <div className="bg-white rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-slate-200 overflow-hidden">
-        <div className="p-8 border-b bg-gradient-to-br from-slate-50 to-white">
-          <div className="relative max-w-md">
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
-            <Input
-              placeholder="Cari nama, email, atau no. telepon..."
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="pl-12 h-14 rounded-2xl border-slate-200 bg-white shadow-inner focus-visible:ring-emerald-500 font-medium"
-            />
+      <Card className="rounded-3xl bg-white shadow-xl shadow-slate-200/40 border border-slate-100 overflow-hidden relative">
+        {/* MULTI-DELETE TOOLBAR */}
+        {selectedIds.length > 0 && (
+          <div className="absolute top-0 left-0 right-0 z-20 h-14 bg-slate-900 text-white flex items-center justify-between px-6 animate-in slide-in-from-top duration-300">
+            <div className="flex items-center gap-3"><div className="h-7 w-7 rounded bg-amber-500 text-slate-900 flex items-center justify-center font-black text-xs">{selectedIds.length}</div><p className="text-[9px] font-black uppercase tracking-widest">Personnel Selected</p></div>
+            <div className="flex items-center gap-2"><Button variant="ghost" onClick={() => setSelectedIds([])} className="text-white/60 hover:text-white text-[8px] font-black uppercase">Cancel</Button><Button onClick={() => setDeleteId("bulk")} className="bg-rose-600 hover:bg-rose-700 text-white rounded-lg h-8 px-4 font-black text-[8px] uppercase tracking-widest active:scale-95 transition-all">Remove Selection</Button></div>
+          </div>
+        )}
+
+        <div className="p-4 bg-slate-50/50 border-b border-slate-100 flex flex-col md:flex-row gap-3 items-center">
+          <div className="relative flex-1 w-full group"><Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-amber-500 transition-colors" /><Input placeholder="Cari personel..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="pl-12 h-11 bg-white border-none rounded-xl font-bold text-sm shadow-sm" /></div>
+          <div className="flex gap-2 w-full md:w-auto">
+            <Select value={limit.toString()} onValueChange={(val) => { setLimit(parseInt(val)); setPage(1); }}><SelectTrigger className="w-full md:w-32 h-11 rounded-xl border-none bg-white font-black uppercase text-[9px] tracking-widest shadow-sm"><ListTree className="h-3.5 w-3.5 mr-2 text-slate-400" /><SelectValue placeholder="Limit" /></SelectTrigger><SelectContent className="rounded-xl border-none shadow-2xl"><SelectItem value="10" className="text-[9px] font-bold uppercase">10 Baris</SelectItem><SelectItem value="25" className="text-[9px] font-bold uppercase">25 Baris</SelectItem><SelectItem value="50" className="text-[9px] font-bold uppercase">50 Baris</SelectItem></SelectContent></Select>
+            <Button size="icon" onClick={() => { setViewingAssistant(null); setIsRegDialogOpen(true); }} className="h-11 w-11 rounded-xl bg-amber-600 hover:bg-amber-700 text-white shadow-lg active:scale-95 transition-all" title="Tambah Personel Baru"><UserPlus className="h-4 w-4" /></Button>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto bg-white">
           <Table>
-            <TableHeader>
-              <TableRow className="bg-slate-50/50 hover:bg-slate-50/50 border-none">
-                <TableHead className="px-8 py-5 font-black text-slate-900 uppercase text-[10px] tracking-[0.2em]">Data Personel</TableHead>
-                <TableHead className="px-4 py-5 font-black text-slate-900 uppercase text-[10px] tracking-[0.2em]">Informasi Kontak</TableHead>
-                <TableHead className="px-4 py-5 font-black text-slate-900 uppercase text-[10px] tracking-[0.2em]">Alamat Domisili</TableHead>
-                <TableHead className="px-8 py-5 font-black text-slate-900 uppercase text-[10px] tracking-[0.2em] text-right">Aksi</TableHead>
+            <TableHeader className="bg-slate-50/30">
+              <TableRow className="border-b border-slate-100">
+                <TableHead className="w-[50px] px-6 py-4 text-center"><Checkbox checked={selectedIds.length === paginatedItems.length && paginatedItems.length > 0} onCheckedChange={toggleSelectAll} /></TableHead>
+                <TableHead className="px-6 py-4 font-black uppercase tracking-widest text-[8px] text-slate-400">Assistant Info</TableHead>
+                <TableHead className="px-6 py-4 font-black uppercase tracking-widest text-[8px] text-slate-400">Contact</TableHead>
+                <TableHead className="px-6 py-4 font-black uppercase tracking-widest text-[8px] text-slate-400">Location</TableHead>
+                <TableHead className="px-6 py-4 text-right font-black uppercase tracking-widest text-[8px] text-slate-400">Manage</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i}><TableCell colSpan={4} className="py-10 px-8"><div className="h-14 bg-slate-50 animate-pulse rounded-2xl" /></TableCell></TableRow>
-                ))
-              ) : filteredItems.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="py-32 text-center">
-                    <EmptyState 
-                      title="Data asisten tidak ditemukan" 
-                      description="Belum ada data asisten yang sesuai dengan kriteria pencarian Anda."
-                    />
-                  </TableCell>
-                </TableRow>
+                <TableRow><TableCell colSpan={5} className="p-0"><TableSkeleton rows={limit} className="p-6" /></TableCell></TableRow>
+              ) : paginatedItems.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center py-32 bg-white"><UsersIcon className="h-16 w-16 text-slate-100 mx-auto mb-4" /><p className="text-slate-300 font-black uppercase tracking-widest text-[11px]">No assistants found</p></TableCell></TableRow>
               ) : (
                 paginatedItems.map((assistant) => (
-                  <TableRow key={assistant.id} className="group hover:bg-emerald-50/10 transition-all border-slate-100/60">
-                    <TableCell className="px-8 py-6">
-                      <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-700 font-black text-sm shadow-sm border border-emerald-50 group-hover:scale-110 transition-transform">
-                          {assistant.full_name.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-black text-slate-800 tracking-tight">{assistant.full_name}</span>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Assistant Field Officer</span>
-                        </div>
+                  <TableRow key={assistant.id} className={cn("hover:bg-slate-50 transition-all border-b border-slate-50 last:border-none", selectedIds.includes(assistant.id) && "bg-amber-50/20")}>
+                    <TableCell className="px-6 py-4 text-center"><Checkbox checked={selectedIds.includes(assistant.id)} onCheckedChange={() => toggleSelect(assistant.id)} /></TableCell>
+                    <TableCell className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-xl bg-amber-50 flex items-center justify-center border border-amber-100 shrink-0 text-amber-600 font-black text-xs">{(assistant.full_name || 'A').charAt(0)}</div>
+                        <div className="flex flex-col min-w-0"><span className="text-[12px] font-black text-slate-900 truncate">{assistant.full_name}</span><span className="text-[9px] font-bold text-slate-400 uppercase truncate">{assistant.email || "No Email"}</span></div>
                       </div>
                     </TableCell>
-                    <TableCell className="px-4">
-                      <div className="flex flex-col gap-2">
-                        {assistant.phone && (
-                          <a 
-                            href={formatWALink(assistant.phone)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 text-xs font-bold text-slate-600 bg-blue-50/50 px-2 py-1.5 rounded-lg border border-blue-100 w-fit hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all cursor-pointer"
-                            title="Hubungi via WhatsApp Web"
-                          >
-                            <Phone className="h-3 w-3 text-blue-500" /> {assistant.phone}
-                          </a>
-                        )}
-                        {assistant.email && (
-                          <div className="flex items-center gap-2 text-[10px] font-medium text-slate-500 ml-1">
-                            <Mail className="h-3 w-3 text-slate-300" /> {assistant.email}
-                          </div>
-                        )}
-                        {!assistant.phone && !assistant.email && (
-                          <span className="text-[10px] font-bold text-slate-300 uppercase italic">Tanpa Kontak</span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-4">
-                      <div className="flex items-start gap-2 max-w-[250px]">
-                        <MapPin className="h-3.5 w-3.5 text-slate-300 mt-0.5 shrink-0" />
-                        <span className="text-xs font-medium text-slate-500 leading-relaxed" title={assistant.address}>
-                          {assistant.address || "Alamat belum diatur"}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-8 text-right">
-                      <div className="flex justify-end gap-2 transition-opacity">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => handleEdit(assistant)} 
-                          className="h-9 w-9 text-emerald-600 hover:bg-emerald-100 rounded-xl bg-white border border-slate-100 shadow-sm"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => handleDelete(assistant.id)} 
-                          className="h-9 w-9 text-red-500 hover:bg-red-50 rounded-xl bg-white border border-slate-100 shadow-sm"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                    <TableCell className="px-6 py-4"><div className="flex items-center gap-2 text-emerald-600"><Phone className="h-3 w-3" /><span className="text-[10px] font-black">{assistant.phone || "-"}</span></div></TableCell>
+                    <TableCell className="px-6 py-4"><div className="flex items-center gap-2"><MapPin className="h-3 w-3 text-slate-400" /><span className="text-[10px] font-bold text-slate-600 uppercase truncate max-w-[150px]">{assistant.address || "N/A"}</span></div></TableCell>
+                    <TableCell className="px-6 py-4 text-right"><Button variant="ghost" size="sm" onClick={() => openDetail(assistant)} className="h-8 px-3 rounded-lg font-black text-[8px] uppercase tracking-widest text-slate-400 hover:text-amber-600 transition-all gap-1.5"><Settings2 className="h-3 w-3" /> Manage</Button></TableCell>
                   </TableRow>
                 ))
               )}
@@ -306,128 +293,82 @@ export default function AssistantManagementPage() {
           </Table>
         </div>
 
-        {/* Pagination Footer */}
-        <div className="p-8 bg-slate-50/80 border-t flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Record: {filteredItems.length} Assistants</span>
-            <div className="h-4 w-[1px] bg-slate-300 hidden md:block" />
-            <div className="hidden md:flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Database Sync Active</span>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="h-11 w-11 rounded-2xl border-slate-200 shadow-sm bg-white" 
-              disabled={page === 1} 
-              onClick={() => setPage(p => p - 1)}
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </Button>
-            <div className="h-11 px-6 flex items-center justify-center bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-900 shadow-sm">
-              {page} / {totalPages || 1}
-            </div>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="h-11 w-11 rounded-2xl border-slate-200 shadow-sm bg-white" 
-              disabled={page === totalPages || totalPages === 0} 
-              onClick={() => setPage(p => p + 1)}
-            >
-              <ChevronRight className="h-5 w-5" />
-            </Button>
+        <div className="p-4 bg-slate-50/50 flex items-center justify-between border-t border-slate-100">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total {filteredItems.length} Personnel</p>
+          <div className="flex gap-1.5">
+            <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg bg-white border-slate-200" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft className="h-3.5 w-3.5" /></Button>
+            <div className="flex items-center px-3 text-[9px] font-black bg-white border border-slate-200 rounded-lg text-slate-700">{page} / {totalPages || 1}</div>
+            <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg bg-white border-slate-200" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(p => p + 1)}><ChevronRight className="h-3.5 w-3.5" /></Button>
           </div>
         </div>
-      </div>
+      </Card>
 
-      {/* DIALOG FORM */}
-      <Dialog open={isDialogOpen} onOpenChange={(open) => {
-        setIsDialogOpen(open);
-        if (!open) resetForm();
-      }}>
-        <DialogContent className="sm:max-w-xl p-0 border-none shadow-2xl rounded-[2.5rem] overflow-hidden">
-          <div className="bg-emerald-700 p-6 text-white flex items-center justify-between">
+      {/* REGISTRATION DIALOG */}
+      <Dialog open={isRegDialogOpen} onOpenChange={setIsRegDialogOpen}>
+        <DialogContent showCloseButton={false} className="max-w-2xl rounded-2xl border-none p-0 overflow-hidden shadow-2xl bg-white">
+          <div className="bg-slate-900 px-6 py-4 text-white flex items-center justify-between border-b border-white/5">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center border border-white/20">
-                <User className="h-5 w-5" />
-              </div>
-              <div>
-                <DialogTitle className="text-lg font-black uppercase tracking-tight">
-                  {editingAssistant ? "Perbarui Data" : "Registrasi Asisten"}
-                </DialogTitle>
-                <DialogDescription className="text-emerald-200 text-[10px] font-bold uppercase tracking-widest">
-                  Personal Database Management
-                </DialogDescription>
-              </div>
+              <div className="h-9 w-9 rounded-lg bg-amber-500/20 flex items-center justify-center border border-amber-500/20"><UserPlus className="h-5 w-5 text-amber-400" /></div>
+              <div><DialogTitle className="text-sm font-black uppercase tracking-widest text-white">Assistant Authorization</DialogTitle><DialogDescription className="text-[8px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-0.5">Register new field & sampling team member</DialogDescription></div>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => setIsDialogOpen(false)} className="text-white/60 hover:text-white rounded-xl">
-              <X className="h-5 w-5" />
-            </Button>
+            <Button variant="ghost" size="icon" onClick={() => setIsRegDialogOpen(false)} className="text-white/20 hover:text-white rounded-lg h-8 w-8"><X className="h-4 w-4" /></Button>
           </div>
-
-          <form onSubmit={handleSubmit} className="p-8 space-y-6">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Nama Lengkap</Label>
-                <Input 
-                  value={formData.full_name} 
-                  onChange={(e) => setFormData({...formData, full_name: e.target.value})} 
-                  placeholder="Masukkan nama lengkap asisten..." 
-                  required 
-                  className="h-12 rounded-2xl border-slate-200 bg-slate-50/50"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">No. Telepon / WA</Label>
-                  <Input 
-                    value={formData.phone} 
-                    onChange={(e) => setFormData({...formData, phone: e.target.value})} 
-                    placeholder="Contoh: 08123456789" 
-                    className="h-12 rounded-2xl border-slate-200 bg-slate-50/50"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Email (Opsional)</Label>
-                  <Input 
-                    value={formData.email} 
-                    onChange={(e) => setFormData({...formData, email: e.target.value})} 
-                    type="email" 
-                    placeholder="asisten@wahfalab.com" 
-                    className="h-12 rounded-2xl border-slate-200 bg-slate-50/50"
-                  />
+          <form onSubmit={onRegisterSubmit} className="p-6 bg-white space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 border-b border-slate-50 pb-2"><Contact2 className="h-3 w-3 text-amber-500" /><span className="text-[9px] font-black text-slate-900 uppercase tracking-widest">Basic Profile</span></div>
+                <div className="space-y-3">
+                  <div className="space-y-1"><Label className="text-[8px] font-black uppercase text-slate-400 tracking-widest ml-1">Full Identity Name</Label><Input name="full_name" className="h-9 rounded-lg bg-slate-50 border-none font-bold text-xs px-3 focus-visible:ring-amber-500 shadow-inner" placeholder="e.g Alexander Pierce" required /></div>
+                  <div className="space-y-1"><Label className="text-[8px] font-black uppercase text-slate-400 tracking-widest ml-1">Official Email</Label><Input type="email" name="email" className="h-9 rounded-lg bg-slate-50 border-none font-bold text-xs px-3 focus-visible:ring-blue-500 shadow-inner" placeholder="name@email.com" /></div>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Alamat Domisili</Label>
-                <Input 
-                  value={formData.address} 
-                  onChange={(e) => setFormData({...formData, address: e.target.value})} 
-                  placeholder="Alamat lengkap domisili saat ini..." 
-                  className="h-12 rounded-2xl border-slate-200 bg-slate-50/50"
-                />
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 border-b border-slate-50 pb-2"><Phone className="h-3 w-3 text-emerald-500" /><span className="text-[9px] font-black text-slate-900 uppercase tracking-widest">Contact & Address</span></div>
+                <div className="space-y-3">
+                  <div className="space-y-1"><Label className="text-[8px] font-black uppercase text-slate-400 tracking-widest ml-1">WhatsApp</Label><Input name="phone" className="h-9 rounded-lg bg-slate-50 border-none font-bold text-xs px-3 shadow-inner" placeholder="628..." required /></div>
+                  <div className="space-y-1"><Label className="text-[8px] font-black uppercase text-slate-400 tracking-widest ml-1">Domicile Address</Label><Input name="address" className="h-9 rounded-lg bg-slate-50 border-none font-bold text-xs px-3 shadow-inner" placeholder="Complete address..." /></div>
+                </div>
               </div>
             </div>
-
-            <DialogFooter className="pt-4 border-t flex gap-3">
-              <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)} className="flex-1 font-black text-[10px] uppercase h-12 rounded-2xl text-slate-400">
-                Batal
-              </Button>
-              <LoadingButton
-                type="submit"
-                loading={submitting}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase h-12 rounded-2xl shadow-lg shadow-emerald-900/20"
-              >
-                {editingAssistant ? "Simpan Perubahan" : "Konfirmasi Registrasi"}
-              </LoadingButton>
-            </DialogFooter>
+            <div className="pt-4 border-t border-slate-50 flex gap-3"><Button type="button" variant="ghost" onClick={() => setIsRegDialogOpen(false)} className="flex-1 h-10 rounded-lg font-black text-slate-400 uppercase text-[9px] tracking-widest border-none hover:bg-slate-100 transition-all">Cancel</Button><LoadingButton type="submit" loading={submitting} className="flex-[2] h-10 bg-slate-900 hover:bg-black text-white rounded-lg font-black uppercase text-[9px] tracking-[0.2em] shadow-xl active:scale-95 transition-all">Execute Registration</LoadingButton></div>
           </form>
         </DialogContent>
       </Dialog>
-      
-      <LoadingOverlay isOpen={submitting} title="Menyimpan Data..." description="Sedang mensinkronisasi data personel ke database" />
+
+      {/* DETAIL MODAL */}
+      <Dialog open={isDetailDialogOpen} onOpenChange={(open) => { setIsDetailDialogOpen(open); if (!open) setIsEditMode(false); }}>
+        <DialogContent showCloseButton={false} className="max-w-xl rounded-2xl border-none p-0 overflow-hidden shadow-2xl bg-white">
+          <div className="bg-slate-900 p-5 text-white relative"><div className="flex items-center justify-between relative z-10"><div className="flex items-center gap-4"><div className="h-14 w-14 rounded-xl bg-white/10 flex items-center justify-center border-2 border-white/10 shadow-xl text-xl font-black overflow-hidden">{viewingAssistant?.full_name ? viewingAssistant.full_name.charAt(0).toUpperCase() : 'A'}</div><div className="space-y-0.5"><Badge className="bg-amber-500 text-white border-none text-[6px] font-black uppercase px-1 h-3 mb-1">Field Assistant</Badge><DialogTitle className="text-lg font-black uppercase tracking-tight text-white leading-none">{viewingAssistant?.full_name}</DialogTitle><div className="flex items-center gap-2 mt-1 text-slate-400 text-[7px] font-black uppercase tracking-widest"><ShieldCheck className="h-2.5 w-2.5 text-amber-400" /> Active Personnel</div></div></div><div className="flex gap-1.5 self-start">{!isEditMode && <Button type="button" variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setIsEditMode(true); }} className="text-white/20 hover:text-white rounded-lg h-8 w-8"><Pencil className="h-3.5 w-3.5" /></Button>}<Button type="button" variant="ghost" size="icon" onClick={() => setIsDetailDialogOpen(false)} className="text-white/20 hover:text-white rounded-lg h-8 w-8"><X className="h-3.5 w-3.5" /></Button></div></div></div>
+          <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-5 bg-white">
+            <div className="space-y-4">
+              <QuickEditItem icon={User} label="Name" value={isEditMode ? editData.full_name : viewingAssistant?.full_name} isEdit={isEditMode} onChange={(val: string) => setEditData({...editData, full_name: val})} />
+              <QuickEditItem icon={Mail} label="Email" value={isEditMode ? editData.email : viewingAssistant?.email} isEdit={isEditMode} onChange={(val: string) => setEditData({...editData, email: val})} />
+              <QuickEditItem icon={Phone} label="WhatsApp" value={isEditMode ? editData.phone : (viewingAssistant?.phone || "-")} isEdit={isEditMode} onChange={(val: string) => setEditData({...editData, phone: val})} />
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-1"><span className="text-[7px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5"><MapPin className="h-2 w-2" /> Address</span>{isEditMode ? <Textarea value={editData.address} onChange={(e) => setEditData({...editData, address: e.target.value})} className="min-h-[60px] rounded-lg bg-slate-50 border-none font-bold text-[10px] p-2 focus-visible:ring-amber-500 transition-all resize-none shadow-inner" /> : <p className="text-[9px] font-bold text-slate-600 leading-relaxed uppercase bg-slate-50/50 p-2 rounded-lg border border-slate-50">{viewingAssistant?.address || "No address."}</p>}</div>
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-100 flex items-start gap-2.5"><ShieldAlert className="h-3 w-3 text-amber-600 shrink-0 mt-0.5" /><p className="text-[8px] font-bold text-amber-800 leading-normal uppercase tracking-tight">Personnel activity is logged for travel order compliance.</p></div>
+            </div>
+          </div>
+          <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center px-5">
+            <Button variant="outline" onClick={() => setDeleteId(viewingAssistant.id)} className="rounded-lg h-8 px-3 border-rose-100 text-rose-600 font-black uppercase text-[7px] tracking-widest"><Trash2 className="h-3 w-3" /></Button>
+            <div className="flex gap-2">{isEditMode ? (<><Button variant="ghost" onClick={handleCancelEdit} disabled={submitting} className="h-8 font-black uppercase text-[8px] text-slate-400 rounded-lg">Cancel</Button><LoadingButton onClick={onQuickUpdate} loading={submitting} className="h-8 px-4 rounded-lg bg-amber-600 text-white font-black uppercase text-[8px] tracking-widest shadow-md">Save Changes</LoadingButton></>) : (<Button onClick={() => setIsDetailDialogOpen(false)} className="h-8 px-6 rounded-lg bg-slate-900 text-white font-black uppercase text-[8px] tracking-widest shadow-md">Close</Button>)}</div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* DELETE DIALOG */}
+      <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}><AlertDialogContent className="rounded-2xl border-none p-8 shadow-2xl sm:max-w-sm bg-white"><AlertDialogHeader><div className="h-12 w-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-inner border border-rose-100"><ShieldAlert className="h-6 w-6" /></div><AlertDialogTitle className="text-base font-black text-center text-slate-900 uppercase">Delete Record?</AlertDialogTitle><AlertDialogDescription className="text-center text-slate-400 font-bold uppercase text-[8px] mt-2 leading-relaxed">{deleteId === "bulk" ? `Hapus ${selectedIds.length} personel terpilih?` : "Menghapus personel ini akan menghilangkan seluruh datanya secara permanen."}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter className="mt-6 gap-3"><AlertDialogCancel className="h-10 rounded-lg font-black text-[8px] uppercase flex-1 border-none bg-slate-100">Batal</AlertDialogCancel><Button onClick={confirmDelete} className="h-10 rounded-lg bg-rose-600 text-white font-black text-[8px] flex-1 shadow-md uppercase">Konfirmasi</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>
+      <LoadingOverlay isOpen={submitting} title="Syncing..." />
+    </div>
+  );
+}
+
+function QuickEditItem({ icon: Icon, label, value, isEdit, onChange }: any) {
+  return (
+    <div className="space-y-1">
+      <span className="text-[7px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5"><Icon className="h-2 w-2" /> {label}</span>
+      {isEdit ? <Input value={value} onChange={(e) => onChange(e.target.value)} className="h-8 rounded-lg bg-slate-50 border-none font-bold text-[10px] px-3 focus-visible:ring-amber-500 transition-all shadow-inner" /> : <p className="text-[9px] font-black text-slate-700 uppercase truncate px-1">{value || "-"}</p>}
     </div>
   );
 }

@@ -41,10 +41,9 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { logout, getProfile } from "@/lib/actions/auth";
 import { createClient } from "@/lib/supabase/client";
-import { getPendingApprovalCount } from "@/lib/actions/approval";
 import Image from "next/image";
 
-export const adminMenuItems = (pendingApprovals: number = 0) => [
+export const adminMenuItems = () => [
   {
     group: "Dashboard",
     icon: LayoutDashboard,
@@ -59,8 +58,6 @@ export const adminMenuItems = (pendingApprovals: number = 0) => [
       { icon: FileText, label: "Penawaran Harga", href: "/admin/quotations" },
       { icon: Briefcase, label: "Progress Order", href: "/admin/jobs" },
       { icon: MapPin, label: "Penugasan", href: "/admin/sampling" },
-      { icon: Bell, label: "Persetujuan", href: "/admin/approval-requests", 
-        badge: pendingApprovals > 0 ? pendingApprovals : undefined },
     ]
   },
   {
@@ -247,7 +244,6 @@ export function Sidebar({ className }: { className?: string }) {
   const [role, setRole] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState("WahfaLab");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [pendingApprovals, setPendingApprovals] = useState(0);
 
   useEffect(() => {
     async function fetchRole() {
@@ -273,24 +269,8 @@ export function Sidebar({ className }: { className?: string }) {
     fetchCompanyProfile();
   }, []);
 
-  useEffect(() => {
-    async function fetchPendingApprovals() {
-      if (role === 'admin') {
-        try {
-          const count = await getPendingApprovalCount();
-          setPendingApprovals(count);
-        } catch (error) {
-          console.error('Error fetching pending approvals:', error);
-        }
-      }
-    }
-    fetchPendingApprovals();
-    const interval = setInterval(fetchPendingApprovals, 30000);
-    return () => clearInterval(interval);
-  }, [role]);
-
   const menuItems = role === 'admin'
-    ? adminMenuItems(pendingApprovals)
+    ? adminMenuItems()
     : role === 'content_manager'
       ? contentManagerMenuItems
       : role === 'operator'

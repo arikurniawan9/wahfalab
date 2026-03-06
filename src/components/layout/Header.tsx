@@ -9,7 +9,6 @@ import { NavContent, adminMenuItems, operatorMenuItems } from './Sidebar'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { logout } from '@/lib/actions/auth'
-import { getPendingApprovalCount } from '@/lib/actions/approval'
 
 import {
   DropdownMenu,
@@ -36,7 +35,6 @@ export function Header({ title, subtitle, profile }: HeaderProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [companyName, setCompanyName] = useState("WahfaLab");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [pendingApprovals, setPendingApprovals] = useState(0);
 
   // Determine settings link based on role
   const getSettingsLink = () => {
@@ -67,24 +65,8 @@ export function Header({ title, subtitle, profile }: HeaderProps) {
     fetchCompanyProfile();
   }, []);
 
-  useEffect(() => {
-    async function fetchPendingApprovals() {
-      if (profile?.role === 'admin') {
-        try {
-          const count = await getPendingApprovalCount();
-          setPendingApprovals(count);
-        } catch (error) {
-          console.error('Error fetching pending approvals:', error);
-        }
-      }
-    }
-    if (showHamburger) {
-      fetchPendingApprovals();
-    }
-  }, [profile?.role, showHamburger]);
-
   const menuItems = profile?.role === 'admin'
-    ? adminMenuItems(pendingApprovals)
+    ? adminMenuItems()
     : profile?.role === 'operator'
       ? operatorMenuItems
       : [];
