@@ -34,7 +34,8 @@ import {
   Image as ImageIcon,
   Newspaper,
   Mail,
-  ListTree
+  ListTree,
+  History
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -96,6 +97,7 @@ export const adminMenuItems = (pendingApprovals: number = 0) => [
       { icon: Building2, label: "Profil Perusahaan", href: "/admin/settings/company" },
       { icon: LayoutDashboard, label: "Data Home", href: "/admin/content-management" },
       { icon: Server, label: "Sistem & Maintenance", href: "/admin/settings/system" },
+      { icon: History, label: "Audit Log", href: "/admin/settings/audit-logs" },
       { icon: User, label: "Akun Saya", href: "/admin/settings/profile" },
     ]
   },

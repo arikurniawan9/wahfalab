@@ -90,7 +90,7 @@ export default function GalleryManagerPage() {
 
     const result = await uploadLocalImage(formData);
     if (result.success) {
-      handleGalleryChange(index, "image_url", result.url);
+      handleGalleryChange(index, "image_url", result.url || "");
       toast.success("Foto berhasil diunggah!");
     } else {
       toast.error("Gagal unggah: " + result.error);

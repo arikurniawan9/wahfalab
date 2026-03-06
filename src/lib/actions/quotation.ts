@@ -203,6 +203,33 @@ export async function updateQuotationStatus(id: string, status: any) {
         
         // Audit log job order creation
         await audit.createJobOrder(jobOrder)
+
+        // NOTIFIKASI KLIEN: Kirim notifikasi ke klien
+        const currentQuotation = await prisma.quotation.findUnique({
+          where: { id },
+          select: { user_id: true, quotation_number: true }
+        })
+
+        if (currentQuotation?.user_id) {
+          const notification = await prisma.notification.create({
+            data: {
+              user_id: currentQuotation.user_id,
+              type: 'system',
+              title: 'Penawaran Diterima',
+              message: `Penawaran ${currentQuotation.quotation_number} telah disetujui. Pekerjaan Anda kini masuk dalam antrean progres order.`,
+              link: `/dashboard/orders`
+            }
+          })
+
+          // Audit log notification creation
+          await audit.logAudit({
+            action: 'send_notification',
+            entity_type: 'notification',
+            entity_id: notification.id,
+            user_id: userId, // ID Admin yang melakukan approval
+            new_data: notification
+          })
+        }
       }
     }
 

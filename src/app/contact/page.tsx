@@ -1,6 +1,4 @@
 import React from "react";
-import Image from "next/image";
-import Link from "next/link";
 import { 
   getCachedLandingPageConfig, 
   getCachedCompanyProfile, 
@@ -10,29 +8,14 @@ import {
   Phone, 
   Mail, 
   MapPin, 
-  Home,
-  Award,
-  Heart,
-  ImageIcon,
-  Newspaper,
-  ChevronDown,
   Instagram,
   Facebook,
   Twitter,
-  Globe,
-  Briefcase,
-  Scale
+  Globe
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { AuthNav } from "../auth-nav";
-import { MobileNav } from "@/components/layout/MobileNav";
-import { 
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { ContactForm } from "@/components/layout/ContactForm";
+import { LandingHeader } from "@/components/layout/LandingHeader";
 
 export default async function ContactPage() {
   const supabase = await createClient();
@@ -46,76 +29,16 @@ export default async function ContactPage() {
   }
 
   const companyProfile = await getCachedCompanyProfile();
-
-  const getDashboardHref = () => {
-    if (role === "admin") return "/admin";
-    if (role === "operator") return "/operator";
-    if (role === "content_manager") return "/content-manager";
-    return "/dashboard";
-  };
+  const landingConfig = await getCachedLandingPageConfig();
 
   return (
     <div className="flex flex-col min-h-screen bg-white font-[family-name:var(--font-geist-sans)]">
-      {/* Standard Navigation */}
-      <header className="px-4 md:px-6 lg:px-12 h-20 flex items-center border-b bg-white/80 backdrop-blur-md sticky top-0 z-50">
-        <Link className="flex items-center justify-center gap-2 md:gap-3 cursor-pointer group shrink-0" href="/">
-          <div className="relative h-8 w-8 md:h-10 md:w-10 overflow-hidden rounded-xl shadow-inner group-hover:scale-110 transition-transform duration-500">
-            {companyProfile?.logo_url ? (
-              <Image src={companyProfile.logo_url} alt="Logo" fill className="object-contain" priority />
-            ) : (
-              <Image src="/logo-wahfalab.png" alt="Logo" fill className="object-contain" priority />
-            )}
-          </div>
-          <span className="font-black text-lg md:text-xl tracking-tighter text-emerald-900 font-[family-name:var(--font-montserrat)] uppercase truncate max-w-[120px] md:max-w-none">
-            {companyProfile?.company_name || "WahfaLab"}
-          </span>
-        </Link>
-        <nav className="ml-auto flex gap-2 items-center">
-          <div className="hidden md:flex items-center gap-1 lg:gap-2">
-            <Link className="text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl hover:bg-emerald-50 hover:text-emerald-600 transition-all flex items-center gap-2" href="/">
-              <Home className="h-3.5 w-3.5" /> Home
-            </Link>
-            <Link className="text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl hover:bg-emerald-50 hover:text-emerald-600 transition-all flex items-center gap-2" href="/#features">
-              <Award className="h-3.5 w-3.5" /> Keunggulan
-            </Link>
-            <Link className="text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl hover:bg-emerald-50 hover:text-emerald-600 transition-all hidden lg:flex items-center gap-2" href="/#commitment">
-              <Heart className="h-3.5 w-3.5" /> Komitmen
-            </Link>
-            <Link className="text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl hover:bg-emerald-50 hover:text-emerald-600 transition-all flex items-center gap-2" href="/#portfolio">
-              <Briefcase className="h-3.5 w-3.5" /> Mitra
-            </Link>
-            
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl hover:bg-emerald-50 hover:text-emerald-600 transition-all flex items-center gap-2 outline-none cursor-pointer">
-                  Lainnya <ChevronDown className="h-3 w-3" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 p-2 rounded-2xl border-emerald-100 shadow-2xl">
-                {[
-                  { href: "/legality", icon: Scale, label: "Legalitas" },
-                  { href: "/gallery", icon: ImageIcon, label: "Galeri" },
-                  { href: "/contact", icon: Phone, label: "Kontak" },
-                  { href: "/news", icon: Newspaper, label: "News" }
-                ].map((item) => (
-                  <DropdownMenuItem key={item.href} asChild>
-                    <Link href={item.href} className="flex items-center gap-3 p-3 rounded-xl cursor-pointer hover:bg-emerald-50 text-slate-600 hover:text-emerald-600 transition-colors">
-                      <item.icon className="h-4 w-4" />
-                      <span className="text-[10px] font-black uppercase tracking-widest">{item.label}</span>
-                    </Link>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <div className="ml-2 pl-2 border-l border-slate-100">
-              <AuthNav initialUser={user} initialRole={role} />
-            </div>
-          </div>
-
-          <MobileNav user={user} role={role} dashboardHref={getDashboardHref()} />
-        </nav>
-      </header>
+      <LandingHeader 
+        companyProfile={companyProfile} 
+        navbarMenus={landingConfig?.navbar_menus as any[] || []} 
+        user={user} 
+        role={role} 
+      />
 
       <main className="flex-1">
         {/* Header Section */}

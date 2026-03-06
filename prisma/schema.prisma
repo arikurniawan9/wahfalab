@@ -103,6 +103,7 @@ model ContactMessage {
 
 // Notification Types
 enum NotificationType {
+  system
   sampling_completed
   analysis_ready
   analysis_completed

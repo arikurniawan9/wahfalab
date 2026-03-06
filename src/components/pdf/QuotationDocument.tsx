@@ -357,7 +357,7 @@ export const QuotationDocument = ({ data }: any) => {
         <View style={styles.footer} wrap={false}>
           <View style={styles.signBox}>
             <Text style={styles.signTitle}>Penerima / Pelanggan,</Text>
-            <Text style={styles.signName}>( ____________________ )</Text>
+            <Text style={styles.signName}>( {data.profile?.full_name || "____________________"} )</Text>
           </View>
           <View style={styles.signBox}>
             <Text style={styles.signTitle}>Diperiksa Oleh,</Text>

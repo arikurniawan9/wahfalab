@@ -1,9 +1,3 @@
-// ============================================================================
-// ADMIN JOB PROGRESS DASHBOARD - Super Admin v3.2 (Refined Indonesian)
-// Dashboard komprehensif untuk administrator dengan wawasan finansial,
-// pelacakan SLA, dan alat manajemen tingkat lanjut.
-// ============================================================================
-
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
@@ -49,14 +43,28 @@ import {
   AlertTriangle,
   MoreVertical,
   ShieldCheck,
-  CreditCard
+  CreditCard,
+  Keyboard,
+  Info,
+  UserPlus
 } from "lucide-react";
-import { ChemicalLoader, LoadingOverlay, LoadingButton } from "@/components/ui";
+import { LoadingOverlay, LoadingButton } from "@/components/ui";
+import { TableSkeleton, PageSkeleton } from "@/components/ui/skeleton";
 import { getJobOrders, getJobStats, getFieldOfficers, getCustomers, deleteJobOrderWithPhotos } from "@/lib/actions/jobs";
 import { getFieldAssistants } from "@/lib/actions/field-assistant";
 import { createSamplingAssignment } from "@/lib/actions/sampling";
 import { createTravelOrder } from "@/lib/actions/travel-order";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -80,11 +88,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-// Stat Card Component
+// Stat Card Component Premium
 function StatCard({ title, value, subValue, icon: Icon, color, onClick, active }: any) {
   const colors: any = {
     blue: "bg-blue-50 text-blue-600 border-blue-100",
@@ -101,65 +108,63 @@ function StatCard({ title, value, subValue, icon: Icon, color, onClick, active }
   return (
     <Card
       className={cn(
-        "border-2 transition-all duration-300 cursor-pointer overflow-hidden min-h-[110px] flex flex-col justify-center",
-        active ? "border-emerald-500 shadow-lg scale-[1.05]" : "border-transparent shadow-sm hover:shadow-md",
+        "border-none shadow-sm transition-all duration-300 cursor-pointer overflow-hidden flex flex-col justify-center rounded-2xl",
+        active ? "ring-2 ring-emerald-500 shadow-xl scale-[1.02]" : "hover:shadow-md hover:translate-y-[-2px]",
         colors[color]
       )}
       onClick={onClick}
     >
-      <CardContent className="p-3 flex flex-col items-center text-center gap-2">
-        <div className={cn("p-2 rounded-xl bg-white shadow-sm shrink-0 mb-1")}>
+      <CardContent className="p-4 flex items-center gap-4">
+        <div className={cn("p-3 rounded-2xl bg-white shadow-sm shrink-0")}>
           <Icon className="h-5 w-5" />
         </div>
-        <div className="w-full min-w-0 space-y-1">
-          <p className="text-[9px] font-black uppercase opacity-70 tracking-tight leading-none truncate">{title}</p>
-          <p className="text-lg font-black tracking-tighter leading-none">{value}</p>
-          {subValue && <p className="text-[8px] font-bold opacity-60 truncate">{subValue}</p>}
+        <div className="min-w-0">
+          <p className="text-[9px] font-black uppercase opacity-60 tracking-widest leading-none mb-1">{title}</p>
+          <p className="text-xl font-black tracking-tight leading-none text-slate-900">{value}</p>
+          {subValue && <p className="text-[8px] font-bold opacity-50 uppercase tracking-tighter mt-1">{subValue}</p>}
         </div>
       </CardContent>
     </Card>
   );
 }
 
-// Workflow Timeline Component
+// Workflow Timeline Component Premium
 function WorkflowTimeline({ status }: any) {
   const stages = [
     { id: 1, name: "Order", icon: FileText, complete: true },
     { id: 2, name: "Sampling", icon: MapPin, complete: ["analysis_ready", "analysis", "analysis_done", "reporting", "completed"].includes(status) },
-    { id: 3, name: "BAST", icon: ClipboardCheck, complete: ["analysis_ready", "analysis", "analysis_done", "reporting", "completed"].includes(status) },
-    { id: 4, name: "Analisis", icon: FlaskConical, complete: ["analysis_done", "reporting", "completed"].includes(status) },
-    { id: 5, name: "Reporting", icon: FileText, complete: ["completed"].includes(status) },
-    { id: 6, name: "Selesai", icon: CheckCircle, complete: status === "completed" },
+    { id: 3, name: "Analisis", icon: FlaskConical, complete: ["analysis_done", "reporting", "completed"].includes(status) },
+    { id: 4, name: "Reporting", icon: FileText, complete: ["completed"].includes(status) },
+    { id: 5, name: "Selesai", icon: CheckCircle, complete: status === "completed" },
   ];
 
   const getStatusColor = (stage: any) => {
-    if (stage.complete) return "bg-emerald-500 text-white border-emerald-600";
-    if (stage.id === stages.findIndex(s => !s.complete) + 1) return "bg-amber-500 text-white border-amber-600 animate-pulse";
-    return "bg-slate-100 text-slate-400 border-slate-200";
+    if (stage.complete) return "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-900/10";
+    if (stage.id === stages.findIndex(s => !s.complete) + 1) return "bg-amber-500 text-white border-amber-500 animate-pulse shadow-md shadow-amber-900/10";
+    return "bg-slate-50 text-slate-300 border-slate-100";
   };
 
   return (
-    <div className="flex items-center gap-1 min-w-[200px]">
+    <div className="flex items-center gap-1.5 min-w-[220px]">
       {stages.map((stage, index) => (
         <React.Fragment key={stage.id}>
-          <div className="flex flex-col items-center gap-1">
-            <div className={cn(
-              "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-300",
-              getStatusColor(stage)
-            )}>
-              <stage.icon className="h-3 w-3" />
-            </div>
-            <span className={cn(
-              "text-[8px] font-bold uppercase tracking-tighter",
-              stage.complete ? "text-emerald-600" : stage.id === stages.findIndex(s => !s.complete) + 1 ? "text-amber-600" : "text-slate-400"
-            )}>
-              {stage.name}
-            </span>
-          </div>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className={cn(
+                  "w-7 h-7 rounded-xl border flex items-center justify-center transition-all duration-500",
+                  getStatusColor(stage)
+                )}>
+                  <stage.icon className="h-3.5 w-3.5" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent className="rounded-lg border-emerald-50 shadow-xl"><p className="text-[9px] font-black uppercase tracking-widest">{stage.name}</p></TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           {index < stages.length - 1 && (
             <div className={cn(
-              "w-4 h-0.5 transition-all duration-300",
-              stage.complete ? "bg-emerald-500" : "bg-slate-200"
+              "w-3 h-0.5 transition-all duration-1000 rounded-full",
+              stage.complete ? "bg-emerald-500" : "bg-slate-100"
             )} />
           )}
         </React.Fragment>
@@ -170,13 +175,13 @@ function WorkflowTimeline({ status }: any) {
 
 const statusOptions = [
   { value: "all", label: "Semua Status", color: "bg-slate-100 text-slate-700", icon: Briefcase },
-  { value: "scheduled", label: "Terjadwal", color: "bg-blue-100 text-blue-700", icon: Clock },
-  { value: "sampling", label: "Sampling", color: "bg-amber-100 text-amber-700", icon: MapPin },
-  { value: "analysis_ready", label: "Siap Analisis", color: "bg-emerald-100 text-emerald-700", icon: ClipboardCheck },
-  { value: "analysis", label: "Analisis Lab", color: "bg-indigo-100 text-indigo-700", icon: FlaskConical },
-  { value: "analysis_done", label: "Selesai Analisis", color: "bg-violet-100 text-violet-700", icon: TestTube },
-  { value: "reporting", label: "Reporting", color: "bg-purple-100 text-purple-700", icon: FileText },
-  { value: "completed", label: "Selesai", color: "bg-emerald-100 text-emerald-700", icon: CheckCircle },
+  { value: "scheduled", label: "Order", color: "bg-blue-50 text-blue-700 border-blue-100", icon: Clock },
+  { value: "sampling", label: "Sampling", color: "bg-amber-50 text-amber-700 border-amber-100", icon: MapPin },
+  { value: "analysis_ready", label: "Siap Analisis", color: "bg-emerald-50 text-emerald-700 border-emerald-100", icon: ClipboardCheck },
+  { value: "analysis", label: "Analisis Lab", color: "bg-indigo-50 text-indigo-700 border-indigo-100", icon: FlaskConical },
+  { value: "analysis_done", label: "Selesai Analisis", color: "bg-violet-50 text-violet-700 border-violet-100", icon: TestTube },
+  { value: "reporting", label: "Reporting", color: "bg-purple-50 text-purple-700 border-purple-100", icon: FileText },
+  { value: "completed", label: "Selesai", color: "bg-emerald-600 text-white border-emerald-600", icon: CheckCircle },
 ];
 
 export default function AdminJobProgressPage() {
@@ -187,17 +192,11 @@ export default function AdminJobProgressPage() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [filters, setFilters] = useState<any>({
-    dateFrom: "",
-    dateTo: "",
-    fieldOfficerId: "",
-    customerId: "",
-  });
+  const [filters, setFilters] = useState<any>({ dateFrom: "", dateTo: "", fieldOfficerId: "", customerId: "" });
   const [fieldOfficers, setFieldOfficers] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [showFilters, setShowFilters] = useState(false);
 
-  // Modal states
   const [selectedJob, setSelectedJob] = useState<any>(null);
   const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -206,29 +205,15 @@ export default function AdminJobProgressPage() {
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
   const [assistants, setAssistants] = useState<any[]>([]);
   const [assignFormData, setAssignFormData] = useState<any>({
-    job_order_id: "",
-    field_officer_id: "",
-    assistant_ids: [],
-    scheduled_date: "",
-    scheduled_time: "08:00",
-    location: "",
-    notes: ""
+    job_order_id: "", field_officer_id: "", assistant_ids: [], scheduled_date: "", scheduled_time: "08:00", location: "", notes: ""
   });
 
-  // Debounced search
   const useDebounce = (value: string, delay: number) => {
     const [debouncedValue, setDebouncedValue] = useState(value);
-
     useEffect(() => {
-      const handler = setTimeout(() => {
-        setDebouncedValue(value);
-      }, delay);
-
-      return () => {
-        clearTimeout(handler);
-      };
+      const handler = setTimeout(() => setDebouncedValue(value), delay);
+      return () => clearTimeout(handler);
     }, [value, delay]);
-
     return debouncedValue;
   };
 
@@ -253,32 +238,19 @@ export default function AdminJobProgressPage() {
     try {
       const statsData = await getJobStats();
       setStats(statsData);
-    } catch (error) {
-      console.error('Failed to load stats:', error);
-    }
+    } catch (error) { console.error('Failed to load stats:', error); }
   }, []);
 
   const loadFilterOptions = useCallback(async () => {
     try {
-      const [officers, customers] = await Promise.all([
-        getFieldOfficers(),
-        getCustomers()
-      ]);
+      const [officers, customerList] = await Promise.all([getFieldOfficers(), getCustomers()]);
       setFieldOfficers(officers || []);
-      setCustomers(customers || []);
-    } catch (error) {
-      console.error('Failed to load filter options:', error);
-    }
+      setCustomers(customerList || []);
+    } catch (error) { console.error('Failed to load filter options:', error); }
   }, []);
 
-  useEffect(() => {
-    loadStats();
-    loadFilterOptions();
-  }, [loadStats, loadFilterOptions]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useEffect(() => { loadStats(); loadFilterOptions(); }, [loadStats, loadFilterOptions]);
+  useEffect(() => { loadData(); }, [loadData]);
 
   const openAssignDialog = async (job: any) => {
     setSelectedJob(job);
@@ -294,645 +266,227 @@ export default function AdminJobProgressPage() {
 
     setLoading(true);
     try {
-      const [officers, assistantList] = await Promise.all([
-        getFieldOfficers(),
-        getFieldAssistants()
-      ]);
+      const [officers, assistantList] = await Promise.all([getFieldOfficers(), getFieldAssistants()]);
       setFieldOfficers(officers || []);
       setAssistants(assistantList || []);
-    } catch (error) {
-      toast.error("Gagal memuat data petugas");
-    } finally {
-      setLoading(false);
-    }
-
-    setIsAssignDialogOpen(true);
+      setIsAssignDialogOpen(true);
+    } catch (error) { toast.error("Gagal memuat data petugas"); }
+    finally { setLoading(false); }
   };
 
   const handleAssignSubmit = async () => {
-    if (!selectedJob) return;
-    if (!assignFormData.field_officer_id || !assignFormData.scheduled_date || !assignFormData.location) {
-      toast.error("Harap lengkapi semua data wajib");
+    if (!assignFormData.field_officer_id || !assignFormData.scheduled_date) {
+      toast.error("Mohon lengkapi data penugasan");
       return;
     }
-
     setSubmitting(true);
     try {
-      const assignmentResult = await createSamplingAssignment({
-        ...assignFormData,
-        scheduled_date: `${assignFormData.scheduled_date}T${assignFormData.scheduled_time}:00`
-      });
-
-      if (assignmentResult.error || !assignmentResult.assignment) {
-        throw new Error(assignmentResult.error || "Failed to create assignment");
-      }
-
-      const travelOrderData = {
-        assignment_id: assignmentResult.assignment.id,
-        departure_date: `${assignFormData.scheduled_date}T${assignFormData.scheduled_time}:00`,
-        return_date: `${assignFormData.scheduled_date}T17:00:00`,
-        destination: assignFormData.location,
-        purpose: assignFormData.notes || `Sampling untuk ${selectedJob.tracking_code}`,
-      };
-
-      await createTravelOrder(travelOrderData);
-      toast.success("Penugasan & Surat Tugas Berhasil!");
+      await createSamplingAssignment(assignFormData);
+      toast.success("Petugas sampling berhasil ditugaskan");
       setIsAssignDialogOpen(false);
       loadData();
-      loadStats();
-    } catch (error: any) {
-      toast.error(error.message || "Gagal membuat penugasan");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handlePreviewJob = (job: any) => {
-    setSelectedJob(job);
-    setIsPreviewDialogOpen(true);
-  };
-
-  const handleDeleteClick = (job: any) => {
-    setSelectedJob(job);
-    setIsDeleteDialogOpen(true);
+    } catch (error: any) { toast.error(error.message || "Gagal menugaskan petugas"); }
+    finally { setSubmitting(false); }
   };
 
   const confirmDelete = async () => {
     if (!selectedJob) return;
     setDeleting(true);
     try {
-      const result = await deleteJobOrderWithPhotos(selectedJob.id);
-      if (result.success) {
-        toast.success("Job Order berhasil dihapus");
-        setIsDeleteDialogOpen(false);
-        loadData();
-        loadStats();
-      } else {
-        toast.error(result.error || "Gagal menghapus job order");
-      }
-    } catch (error) {
-      toast.error("Terjadi kesalahan saat menghapus data");
-    } finally {
-      setDeleting(false);
-    }
+      await deleteJobOrderWithPhotos(selectedJob.id);
+      toast.success("Job Order berhasil dihapus");
+      setIsDeleteDialogOpen(false);
+      loadData();
+      loadStats();
+    } catch (error: any) { toast.error(error.message || "Gagal menghapus job order"); }
+    finally { setDeleting(false); }
   };
 
-  const getStatusInfo = (status: string) => {
-    return statusOptions.find(opt => opt.value === status) || statusOptions[0];
+  const getStatusLabel = (status: string) => {
+    const opt = statusOptions.find(o => o.value === status);
+    return opt ? opt.label : status.toUpperCase();
   };
 
-  const formatIDR = (amount: any) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
-    }).format(amount || 0);
-  };
-
-  const handleExport = () => {
-    if (data.items.length === 0) return;
-    
-    const headers = ["Kode Tracking", "No. Penawaran", "Klien", "Perusahaan", "Status", "Total Nilai", "Tanggal"];
-    const rows = data.items.map((item: any) => [
-      item.tracking_code,
-      item.quotation.quotation_number,
-      item.quotation.profile.full_name,
-      item.quotation.profile.company_name || "-",
-      item.status,
-      item.quotation.total_amount,
-      new Date(item.created_at).toLocaleDateString('id-ID')
-    ]);
-
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + headers.join(",") + "\n"
-      + rows.map((e: any) => e.join(",")).join("\n");
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `job_orders_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.success("Data berhasil diekspor");
+  const getStatusBadge = (status: string) => {
+    const opt = statusOptions.find(o => o.value === status);
+    const StatusIcon = opt?.icon || Clock;
+    return (
+      <Badge variant="outline" className={cn(
+        "px-3 py-1 rounded-full font-black text-[9px] uppercase tracking-widest border gap-2",
+        opt?.color || "bg-slate-100"
+      )}>
+        <StatusIcon className="h-3 w-3" /> {opt?.label || status}
+      </Badge>
+    );
   };
 
   return (
-    <div className="p-4 md:p-10 pb-24 md:pb-10">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
+    <div className="p-4 md:p-10 bg-slate-50/30 min-h-screen space-y-10 pb-24 md:pb-10 font-[family-name:var(--font-geist-sans)]">
+      {/* Header Premium */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div className="space-y-1">
-          <h1 className="text-2xl font-black text-emerald-900 tracking-tight flex items-center gap-3">
-            <ShieldCheck className="h-8 w-8 text-emerald-600" />
-            DASHBOARD MONITORING PEKERJAAN
-          </h1>
-          <p className="text-slate-500 text-xs font-bold uppercase tracking-[0.2em] opacity-80">Pengawasan Operasional & Finansial Laboratorium</p>
+          <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight">Progress Pekerjaan</h1>
+          <p className="text-slate-500 text-sm font-medium">Monitoring operasional laboratorium secara end-to-end.</p>
         </div>
         <div className="flex gap-2">
-            <Button variant="outline" className="rounded-2xl border-slate-200 font-bold text-xs gap-2 h-11 px-6 shadow-sm bg-white" onClick={handleExport}>
-                <Download className="h-4 w-4 text-emerald-600" />
-                Ekspor Data
-            </Button>
-            <Button className="rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-2 h-11 px-6 shadow-lg shadow-emerald-900/20" onClick={() => { loadStats(); loadData(); }}>
-                <History className="h-4 w-4" />
-                Refresh Data
-            </Button>
+          <Button variant="outline" onClick={() => loadData()} className="h-11 px-5 rounded-xl border-slate-200 bg-white hover:bg-slate-50 transition-all font-bold uppercase text-[10px] tracking-widest">
+            <History className="h-4 w-4 mr-2 text-emerald-600" /> Refresh Data
+          </Button>
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-9 gap-4 mb-8">
-        <StatCard title="Total" value={stats.total || 0} icon={Briefcase} color="slate" onClick={() => { setFilterStatus("all"); setFilters({}); }} active={filterStatus === "all"} />
-        <StatCard title="Terjadwal" value={stats.scheduled || 0} icon={Clock} color="blue" onClick={() => setFilterStatus("scheduled")} active={filterStatus === "scheduled"} />
-        <StatCard title="Sampling" value={stats.sampling || 0} icon={MapPin} color="amber" onClick={() => setFilterStatus("sampling")} active={filterStatus === "sampling"} />
-        <StatCard title="Siap Analisis" value={stats.analysisReady || 0} icon={ClipboardCheck} color="emerald" onClick={() => setFilterStatus("analysis_ready")} active={filterStatus === "analysis_ready"} />
-        <StatCard title="Analisis" value={stats.analysis || 0} icon={FlaskConical} color="indigo" onClick={() => setFilterStatus("analysis")} active={filterStatus === "analysis"} />
-        <StatCard title="Selesai Analisis" value={stats.analysisDone || 0} icon={TestTube} color="violet" onClick={() => setFilterStatus("analysis_done")} active={filterStatus === "analysis_done"} />
-        <StatCard title="Reporting" value={stats.reporting || 0} icon={FileText} color="purple" onClick={() => setFilterStatus("reporting")} active={filterStatus === "reporting"} />
-        <StatCard title="Selesai" value={stats.completed || 0} icon={CheckCircle} color="emerald" onClick={() => setFilterStatus("completed")} active={filterStatus === "completed"} />
-        <StatCard title="Overdue" value={stats.overdue || 0} subValue="Butuh Tindakan" icon={AlertCircle} color="red" onClick={() => {}} active={false} />
+      {/* Stats Dashboard */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+        <StatCard title="Total" value={stats.total || 0} icon={Briefcase} color="slate" active={filterStatus === 'all'} onClick={() => setFilterStatus('all')} />
+        <StatCard title="Order" value={stats.scheduled || 0} icon={Clock} color="blue" active={filterStatus === 'scheduled'} onClick={() => setFilterStatus('scheduled')} />
+        <StatCard title="Sampling" value={stats.sampling || 0} icon={MapPin} color="amber" active={filterStatus === 'sampling'} onClick={() => setFilterStatus('sampling')} />
+        <StatCard title="Analisis" value={(stats.analysis_ready || 0) + (stats.analysis || 0)} icon={FlaskConical} color="indigo" active={filterStatus === 'analysis'} onClick={() => setFilterStatus('analysis')} />
+        <StatCard title="Reporting" value={stats.reporting || 0} icon={FileText} color="purple" active={filterStatus === 'reporting'} onClick={() => setFilterStatus('reporting')} />
+        <StatCard title="Selesai" value={stats.completed || 0} icon={CheckCircle} color="emerald" active={filterStatus === 'completed'} onClick={() => setFilterStatus('completed')} />
       </div>
 
-      {/* Main Table */}
-      <div className="bg-white rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-slate-200 overflow-hidden">
-        <div className="p-8 border-b bg-gradient-to-br from-slate-50 to-white flex flex-col gap-6">
-          <div className="flex flex-col md:flex-row gap-4 items-center">
-            <div className="relative flex-1 w-full">
-              <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
-              <Input
-                placeholder="Cari kode tracking, nama klien, perusahaan..."
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                className="pl-12 h-14 rounded-2xl border-slate-200 bg-white shadow-inner focus-visible:ring-emerald-500 font-medium"
-              />
-            </div>
-            <div className="flex gap-3 w-full md:w-auto">
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-full md:w-56 h-14 rounded-2xl border-slate-200 bg-white font-black text-xs uppercase tracking-wider text-slate-700">
-                  <div className="flex items-center gap-2"><Filter className="h-4 w-4 text-emerald-600" /><SelectValue placeholder="Semua Status" /></div>
-                </SelectTrigger>
-                <SelectContent className="rounded-2xl">{statusOptions.map(opt => <SelectItem key={opt.value} value={opt.value} className="text-xs font-bold py-3 cursor-pointer">{opt.label.toUpperCase()}</SelectItem>)}</SelectContent>
-              </Select>
-              <Button
-                variant={showFilters ? "secondary" : "outline"}
-                size="sm"
-                onClick={() => setShowFilters(!showFilters)}
-                className={cn("h-14 px-6 rounded-2xl border-slate-200 font-black text-xs uppercase tracking-wider transition-all", showFilters ? "bg-slate-200" : "bg-white")}
-              >
-                {showFilters ? "Tutup Filter" : "Lanjutan"}
-              </Button>
-            </div>
+      {/* Main Table Container */}
+      <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
+        <div className="p-6 border-b bg-white flex flex-col lg:flex-row gap-4 items-center">
+          <div className="relative flex-1 w-full">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
+            <Input
+              placeholder="Cari nomor job, penawaran, atau klien..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              className="pl-12 h-12 bg-slate-50 border-none rounded-2xl font-medium text-sm focus-visible:ring-emerald-500"
+            />
           </div>
-
-          {showFilters && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 p-6 bg-slate-900 rounded-3xl border border-slate-800 animate-in fade-in zoom-in-95 duration-300">
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Dari Tanggal</Label>
-                <Input type="date" value={filters.dateFrom} onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })} className="h-11 rounded-xl border-slate-700 bg-slate-800 text-white text-xs" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Sampai Tanggal</Label>
-                <Input type="date" value={filters.dateTo} onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })} className="h-11 rounded-xl border-slate-700 bg-slate-800 text-white text-xs" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Field Officer</Label>
-                <Select value={filters.fieldOfficerId || "all"} onValueChange={(val) => setFilters({ ...filters, fieldOfficerId: val === "all" ? "" : val })}>
-                  <SelectTrigger className="h-11 rounded-xl border-slate-700 bg-slate-800 text-white text-xs"><SelectValue placeholder="Semua Petugas" /></SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-slate-700 text-white">
-                    <SelectItem value="all">Semua Petugas</SelectItem>
-                    {fieldOfficers.map((o: any) => <SelectItem key={o.id} value={o.id}>{o.full_name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Klien</Label>
-                <Select value={filters.customerId || "all"} onValueChange={(val) => setFilters({ ...filters, customerId: val === "all" ? "" : val })}>
-                  <SelectTrigger className="h-11 rounded-xl border-slate-700 bg-slate-800 text-white text-xs"><SelectValue placeholder="Semua Klien" /></SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-slate-700 text-white">
-                    <SelectItem value="all">Semua Klien</SelectItem>
-                    {customers.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.company_name || c.full_name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="md:col-span-4 flex justify-end gap-3 pt-2">
-                <Button variant="ghost" size="sm" onClick={() => { setFilters({ dateFrom: "", dateTo: "", fieldOfficerId: "", customerId: "" }); setFilterStatus("all"); setSearch(""); }} className="text-white hover:bg-white/10 text-xs font-black uppercase">Reset Filter</Button>
-                <Button size="sm" onClick={loadData} className="bg-emerald-500 hover:bg-emerald-400 text-slate-900 text-xs font-black uppercase px-8 rounded-xl">Terapkan Filter</Button>
-              </div>
-            </div>
-          )}
+          <div className="flex gap-2 w-full lg:w-auto">
+            <Button variant="outline" onClick={() => setShowFilters(!showFilters)} className={cn("h-12 px-6 rounded-2xl border-slate-100 font-black uppercase text-[10px] tracking-widest transition-all", showFilters ? "bg-emerald-600 text-white hover:bg-emerald-700 border-emerald-600" : "bg-slate-50 hover:bg-slate-100")}>
+              <Filter className="h-4 w-4 mr-2" /> Filter Lanjutan
+            </Button>
+          </div>
         </div>
+
+        {showFilters && (
+          <div className="p-6 bg-slate-50/50 border-b border-slate-100 grid grid-cols-1 md:grid-cols-4 gap-4 animate-in slide-in-from-top-4 duration-300">
+            <div className="space-y-1.5"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Klien</label>
+              <Select value={filters.customerId} onValueChange={(v) => setFilters({...filters, customerId: v})}>
+                <SelectTrigger className="bg-white border-slate-200 rounded-xl h-10 text-xs font-bold"><SelectValue placeholder="Semua Klien" /></SelectTrigger>
+                <SelectContent className="rounded-xl">{customers.map(c => <SelectItem key={c.id} value={c.id} className="text-xs font-bold">{c.full_name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Petugas Sampling</label>
+              <Select value={filters.fieldOfficerId} onValueChange={(v) => setFilters({...filters, fieldOfficerId: v})}>
+                <SelectTrigger className="bg-white border-slate-200 rounded-xl h-10 text-xs font-bold"><SelectValue placeholder="Semua Petugas" /></SelectTrigger>
+                <SelectContent className="rounded-xl">{fieldOfficers.map(o => <SelectItem key={o.id} value={o.id} className="text-xs font-bold">{o.full_name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Dari Tanggal</label><Input type="date" value={filters.dateFrom} onChange={(e) => setFilters({...filters, dateFrom: e.target.value})} className="bg-white border-slate-200 rounded-xl h-10 text-xs font-bold" /></div>
+            <div className="space-y-1.5 flex items-end"><Button variant="ghost" onClick={() => { setFilters({dateFrom:"", dateTo:"", fieldOfficerId:"", customerId:""}); setPage(1); }} className="text-rose-500 font-black text-[9px] uppercase tracking-widest h-10 hover:bg-rose-50 rounded-xl w-full">Reset Filter</Button></div>
+          </div>
+        )}
 
         <div className="overflow-x-auto">
           <Table>
-            <TableHeader>
-              <TableRow className="bg-slate-50/50 hover:bg-slate-50/50 border-none">
-                <TableHead className="px-8 py-5 font-black text-slate-900 uppercase text-[10px] tracking-[0.2em]">Pekerjaan & Penawaran</TableHead>
-                <TableHead className="px-4 py-5 font-black text-slate-900 uppercase text-[10px] tracking-[0.2em]">Informasi Klien</TableHead>
-                <TableHead className="px-4 py-5 font-black text-slate-900 uppercase text-[10px] tracking-[0.2em]">Status Operasional</TableHead>
-                <TableHead className="px-4 py-5 font-black text-slate-900 uppercase text-[10px] tracking-[0.2em]">Billing & Revenue</TableHead>
-                <TableHead className="px-8 py-5 font-black text-slate-900 uppercase text-[10px] tracking-[0.2em] text-right">Aksi</TableHead>
+            <TableHeader className="bg-slate-50/50">
+              <TableRow className="border-b border-slate-100">
+                <TableHead className="px-8 py-6 font-black uppercase tracking-widest text-[9px] text-slate-400">Pekerjaan</TableHead>
+                <TableHead className="px-4 py-6 font-black uppercase tracking-widest text-[9px] text-slate-400">Alur Progres</TableHead>
+                <TableHead className="px-4 py-6 font-black uppercase tracking-widest text-[9px] text-slate-400">Informasi Klien</TableHead>
+                <TableHead className="px-4 py-6 font-black uppercase tracking-widest text-[9px] text-slate-400 text-center">Status</TableHead>
+                <TableHead className="px-8 py-6 font-black uppercase tracking-widest text-[9px] text-slate-400 text-center">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                Array.from({ length: 6 }).map((_, i) => (
-                  <TableRow key={i}><TableCell colSpan={5} className="py-10 px-8"><div className="h-14 bg-slate-50 animate-pulse rounded-2xl" /></TableCell></TableRow>
-                ))
+                <TableRow><TableCell colSpan={5} className="p-0"><TableSkeleton rows={limit} className="p-8" /></TableCell></TableRow>
               ) : data.items.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-32"><div className="flex flex-col items-center gap-6"><div className="h-24 w-24 rounded-full bg-slate-50 flex items-center justify-center border-4 border-white shadow-lg"><Briefcase className="h-10 w-10 text-slate-200" /></div><div className="space-y-1"><p className="font-black text-slate-800 text-lg uppercase tracking-widest">Tidak ada data</p><p className="text-xs text-slate-400 font-bold uppercase tracking-tighter">Sesuaikan pencarian atau filter Anda</p></div></div></TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center py-32 bg-slate-50/30">
+                  <Briefcase className="h-12 w-12 text-slate-100 mx-auto mb-4" />
+                  <p className="text-slate-400 font-black uppercase tracking-widest text-[10px]">Tidak ada data progress ditemukan</p>
+                </TableCell></TableRow>
               ) : (
-                data.items.map((item: any) => {
-                  const sInfo = getStatusInfo(item.status);
-                  const isUrgent = new Date().getTime() - new Date(item.created_at).getTime() > 7 * 24 * 60 * 60 * 1000 && item.status !== 'completed';
-                  
-                  return (
-                    <TableRow key={item.id} className="group hover:bg-emerald-50/10 transition-all border-slate-100/60">
-                      <TableCell className="px-8 py-6">
-                        <div className="flex flex-col gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-xs font-black text-emerald-800 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-lg shadow-sm">{item.tracking_code}</span>
-                            {isUrgent && <Badge className="bg-red-50 text-red-600 border-red-100 text-[8px] font-black uppercase px-1.5 h-5 flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Peringatan SLA</Badge>}
-                          </div>
-                          <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1.5 uppercase tracking-tighter"><FileText className="h-3.5 w-3.5 text-slate-300" />{item.quotation.quotation_number}</span>
+                data.items.map((job: any) => (
+                  <TableRow key={job.id} className="hover:bg-emerald-50/20 transition-all group">
+                    <TableCell className="px-8 py-6">
+                      <div className="space-y-1">
+                        <span className="font-black text-emerald-950 uppercase tracking-tighter text-sm block">{job.tracking_code}</span>
+                        <div className="flex items-center gap-2 text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                          <FileText className="h-3 w-3" /> {job.quotation?.quotation_number}
                         </div>
-                      </TableCell>
-                      <TableCell className="px-4">
-                        <div className="flex flex-col gap-1">
-                          <span className="font-black text-sm text-slate-800 tracking-tight">{item.quotation.profile.full_name}</span>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.1em]">{item.quotation.profile.company_name || "Personal"}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-4">
-                        <div className="space-y-3 min-w-[220px]">
-                          <div className="flex justify-between items-center">
-                            <Badge variant="outline" className={cn("text-[9px] font-black border-2 py-0.5 px-3 uppercase tracking-wider", sInfo.color)}>{sInfo.label}</Badge>
-                            <span className="text-[9px] font-bold text-slate-400 uppercase">{new Date(item.created_at).toLocaleDateString('id-ID')}</span>
-                          </div>
-                          <WorkflowTimeline status={item.status} />
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-4">
-                        <div className="flex flex-col gap-1.5">
-                            <div className="flex items-center gap-2">
-                                <span className="font-black text-sm text-slate-900">{formatIDR(item.quotation.total_amount)}</span>
-                                {item.payment?.payment_status === 'paid' ? (
-                                    <Badge className="bg-emerald-50 text-emerald-600 border-emerald-100 text-[8px] font-black uppercase">LUNAS</Badge>
-                                ) : item.invoice ? (
-                                    <Badge className="bg-blue-50 text-blue-600 border-blue-100 text-[8px] font-black uppercase">TERTAGIH</Badge>
-                                ) : (
-                                    <Badge className="bg-slate-50 text-slate-400 border-slate-100 text-[8px] font-black uppercase">BELUM TAGIH</Badge>
-                                )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <CreditCard className="h-3 w-3 text-slate-300" />
-                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{item.invoice?.invoice_number || "Belum Ada Invoice"}</span>
-                            </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-8 text-right">
-                        <div className="flex justify-end gap-1">
-                          {item.status === 'scheduled' && !item.sampling_assignment && (
-                            <Button
-                              size="sm"
-                              onClick={() => openAssignDialog(item)}
-                              className="bg-amber-100 text-amber-700 hover:bg-amber-200 border-amber-200 font-black text-[10px] uppercase rounded-xl h-10 px-4 mr-1"
-                            >
-                              Tugaskan
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handlePreviewJob(item)}
-                            className="h-10 w-10 rounded-xl text-emerald-600 hover:bg-emerald-100 transition-all active:scale-95 shadow-sm bg-white border border-slate-100"
-                            title="Pratinjau"
-                          >
-                            <Eye className="h-5 w-5" />
+                      </div>
+                    </TableCell>
+                    <TableCell className="px-4 py-6"><WorkflowTimeline status={job.status} /></TableCell>
+                    <TableCell className="px-4 py-6">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-black text-slate-700 uppercase tracking-tight text-[11px]">{job.quotation?.profile?.full_name}</span>
+                        <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate max-w-[150px]">{job.quotation?.profile?.company_name || "PERSONAL CLIENT"}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="px-4 py-6 text-center">{getStatusBadge(job.status)}</TableCell>
+                    <TableCell className="px-8 py-6 text-center">
+                      <div className="flex justify-center gap-2">
+                        <Link href={`/admin/jobs/${job.id}`}>
+                          <Button variant="ghost" size="icon" className="h-10 w-10 rounded-2xl bg-slate-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all shadow-sm">
+                            <Eye className="h-4 w-4" />
                           </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl hover:bg-slate-100 text-slate-400 border border-slate-100 bg-white shadow-sm active:scale-95" title="Opsi">
-                                    <MoreVertical className="h-5 w-5" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 shadow-2xl border-slate-200">
-                                <DropdownMenuLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-3 py-2">Menu Manajemen</DropdownMenuLabel>
-                                <DropdownMenuItem className="rounded-xl cursor-pointer font-bold text-xs py-2.5 px-3" onClick={() => window.open(`/admin/quotations/${item.quotation.id}`, '_blank')}>
-                                    <FileText className="h-4 w-4 mr-2 text-blue-500" /> Buka Penawaran
-                                </DropdownMenuItem>
-                                {item.sampling_assignment && (
-                                    <DropdownMenuItem className="rounded-xl cursor-pointer font-bold text-xs py-2.5 px-3" onClick={() => window.open(`/admin/sampling/${item.sampling_assignment.id}`, '_blank')}>
-                                        <MapPin className="h-4 w-4 mr-2 text-amber-500" /> Detail Sampling
-                                    </DropdownMenuItem>
-                                )}
-                                <DropdownMenuSeparator className="my-2 bg-slate-100" />
-                                <DropdownMenuItem className="rounded-xl cursor-pointer font-bold text-xs py-2.5 px-3 text-red-600 hover:bg-red-50 focus:text-red-600 focus:bg-red-50" onClick={() => handleDeleteClick(item)}>
-                                    <Trash2 className="h-4 w-4 mr-2" /> Hapus Job Order
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
+                        </Link>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-2xl bg-slate-50 text-slate-400 hover:text-emerald-600 transition-all shadow-sm">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-64 p-2 rounded-2xl border-emerald-50 shadow-2xl">
+                            <DropdownMenuLabel className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-3 py-2">Navigasi Cepat</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={() => openAssignDialog(job)} className="rounded-xl p-3 text-[10px] font-bold uppercase tracking-widest" disabled={job.status !== 'scheduled'}>
+                              <UserPlus className="mr-3 h-4 w-4 text-emerald-500" /> Tugaskan Petugas
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="rounded-xl p-3 text-[10px] font-bold uppercase tracking-widest">
+                              <Printer className="mr-3 h-4 w-4 text-blue-500" /> Cetak Surat Jalan
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => { setSelectedJob(job); setIsDeleteDialogOpen(true); }} className="rounded-xl p-3 text-[10px] font-bold uppercase tracking-widest text-rose-600">
+                              <Trash2 className="mr-3 h-4 w-4" /> Hapus Pekerjaan
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
               )}
             </TableBody>
           </Table>
         </div>
 
-        <div className="p-8 bg-slate-50/80 border-t flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Total: {data.total} transaksi aktif</span>
-            <div className="h-4 w-[1px] bg-slate-300 hidden md:block" />
-            <div className="hidden md:flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Sistem Aktif</span>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="h-11 w-11 rounded-2xl border-slate-200 shadow-sm bg-white" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft className="h-5 w-5" /></Button>
-            <div className="h-11 px-6 flex items-center justify-center bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-900 shadow-sm">{page} / {data.pages}</div>
-            <Button variant="outline" size="sm" className="h-11 w-11 rounded-2xl border-slate-200 shadow-sm bg-white" disabled={page === data.pages} onClick={() => setPage(p => p + 1)}><ChevronRight className="h-5 w-5" /></Button>
+        <div className="p-6 border-t flex flex-col md:flex-row items-center justify-between bg-slate-50/50 gap-6">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total {data.total} Pekerjaan</p>
+          <div className="flex gap-3">
+            <Button variant="outline" size="icon" className="h-10 w-10 rounded-2xl bg-white border-slate-200 hover:bg-emerald-50 hover:text-emerald-600 transition-all" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+            <div className="flex items-center px-6 text-[10px] font-black bg-white border border-slate-200 rounded-2xl shadow-sm text-emerald-900 tracking-[0.2em]">{page} / {data.pages}</div>
+            <Button variant="outline" size="icon" className="h-10 w-10 rounded-2xl bg-white border-slate-200 hover:bg-emerald-50 hover:text-emerald-600 transition-all" disabled={page === data.pages} onClick={() => setPage(p => p + 1)}><ChevronRight className="h-4 w-4" /></Button>
           </div>
         </div>
       </div>
 
-      {/* PREVIEW MODAL */}
-      <Dialog open={isPreviewDialogOpen} onOpenChange={setIsPreviewDialogOpen}>
-        <DialogContent className="sm:max-w-5xl p-0 border-none shadow-2xl rounded-[3rem] overflow-hidden max-h-[95vh]">
-          <div className="bg-slate-900 p-8 text-white relative">
-            <div className="absolute top-0 right-0 p-8">
-                <Button variant="ghost" size="icon" onClick={() => setIsPreviewDialogOpen(false)} className="text-white/40 hover:text-white hover:bg-white/10 rounded-2xl h-12 w-12"><X className="h-6 w-6" /></Button>
+      {/* Delete Confirmation */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent className="rounded-[2.5rem] border-none shadow-2xl p-10">
+          <AlertDialogHeader>
+            <div className="w-20 h-20 rounded-3xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-6 border border-rose-100 shadow-inner">
+              <Trash2 className="h-10 w-10" />
             </div>
-            <div className="flex items-center gap-6">
-              <div className="w-16 h-16 rounded-[1.5rem] bg-emerald-500 flex items-center justify-center shadow-xl shadow-emerald-500/20 transform rotate-3">
-                <ShieldCheck className="h-8 w-8 text-slate-900" />
-              </div>
-              <div>
-                <DialogTitle className="text-2xl font-black uppercase tracking-tight">DETAIL TRANSAKSI</DialogTitle>
-                <div className="flex items-center gap-3 mt-1">
-                    <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px] font-black uppercase tracking-widest">{selectedJob?.tracking_code}</Badge>
-                    <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">ID Record: {selectedJob?.id.split('-')[0]}</span>
-                </div>
-              </div>
-            </div>
-          </div>
+            <AlertDialogTitle className="text-2xl font-black uppercase tracking-tight text-center text-slate-900">Konfirmasi Hapus</AlertDialogTitle>
+            <AlertDialogDescription className="text-center text-slate-500 font-medium py-4">
+              Hapus pekerjaan <strong className="text-slate-900">{selectedJob?.tracking_code}</strong>? Seluruh data progres dan foto sampling akan dihapus permanen.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-4 mt-6">
+            <AlertDialogCancel className="rounded-2xl h-14 flex-1 font-black text-slate-400 uppercase text-[10px] tracking-widest border-none hover:bg-slate-50">Batal</AlertDialogCancel>
+            <LoadingButton loading={deleting} onClick={confirmDelete} className="bg-rose-600 hover:bg-rose-700 rounded-2xl h-14 flex-1 font-black text-white uppercase text-[10px] tracking-widest shadow-xl shadow-rose-900/20">Ya, Hapus Permanen</LoadingButton>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-          <div className="p-10 overflow-y-auto max-h-[75vh] bg-white">
-            {selectedJob && (
-              <div className="space-y-10">
-                <div className="grid md:grid-cols-3 gap-6">
-                  <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 shadow-sm">
-                    <h4 className="text-[10px] font-black text-slate-400 uppercase mb-5 tracking-[0.2em] flex items-center gap-2"><Briefcase className="h-3 w-3" /> Logistik Pekerjaan</h4>
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-end border-b border-slate-200/60 pb-2">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Tracking</span>
-                        <span className="font-mono text-xs font-black text-slate-900">{selectedJob.tracking_code}</span>
-                      </div>
-                      <div className="flex justify-between items-end border-b border-slate-200/60 pb-2">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Penawaran</span>
-                        <span className="text-xs font-black text-slate-700">{selectedJob.quotation?.quotation_number}</span>
-                      </div>
-                      <div className="flex justify-between items-end border-b border-slate-200/60 pb-2">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Tgl Dibuat</span>
-                        <span className="text-xs font-black text-slate-700">{new Date(selectedJob.created_at).toLocaleString('id-ID')}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 shadow-sm">
-                    <h4 className="text-[10px] font-black text-slate-400 uppercase mb-5 tracking-[0.2em] flex items-center gap-2"><User className="h-3 w-3" /> Informasi Klien</h4>
-                    <div className="space-y-1">
-                        <p className="font-black text-slate-900 text-lg tracking-tight leading-tight">{selectedJob.quotation?.profile?.full_name}</p>
-                        <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{selectedJob.quotation?.profile?.company_name || "Personal"}</p>
-                        <div className="mt-4 pt-4 border-t border-slate-200/60">
-                             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter line-clamp-2 italic">Ref ID: {selectedJob.quotation?.profile?.id}</p>
-                        </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-emerald-900 p-6 rounded-3xl border border-slate-800 shadow-xl shadow-emerald-900/10">
-                    <h4 className="text-[10px] font-black text-emerald-400 uppercase mb-5 tracking-[0.2em] flex items-center gap-2"><DollarSign className="h-3 w-3" /> Status Keuangan</h4>
-                    <div className="space-y-4">
-                        <div className="flex justify-between items-baseline">
-                            <span className="text-[9px] font-black text-emerald-400 uppercase">Nilai Kontrak</span>
-                            <span className="text-xl font-black text-white">{formatIDR(selectedJob.quotation?.total_amount)}</span>
-                        </div>
-                        <div className="pt-4 border-t border-emerald-800 space-y-3">
-                            <div className="flex justify-between items-center">
-                                <span className="text-[10px] font-bold text-emerald-500 uppercase">Pembayaran</span>
-                                <Badge className={cn("text-[9px] font-black uppercase", selectedJob.payment?.payment_status === 'paid' ? "bg-emerald-500 text-slate-900" : "bg-white/10 text-white")}>
-                                    {selectedJob.payment?.payment_status === 'paid' ? 'LUNAS' : (selectedJob.payment?.payment_status || "PENDING")}
-                                </Badge>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-[10px] font-bold text-emerald-500 uppercase">Invoice</span>
-                                <span className="text-[10px] font-black text-white">{selectedJob.invoice?.invoice_number || "BELUM ADA"}</span>
-                            </div>
-                        </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100 shadow-inner">
-                    <h4 className="text-[10px] font-black text-slate-400 uppercase mb-8 tracking-[0.3em] text-center italic">Analisis Progres Operasional</h4>
-                    <div className="flex justify-center py-4">
-                        <WorkflowTimeline status={selectedJob.status} />
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-10">
-                        <div className="text-center p-4 border-r border-slate-200">
-                             <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Input Order</p>
-                             <p className="text-xs font-black text-slate-700">{new Date(selectedJob.created_at).toLocaleDateString('id-ID')}</p>
-                        </div>
-                        <div className="text-center p-4 border-r border-slate-200">
-                             <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Sampling</p>
-                             <p className="text-xs font-black text-slate-700">{selectedJob.sampling_assignment?.actual_date ? new Date(selectedJob.sampling_assignment.actual_date).toLocaleDateString('id-ID') : 'Menunggu'}</p>
-                        </div>
-                        <div className="text-center p-4 border-r border-slate-200">
-                             <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Analisis Selesai</p>
-                             <p className="text-xs font-black text-slate-700">{selectedJob.analysis_done_at ? new Date(selectedJob.analysis_done_at).toLocaleDateString('id-ID') : 'Proses'}</p>
-                        </div>
-                        <div className="text-center p-4">
-                             <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Report Selesai</p>
-                             <p className="text-xs font-black text-slate-700">{selectedJob.reporting_done_at ? new Date(selectedJob.reporting_done_at).toLocaleDateString('id-ID') : 'Pending'}</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-8">
-                    <div className="space-y-4">
-                        <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-widest flex items-center gap-2"><User className="h-3 w-3 text-blue-500" /> Personel Lapangan</h4>
-                        {selectedJob.sampling_assignment ? (
-                            <div className="flex items-center gap-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
-                                <div className="h-14 w-14 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 font-black text-lg border border-blue-100">
-                                    {selectedJob.sampling_assignment.field_officer?.full_name?.charAt(0)}
-                                </div>
-                                <div className="flex-1">
-                                    <p className="font-black text-slate-900 tracking-tight">{selectedJob.sampling_assignment.field_officer?.full_name}</p>
-                                    <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-0.5">Field Officer</p>
-                                    <div className="flex gap-2 mt-3">
-                                        <Badge className="bg-slate-50 text-slate-400 border-slate-100 text-[8px] font-black uppercase">Ref: {selectedJob.sampling_assignment.id.split('-')[0]}</Badge>
-                                        <Badge className="bg-slate-50 text-slate-400 border-slate-100 text-[8px] font-black uppercase">{selectedJob.sampling_assignment.travel_order?.document_number || "TIDAK ADA SURAT TUGAS"}</Badge>
-                                    </div>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="p-8 rounded-3xl border border-dashed border-slate-200 bg-slate-50/50 flex flex-col items-center justify-center text-center">
-                                <AlertTriangle className="h-6 w-6 text-slate-300 mb-2" />
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Belum Ada Personel</p>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="space-y-4">
-                        <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-widest flex items-center gap-2"><FlaskConical className="h-3 w-3 text-purple-500" /> Analis Laboratorium</h4>
-                        {selectedJob.lab_analysis ? (
-                            <div className="flex items-center gap-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
-                                <div className="h-14 w-14 bg-purple-50 rounded-2xl flex items-center justify-center text-purple-600 font-black text-lg border border-purple-100">
-                                    {selectedJob.lab_analysis.analyst?.full_name?.charAt(0)}
-                                </div>
-                                <div className="flex-1">
-                                    <p className="font-black text-slate-900 tracking-tight">{selectedJob.lab_analysis.analyst?.full_name}</p>
-                                    <p className="text-[10px] font-bold text-purple-500 uppercase tracking-widest mt-0.5">Analyst</p>
-                                    <div className="flex gap-2 mt-3">
-                                        <Badge className="bg-slate-50 text-slate-400 border-slate-100 text-[8px] font-black uppercase">Tahap Analisis</Badge>
-                                    </div>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="p-8 rounded-3xl border border-dashed border-slate-200 bg-slate-50/50 flex flex-col items-center justify-center text-center">
-                                <History className="h-6 w-6 text-slate-300 mb-2" />
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Menunggu Input Analisis</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="p-8 border-t bg-slate-50 flex gap-4">
-            <Button variant="outline" onClick={() => setIsPreviewDialogOpen(false)} className="flex-1 font-black text-[11px] uppercase h-14 rounded-2xl border-slate-300">Tutup</Button>
-            {selectedJob && (
-              <Link href={`/admin/quotations/${selectedJob.quotation.id}`} className="flex-[2]">
-                <Button className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black text-[11px] uppercase h-14 rounded-2xl shadow-xl shadow-slate-900/20">
-                  <FileText className="h-4 w-4 mr-3 text-emerald-400" />
-                  Lihat Detail Penawaran
-                </Button>
-              </Link>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* DELETE CONFIRMATION */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-md p-0 border-none shadow-2xl rounded-[2.5rem] overflow-hidden">
-            <div className="bg-red-600 p-8 text-white text-center">
-                <div className="w-20 h-20 bg-white/20 rounded-3xl flex items-center justify-center mx-auto mb-4 border border-white/20">
-                    <Trash2 className="h-10 w-10 text-white" />
-                </div>
-                <DialogTitle className="text-xl font-black uppercase tracking-tight">Konfirmasi Penghapusan</DialogTitle>
-                <DialogDescription className="text-red-100 text-[10px] font-bold uppercase tracking-widest mt-2 opacity-80">Tindakan ini tidak dapat dibatalkan</DialogDescription>
-            </div>
-            <div className="p-8 text-center space-y-4">
-                <p className="text-sm font-bold text-slate-600">Anda akan menghapus <span className="text-red-600 font-black">{selectedJob?.tracking_code}</span> beserta semua data terkait.</p>
-                <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex items-center gap-3">
-                    <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
-                    <p className="text-[10px] text-amber-700 font-black uppercase text-left leading-tight">Penghapusan akan dicatat dalam audit log sistem.</p>
-                </div>
-            </div>
-            <DialogFooter className="p-8 pt-0 flex gap-3">
-                <Button variant="ghost" onClick={() => setIsDeleteDialogOpen(false)} className="flex-1 font-black text-[10px] uppercase h-12 rounded-2xl text-slate-400">Batal</Button>
-                <LoadingButton onClick={confirmDelete} loading={deleting} className="flex-1 bg-red-600 hover:bg-red-700 text-white font-black text-[10px] uppercase h-12 rounded-2xl shadow-lg shadow-red-900/20">Hapus Data</LoadingButton>
-            </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ASSIGN FIELD OFFICER MODAL */}
-      <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
-        <DialogContent className="sm:max-w-xl p-0 border-none shadow-2xl rounded-2xl overflow-hidden">
-          <div className="bg-emerald-700 p-6 text-white flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center border border-white/20"><MapPin className="h-5 w-5" /></div>
-              <div><DialogTitle className="text-lg font-black uppercase tracking-tight">Penugasan Sampling</DialogTitle><DialogDescription className="text-emerald-200 text-[10px] font-bold uppercase tracking-widest">Tugaskan Petugas Lapangan</DialogDescription></div>
-            </div>
-          </div>
-
-          <div className="p-8 space-y-6">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Petugas Lapangan Utama</Label>
-                <Select value={assignFormData.field_officer_id} onValueChange={(val) => setAssignFormData({ ...assignFormData, field_officer_id: val })}>
-                  <SelectTrigger className="h-12 rounded-2xl bg-slate-50/50 border-slate-200"><SelectValue placeholder="Pilih Petugas Utama..." /></SelectTrigger>
-                  <SelectContent className="rounded-2xl">{fieldOfficers.map((o) => <SelectItem key={o.id} value={o.id} className="cursor-pointer">{o.full_name}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Asisten Petugas (Bisa Lebih Dari 1)</Label>
-                <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50/50 rounded-2xl border border-slate-200 max-h-[120px] overflow-y-auto">
-                  {assistants.map((o) => (
-                    <div key={o.id} className="flex items-center space-x-2 bg-white p-2 rounded-xl border border-slate-100">
-                      <input
-                        type="checkbox"
-                        id={`ast-${o.id}`}
-                        checked={assignFormData.assistant_ids.includes(o.id)}
-                        onChange={(e) => {
-                          const ids = [...assignFormData.assistant_ids];
-                          if (e.target.checked) {
-                            ids.push(o.id);
-                          } else {
-                            const index = ids.indexOf(o.id);
-                            if (index > -1) ids.splice(index, 1);
-                          }
-                          setAssignFormData({ ...assignFormData, assistant_ids: ids });
-                        }}
-                        className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                      />
-                      <label htmlFor={`ast-${o.id}`} className="text-[10px] font-bold text-slate-600 cursor-pointer truncate">
-                        {o.full_name}
-                      </label>
-                    </div>
-                  ))}
-                  {assistants.length === 0 && (
-                    <p className="col-span-2 text-center py-2 text-[10px] text-slate-400 font-bold uppercase">Tidak ada data asisten</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Tanggal</Label>
-                  <Input type="date" value={assignFormData.scheduled_date} onChange={(e) => setAssignFormData({ ...assignFormData, scheduled_date: e.target.value })} className="h-12 rounded-2xl bg-slate-50/50 border-slate-200" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Jam</Label>
-                  <Input type="time" value={assignFormData.scheduled_time} onChange={(e) => setAssignFormData({ ...assignFormData, scheduled_time: e.target.value })} className="h-12 rounded-2xl bg-slate-50/50 border-slate-200" />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Lokasi Sampling</Label>
-                <Textarea value={assignFormData.location} onChange={(e) => setAssignFormData({ ...assignFormData, location: e.target.value })} placeholder="Alamat lengkap lokasi..." className="rounded-2xl bg-slate-50/50 border-slate-200 min-h-[100px] resize-none" />
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-4 border-t border-slate-100">
-              <Button variant="ghost" onClick={() => setIsAssignDialogOpen(false)} className="flex-1 font-black text-[10px] uppercase h-12 rounded-2xl text-slate-400">Batal</Button>
-              <LoadingButton onClick={handleAssignSubmit} loading={submitting} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase h-12 rounded-2xl shadow-lg shadow-emerald-900/20">Konfirmasi Tugas</LoadingButton>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Loading Overlay */}
-      <LoadingOverlay 
-        isOpen={deleting || submitting} 
-        title={deleting ? "Menghapus Job Order..." : "Memproses Penugasan..."} 
-        description={deleting ? "Mohon tunggu sebentar, data sedang dihapus dari sistem" : "Sedang membuat penugasan dan surat tugas..."} 
-      />
+      <LoadingOverlay isOpen={submitting} title="Sedang Memproses..." description="Mohon tunggu, sistem sedang memperbarui database" />
     </div>
   );
 }

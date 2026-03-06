@@ -21,3 +21,30 @@ export async function getCompanyProfile() {
     return null
   }
 }
+
+export async function getLandingPageConfig() {
+  try {
+    let config = await prisma.landingPageConfig.findFirst()
+    
+    // If doesn't exist, return default structure or create one
+    if (!config) {
+      // Return basic structure to avoid crashes
+      return {
+        navbar_menus: [
+          { label: "Home", href: "/", icon: "Home", is_dropdown: false },
+          { label: "Layanan", href: "/catalog", icon: "Briefcase", is_dropdown: false },
+          { label: "Galeri", href: "/gallery", icon: "ImageIcon", is_dropdown: false },
+          { label: "Berita", href: "/news", icon: "Newspaper", is_dropdown: false },
+          { label: "Kontak", href: "/contact", icon: "Phone", is_dropdown: false },
+        ]
+      }
+    }
+    
+    return config
+  } catch (error) {
+    console.error('Error fetching landing page config:', error)
+    return {
+      navbar_menus: []
+    }
+  }
+}

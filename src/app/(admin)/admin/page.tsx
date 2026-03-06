@@ -2,7 +2,9 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import prisma from '@/lib/prisma'
 import { Button } from '@/components/ui/button'
-import { FileText, Users, Briefcase, TrendingUp } from 'lucide-react'
+import { FileText, Users, Briefcase, TrendingUp, Banknote } from 'lucide-react'
+import { getAdminDashboardStats } from '@/lib/actions/dashboard'
+import { DashboardCharts } from '@/components/admin/DashboardCharts'
 
 export default async function AdminDashboard() {
   const supabase = await createClient()
@@ -22,7 +24,8 @@ export default async function AdminDashboard() {
     activeOrders,
     totalUsers,
     recentQuotations,
-    recentJobOrders
+    recentJobOrders,
+    dashboardData
   ] = await Promise.all([
     prisma.quotation.count(),
     prisma.jobOrder.count({
@@ -64,7 +67,8 @@ export default async function AdminDashboard() {
           }
         }
       }
-    })
+    }),
+    getAdminDashboardStats()
   ])
 
   // Calculate month-over-month growth for quotations
@@ -74,7 +78,7 @@ export default async function AdminDashboard() {
   const quotationsThisMonth = await prisma.quotation.count({
     where: {
       created_at: {
-        gte: now
+        gte: new Date(now.getFullYear(), now.getMonth(), 1)
       }
     }
   })
@@ -82,8 +86,8 @@ export default async function AdminDashboard() {
   const quotationsLastMonth = await prisma.quotation.count({
     where: {
       created_at: {
-        gte: lastMonth,
-        lt: now
+        gte: new Date(now.getFullYear(), now.getMonth() - 1, 1),
+        lt: new Date(now.getFullYear(), now.getMonth(), 1)
       }
     }
   })
@@ -126,7 +130,7 @@ export default async function AdminDashboard() {
         </div>
       </header>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Total Quotations Card */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow border-l-4 border-l-emerald-500">
           <div className="flex items-center justify-between">
@@ -180,7 +184,30 @@ export default async function AdminDashboard() {
             <span className="text-slate-400 text-xs">Terdaftar di sistem</span>
           </div>
         </div>
+
+        {/* Total Revenue Card */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow border-l-4 border-l-blue-500">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-slate-500 text-sm font-medium">Pendapatan</h3>
+              <p className="text-2xl font-bold text-slate-800 mt-2">
+                {formatCurrency(dashboardData.summary.totalRevenue)}
+              </p>
+            </div>
+            <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
+              <Banknote className="h-6 w-6 text-blue-600" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <span className="text-slate-400 text-xs">Total terbayar</span>
+          </div>
+        </div>
       </div>
+
+      <DashboardCharts 
+        quotationTrend={dashboardData.quotationTrend} 
+        jobStatus={dashboardData.jobStatus} 
+      />
 
       {/* Recent Activity - Quotations & Job Orders */}
       <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">

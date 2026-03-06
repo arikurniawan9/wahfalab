@@ -111,7 +111,12 @@ export function LandingHeader({ companyProfile, navbarMenus, user, role }: Landi
           </div>
         </div>
 
-        <MobileNav user={user} role={role} dashboardHref={getDashboardHref()} />
+        <MobileNav 
+          user={user} 
+          role={role} 
+          dashboardHref={getDashboardHref()} 
+          navbarMenus={navbarMenus} 
+        />
       </nav>
     </header>
   );

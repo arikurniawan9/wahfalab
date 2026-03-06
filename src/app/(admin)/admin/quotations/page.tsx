@@ -1,13 +1,3 @@
-// ============================================================================
-// STABLE QUOTATIONS PAGE - v3.0 (Simplified Layout)
-// Fitur:
-// 1. ✅ No Tabs (Single Page Form) - Fix Infinite Loop Error
-// 2. ✅ Katalog Selection (Perdiem, Transport, Alat)
-// 3. ✅ Tambah Customer Baru Langsung
-// 4. ✅ Keyboard Shortcuts (Alt+N, Alt+P, Alt+T, Alt+E, Alt+K, Ctrl+Enter)
-// 5. ✅ Bulk Delete & Duplicate
-// ============================================================================
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -30,23 +20,22 @@ import {
   Search,
   MoreVertical,
   Eye,
-  Download,
-  Upload,
   FileText,
   CheckCircle,
   XCircle,
-  Send,
   DollarSign,
-  Truck,
-  Wrench,
   Copy,
-  MapPin,
-  Car,
-  X,
   Clock,
-  Check
+  FileSpreadsheet,
+  UserPlus,
+  Lock,
+  Building2,
+  Mail,
+  User,
+  MapPin
 } from "lucide-react";
-import { ChemicalLoader, LoadingOverlay, LoadingButton } from "@/components/ui";
+import { LoadingOverlay, LoadingButton } from "@/components/ui";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { 
   getQuotations, 
   deleteQuotation, 
@@ -69,15 +58,6 @@ import {
   DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-  DialogDescription
-} from "@/components/ui/dialog";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -90,11 +70,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useForm, useFieldArray, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
+import { QuotationForm } from "@/components/admin/quotations/QuotationForm";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Stat Card Component
 function StatCard({ title, value, icon: Icon, color }: any) {
@@ -103,13 +82,13 @@ function StatCard({ title, value, icon: Icon, color }: any) {
     amber: "bg-amber-50 text-amber-600 border-amber-100",
     blue: "bg-blue-50 text-blue-600 border-blue-100",
     red: "bg-red-50 text-red-600 border-red-100",
-    purple: "bg-purple-50 text-purple-600 border-purple-100",
+    purple: "bg-purple-50 text-purple-700 border-purple-100",
   };
 
   return (
-    <Card className={cn("border-none shadow-sm", colors[color])}>
+    <Card className={cn("border-none shadow-sm rounded-xl", colors[color])}>
       <CardContent className="p-3 flex items-center gap-3">
-        <div className={cn("p-2 rounded-xl bg-white shadow-sm shrink-0")}>
+        <div className={cn("p-2 rounded-lg bg-white shadow-sm shrink-0")}>
           <Icon className="h-4 w-4" />
         </div>
         <div className="min-w-0">
@@ -121,33 +100,12 @@ function StatCard({ title, value, icon: Icon, color }: any) {
   );
 }
 
-const quotationSchema = z.object({
-  quotation_number: z.string().min(1, "Nomor penawaran wajib diisi"),
-  user_id: z.string().optional().nullable(), // Validasi manual di onSubmit untuk toast lebih jelas
-  use_tax: z.boolean().default(true),
-  discount_amount: z.coerce.number().default(0),
-  perdiem_name: z.string().optional().nullable(),
-  perdiem_price: z.coerce.number().default(0),
-  perdiem_qty: z.coerce.number().default(0),
-  transport_name: z.string().optional().nullable(),
-  transport_price: z.coerce.number().default(0),
-  transport_qty: z.coerce.number().default(0),
-  items: z.array(z.object({
-    service_id: z.string().optional().nullable(),
-    equipment_id: z.string().optional().nullable(),
-    qty: z.coerce.number().default(1),
-    price: z.coerce.number().default(0),
-    name: z.string().optional().nullable(),
-    parameters: z.array(z.string()).optional(),
-  })).default([]),
-});
-
 const statusOptions = [
-  { value: "all", label: "Semua Status", color: "bg-slate-100 text-slate-700" },
-  { value: "draft", label: "Draft", color: "bg-slate-100 text-slate-700 border-slate-200", icon: FileText },
-  { value: "accepted", label: "Diterima", color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: CheckCircle },
-  { value: "rejected", label: "Ditolak", color: "bg-red-100 text-red-700 border-red-200", icon: XCircle },
-  { value: "paid", label: "Dibayar", color: "bg-purple-100 text-purple-700 border-purple-200", icon: DollarSign }
+  { value: "all", label: "Semua Status" },
+  { value: "draft", label: "Draft" },
+  { value: "accepted", label: "Diterima" },
+  { value: "rejected", label: "Ditolak" },
+  { value: "paid", label: "Dibayar" }
 ];
 
 export default function QuotationListPage() {
@@ -161,272 +119,24 @@ export default function QuotationListPage() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isPerdiemDialogOpen, setIsPerdiemDialogOpen] = useState(false);
-  const [isTransportDialogOpen, setIsTransportDialogOpen] = useState(false);
-  const [isEquipmentDialogOpen, setIsEquipmentDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
-  const [importData, setImportData] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<string>("date");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
-  const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
-  const [pendingFormData, setPendingFormData] = useState<any>(null);
-
-  // Form Hooks
-  const { register, control, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
-    resolver: zodResolver(quotationSchema),
-    mode: 'onChange',
-    defaultValues: {
-      quotation_number: "INV-",
-      user_id: "",
-      use_tax: true,
-      discount_amount: 0,
-      perdiem_name: "",
-      perdiem_price: 0,
-      perdiem_qty: 0,
-      transport_name: "",
-      transport_price: 0,
-      transport_qty: 0,
-      items: [{ service_id: "", equipment_id: "", qty: 1, price: 0 }]
-    }
-  });
-
-  const { fields, append, remove } = useFieldArray({ control, name: "items" });
-
-  // Watches for Calculations
-  const watchedItems = watch("items") || [];
-  const watchedUseTax = watch("use_tax");
-  const watchedDiscount = Number(watch("discount_amount")) || 0;
-  const watchedPerdiemPrice = Number(watch("perdiem_price")) || 0;
-  const watchedPerdiemQty = watch("perdiem_qty") || 0;
-  const watchedTransportPrice = Number(watch("transport_price")) || 0;
-  const watchedTransportQty = watch("transport_qty") || 0;
-  const watchedPerdiemName = watch("perdiem_name");
-  const watchedTransportName = watch("transport_name");
-
-  // Logic Calculations
-  const itemsSubtotal = watchedItems.reduce((acc: number, item: any) => acc + (Number(item.qty || 0) * Number(item.price || 0)), 0);
-  const perdiemTotal = Number(watchedPerdiemPrice) * Number(watchedPerdiemQty);
-  const transportTotal = Number(watchedTransportPrice) * Number(watchedTransportQty);
-  const subtotalBeforeDiscount = itemsSubtotal + perdiemTotal + transportTotal;
-  const subtotal = subtotalBeforeDiscount - Number(watchedDiscount);
-  const tax = watchedUseTax ? subtotal * 0.11 : 0;
-  const total = subtotal + tax;
-
-  // Keyboard Shortcuts Logic
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isDialogOpen) return;
-      
-      // Ctrl + Enter untuk Simpan (berlaku di mana saja saat modal buka)
-      if (e.ctrlKey && e.key === 'Enter') {
-        e.preventDefault();
-        handleSubmit(onSubmit)();
-        return;
-      }
-
-      // Alt Shortcuts (berlaku di mana saja saat modal buka)
-      if (e.altKey) {
-        switch (e.key.toLowerCase()) {
-          case 'n': 
-            e.preventDefault();
-            append({ service_id: "", equipment_id: "", qty: 1, price: 0 }); 
-            break;
-          case 'p': 
-            e.preventDefault();
-            setIsPerdiemDialogOpen(true); 
-            break;
-          case 't': 
-            e.preventDefault();
-            setIsTransportDialogOpen(true); 
-            break;
-          case 'e': 
-            e.preventDefault();
-            setIsEquipmentDialogOpen(true); 
-            break;
-          case 'k': 
-            e.preventDefault();
-            setIsCustomerDialogOpen(true); 
-            break;
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDialogOpen, handleSubmit, append]);
-
-  const [customerData, setCustomerData] = useState({
-    full_name: "",
-    email: "",
-    company_name: "",
-    address: "",
-    password: "123456"
-  });
-
-  const handleCreateCustomer = async () => {
-    if (!customerData.full_name || !customerData.email) {
-      toast.error("Nama dan Email wajib diisi");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await createOrUpdateUser({ ...customerData, role: 'client' });
-      toast.success("Customer baru berhasil ditambahkan");
-      setIsCustomerDialogOpen(false);
-      const cResult = await getClients();
-      setClients(cResult);
-      setCustomerData({ full_name: "", email: "", company_name: "", address: "", password: "123456" });
-    } catch (error: any) {
-      toast.error("Gagal menambahkan customer", { description: error.message });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const onSubmit = (formData: any) => {
-    // 1. Validasi Pelanggan
-    if (!formData.user_id || formData.user_id === "") {
-      toast.error("Data Belum Lengkap", {
-        description: "Silakan pilih pelanggan terlebih dahulu."
-      });
-      return;
-    }
-
-    // 2. Filter item untuk memisahkan Layanan dan Sewa Alat
-    const servicesItems = formData.items.filter((item: any) => item.service_id);
-    const equipmentItems = formData.items.filter((item: any) => item.equipment_id);
-
-    // 3. Validasi: Minimal harus ada 1 Layanan yang dipilih
-    if (servicesItems.length === 0) {
-      toast.error("Layanan Wajib Diisi", {
-        description: "Harap tambahkan minimal 1 layanan laboratorium."
-      });
-      return;
-    }
-
-    // 4. Validasi Layanan: Pastikan semua layanan yang ditambahkan sudah dipilih dan punya harga
-    const hasIncompleteService = servicesItems.some((item: any) => !item.service_id || Number(item.price) <= 0);
-    if (hasIncompleteService) {
-      toast.error("Layanan Belum Lengkap", {
-        description: "Pastikan semua baris layanan sudah dipilih dan harga sudah terisi."
-      });
-      return;
-    }
-
-    // 5. Validasi Sewa Alat (Opsional): Jika ada alat yang ditambahkan, harganya harus > 0
-    if (equipmentItems.length > 0) {
-      const hasIncompleteEquipment = equipmentItems.some((item: any) => Number(item.price) <= 0);
-      if (hasIncompleteEquipment) {
-        toast.error("Harga Alat Belum Terisi", {
-          description: "Ada sewa alat yang harganya masih 0 atau kosong."
-        });
-        return;
-      }
-    }
-
-    // 6. Validasi Perdiem (Wajib)
-    if (!formData.perdiem_name || formData.perdiem_name.trim() === "") {
-      toast.error("Perdiem Wajib Diisi", {
-        description: "Harap pilih atau isi keterangan Perdiem (Bisa via Katalog)."
-      });
-      return;
-    }
-    if (Number(formData.perdiem_price) <= 0 || Number(formData.perdiem_qty) <= 0) {
-      toast.error("Detail Perdiem Tidak Valid", {
-        description: "Harga dan hari perdiem harus lebih dari 0."
-      });
-      return;
-    }
-
-    // 7. Validasi Transport (Wajib)
-    if (!formData.transport_name || formData.transport_name.trim() === "") {
-      toast.error("Transport Wajib Diisi", {
-        description: "Harap pilih atau isi keterangan Transport (Bisa via Katalog)."
-      });
-      return;
-    }
-    if (Number(formData.transport_price) <= 0 || Number(formData.transport_qty) <= 0) {
-      toast.error("Detail Transport Tidak Valid", {
-        description: "Harga dan qty transport harus lebih dari 0."
-      });
-      return;
-    }
-
-    setPendingFormData(formData);
-    setIsSaveConfirmOpen(true);
-  };
-
-  const handleConfirmSave = async () => {
-    if (!pendingFormData) return;
-    
-    setIsSaveConfirmOpen(false);
-    setSubmitting(true);
-    try {
-      const result = await createQuotation({
-        ...pendingFormData,
-        subtotal: subtotalBeforeDiscount,
-        tax_amount: tax,
-        total_amount: total
-      });
-      
-      if (result.success) {
-        toast.success("Penawaran berhasil disimpan", {
-          description: "Status otomatis menjadi DRAFT"
-        });
-        setIsDialogOpen(false);
-        reset();
-        loadData();
-      }
-    } catch (error: any) {
-      toast.error("Gagal menyimpan penawaran", { description: error?.message || "Silakan coba lagi" });
-    } finally {
-      setSubmitting(false);
-      setPendingFormData(null);
-    }
-  };
-
-  const onInvalid = (errors: any) => {
-    console.error("Hook Form Errors:", errors);
-    toast.error("Form Belum Lengkap", {
-      description: "Mohon periksa kembali inputan Anda, pastikan data wajib sudah terisi."
-    });
-  };
-
-  const handleServiceChange = (index: number, serviceId: string) => {
-    const service = services.find(s => s.id === serviceId);
-    if (service) {
-      setValue(`items.${index}.service_id`, serviceId);
-      setValue(`items.${index}.price`, Number(service.price));
-      
-      // Load default parameters
-      if (service.parameters) {
-        try {
-          const params = typeof service.parameters === 'string' ? JSON.parse(service.parameters) : service.parameters;
-          const paramNames = Array.isArray(params) ? params.map((p: any) => p.name) : [];
-          setValue(`items.${index}.parameters`, paramNames);
-        } catch (e) {
-          setValue(`items.${index}.parameters`, []);
-        }
-      } else {
-        setValue(`items.${index}.parameters`, []);
-      }
-    }
-  };
+  const [nextQuoNum, setNextQuoNum] = useState("INV-");
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [qResult, cResult, sResult, oResult, eResult] = await Promise.all([
-        getQuotations(page, limit, search),
+      const [qResult, cResult, sResult, oResult, eResult, nextNum] = await Promise.all([
+        getQuotations({ page, limit, search, status: filterStatus === "all" ? undefined : filterStatus }),
         getClients(),
         getAllServices(),
         getAllOperationalCatalogs(),
-        getAllEquipment()
+        getAllEquipment(),
+        getNextInvoiceNumber()
       ]);
       
       setData(qResult);
@@ -434,32 +144,54 @@ export default function QuotationListPage() {
       setServices(sResult);
       setOperationalCatalogs(oResult);
       setEquipment(eResult);
+      setNextQuoNum(nextNum);
       setSelectedIds([]);
     } catch (error: any) {
       toast.error("Gagal memuat data");
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search]);
+  }, [page, limit, search, filterStatus]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  useEffect(() => {
-    if (isDialogOpen) {
-      getNextInvoiceNumber().then(num => setValue("quotation_number", num));
-    }
-  }, [isDialogOpen, setValue]);
+  const handleExportCSV = () => {
+    if (data.items.length === 0) return toast.error("Tidak ada data");
+    const headers = ["No Penawaran", "Klien", "Perusahaan", "Total", "Status"];
+    const rows = data.items.map((i: any) => [i.quotation_number, i.profile.full_name, i.profile.company_name, i.total_amount, i.status]);
+    const csv = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map((e: any) => e.join(",")).join("\n");
+    const link = document.createElement("a");
+    link.href = encodeURI(csv);
+    link.download = `quotations_${Date.now()}.csv`;
+    link.click();
+  };
 
-  const handleDelete = (id: string) => setDeleteId(id);
+  const handleCreateQuotation = async (formData: any) => {
+    setSubmitting(true);
+    try {
+      const result = await createQuotation(formData);
+      if (result.success) {
+        toast.success("Penawaran berhasil disimpan");
+        setIsDialogOpen(false);
+        loadData();
+      }
+    } catch (error: any) {
+      toast.error("Gagal menyimpan penawaran");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const confirmDelete = async () => {
     if (!deleteId) return;
     setDeleting(true);
     try {
-      await deleteQuotation(deleteId);
+      if (deleteId === "bulk") await deleteManyQuotations(selectedIds);
+      else await deleteQuotation(deleteId);
       loadData();
-      toast.success("Penawaran dihapus");
+      toast.success("Data dihapus");
       setDeleteId(null);
     } catch (error: any) {
       toast.error("Gagal menghapus");
@@ -468,726 +200,302 @@ export default function QuotationListPage() {
     }
   };
 
-  const handleBulkDelete = () => setDeleteId("bulk");
-  const confirmBulkDelete = async () => {
-    setDeleting(true);
-    try {
-      await deleteManyQuotations(selectedIds);
-      loadData();
-      toast.success("Data berhasil dihapus");
-      setDeleteId(null);
-    } catch (error: any) {
-      toast.error("Gagal menghapus");
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedIds.length === data.items.length) setSelectedIds([]);
-    else setSelectedIds(data.items.map((i: any) => i.id));
-  };
-
-  const toggleSelect = (id: string) => {
-    if (selectedIds.includes(id)) setSelectedIds(selectedIds.filter(i => i !== id));
-    else setSelectedIds([...selectedIds, id]);
-  };
-
-  const handleClone = async (id: string) => {
+  const [customerData, setCustomerData] = useState({ full_name: "", email: "", company_name: "", address: "" });
+  const handleCreateCustomer = async () => {
+    if (!customerData.full_name || !customerData.email) return toast.error("Nama & Email wajib");
     setSubmitting(true);
     try {
-      const result = await cloneQuotation(id);
-      if (result.success) { toast.success("Duplikasi berhasil"); loadData(); }
+      await createOrUpdateUser({ ...customerData, role: 'client', password: 'password123' });
+      toast.success("Customer ditambahkan");
+      setIsCustomerDialogOpen(false);
+      setCustomerData({ full_name: "", email: "", company_name: "", address: "" });
+      const cResult = await getClients();
+      setClients(cResult);
     } catch (error: any) {
-      toast.error("Gagal duplikasi");
+      toast.error("Gagal tambah customer");
     } finally {
       setSubmitting(false);
     }
   };
 
+  const toggleSelectAll = () => setSelectedIds(selectedIds.length === data.items.length ? [] : data.items.map((i: any) => i.id));
+  const toggleSelect = (id: string) => setSelectedIds(selectedIds.includes(id) ? selectedIds.filter(i => i !== id) : [...selectedIds, id]);
+
   const handleStatusUpdate = async (id: string, status: string) => {
-    setSubmitting(true);
     try {
       await updateQuotationStatus(id, status);
       toast.success("Status diperbarui");
       loadData();
-    } catch (error: any) {
-      toast.error("Gagal update status");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const getFilteredAndSortedData = () => {
-    let filtered = [...data.items];
-    if (search) {
-      filtered = filtered.filter(item => 
-        item.quotation_number.toLowerCase().includes(search.toLowerCase()) ||
-        item.profile.full_name.toLowerCase().includes(search.toLowerCase())
-      );
-    }
-    if (filterStatus !== "all") {
-      filtered = filtered.filter(item => item.status === filterStatus);
-    }
-    filtered.sort((a, b) => {
-      let comp = 0;
-      if (sortBy === "date") comp = new Date(a.date).getTime() - new Date(b.date).getTime();
-      else if (sortBy === "total") comp = Number(a.total_amount) - Number(b.total_amount);
-      else if (sortBy === "number") comp = a.quotation_number.localeCompare(b.quotation_number);
-      return sortOrder === "asc" ? comp : -comp;
-    });
-    return filtered;
-  };
-
-  const filteredItems = getFilteredAndSortedData();
-
-  const getStatusColor = (status: string) => {
-    const option = statusOptions.find(opt => opt.value === status);
-    return option?.color || "bg-slate-100 text-slate-700 border-slate-200";
-  };
-
-  const getStatusIcon = (status: string) => {
-    const option = statusOptions.find(opt => opt.value === status);
-    const Icon = option?.icon || FileText;
-    return <Icon className="h-3 w-3 mr-1" />;
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'draft': 
-      case 'sent': return 'DRAFT'; // Status sent sekarang dianggap draft
-      case 'accepted': return 'DITERIMA';
-      case 'rejected': return 'DITOLAK';
-      case 'paid': return 'DIBAYAR';
-      default: return status.toUpperCase();
-    }
+    } catch (error) { toast.error("Gagal update"); }
   };
 
   return (
-    <div className="p-4 md:p-10 pb-24 md:pb-10">
+    <div className="p-4 md:p-10 pb-24 md:pb-10 bg-slate-50/30 min-h-screen">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold text-emerald-900 tracking-tight">Penawaran Harga</h1>
-          <p className="text-slate-500 text-sm">Kelola semua penawaran harga laboratorium.</p>
-        </div>
-        <div className="flex gap-2 flex-wrap w-full md:w-auto">
+          <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Penawaran Harga</h1>
+          <p className="text-slate-500 text-xs font-medium">Manajemen dokumen penawaran klien laboratorium.</p>
         </div>
       </div>
 
       {/* Stats Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
-        <StatCard 
-          title="Total" 
-          value={data.total} 
-          icon={FileText} 
-          color="emerald" 
-        />
-        <StatCard 
-          title="Draft" 
-          value={data.items.filter((i: any) => i.status === 'draft' || i.status === 'sent').length} 
-          icon={Clock} 
-          color="amber" 
-        />
-        <StatCard 
-          title="Diterima" 
-          value={data.items.filter((i: any) => i.status === 'accepted').length} 
-          icon={CheckCircle} 
-          color="blue" 
-        />
-        <StatCard 
-          title="Ditolak" 
-          value={data.items.filter((i: any) => i.status === 'rejected').length} 
-          icon={XCircle} 
-          color="red" 
-        />
-        <StatCard 
-          title="Lunas" 
-          value={data.items.filter((i: any) => i.status === 'paid').length} 
-          icon={DollarSign} 
-          color="purple" 
-        />
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+        <StatCard title="Total" value={data.total} icon={FileText} color="emerald" />
+        <StatCard title="Draft" value={data.items.filter((i: any) => i.status === 'draft').length} icon={Clock} color="amber" />
+        <StatCard title="Diterima" value={data.items.filter((i: any) => i.status === 'accepted').length} icon={CheckCircle} color="blue" />
+        <StatCard title="Ditolak" value={data.items.filter((i: any) => i.status === 'rejected').length} icon={XCircle} color="red" />
+        <StatCard title="Lunas" value={data.items.filter((i: any) => i.status === 'paid').length} icon={DollarSign} color="purple" />
       </div>
 
-      {/* Main Table */}
-      <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
-        <div className="p-5 border-b bg-emerald-50/5 flex flex-col md:flex-row gap-4 items-center">
+      {/* Table Container */}
+      <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
+        <div className="p-4 border-b flex flex-col md:flex-row gap-4 items-center bg-white">
           <div className="relative flex-1 w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             <Input
-              placeholder="Cari nomor penawaran atau klien..."
+              placeholder="Cari nomor atau klien..."
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="pl-10 h-11 focus-visible:ring-emerald-500 rounded-lg"
+              className="pl-10 h-10 bg-slate-50 border-none rounded-xl text-xs font-medium"
             />
           </div>
-          <div className="flex gap-2 w-full md:w-auto justify-end">
-            {selectedIds.length > 0 && (
-              <Button 
-                variant="destructive" 
-                size="icon"
-                onClick={handleBulkDelete} 
-                className="h-11 w-11 rounded-lg shadow-sm animate-in zoom-in duration-200"
-                title={`Hapus ${selectedIds.length} data`}
-              >
-                <Trash2 className="h-5 w-5" />
-              </Button>
-            )}
-            
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-full md:w-40 h-11 rounded-lg border-slate-200 bg-white">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                {statusOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-
-            <Button 
-              onClick={() => { reset(); setIsDialogOpen(true); }} 
-              size="icon"
-              className="bg-emerald-600 hover:bg-emerald-700 shadow-lg cursor-pointer h-11 w-11 shrink-0"
-              title="Buat Penawaran Baru"
-            >
-              <Plus className="h-5 w-5" />
-            </Button>
-          </div>
-        </div>
-
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-slate-50/80 font-bold">
-              <TableHead className="w-12 px-6"><Checkbox checked={data.items.length > 0 && selectedIds.length === data.items.length} onCheckedChange={toggleSelectAll} /></TableHead>
-              <TableHead className="px-4">No. Penawaran</TableHead>
-              <TableHead className="px-4">Klien</TableHead>
-              <TableHead className="px-4 text-right">Total Tagihan</TableHead>
-              <TableHead className="px-4 text-center">Status</TableHead>
-              <TableHead className="px-6 text-center">Aksi</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  <TableCell colSpan={6} className="py-4"><div className="h-10 bg-slate-50 animate-pulse rounded-lg" /></TableCell>
-                </TableRow>
-              ))
-            ) : filteredItems.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-20 text-slate-400">Data tidak ditemukan.</TableCell></TableRow>
-            ) : (
-              filteredItems.map((item: any) => (
-                <TableRow key={item.id} className="hover:bg-emerald-50/5">
-                  <TableCell className="px-6"><Checkbox checked={selectedIds.includes(item.id)} onCheckedChange={() => toggleSelect(item.id)} /></TableCell>
-                  <TableCell className="font-bold text-emerald-900 px-4">{item.quotation_number}</TableCell>
-                  <TableCell className="px-4">
-                    <div className="flex flex-col">
-                      <span className="font-medium text-slate-800">{item.profile.full_name}</span>
-                      <span className="text-[10px] text-slate-400 uppercase">{item.profile.company_name || "Personal"}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right font-bold text-emerald-700 px-4">Rp {Number(item.total_amount).toLocaleString("id-ID")}</TableCell>
-                  <TableCell className="px-4 text-center">
-                    <Badge variant="outline" className={cn("capitalize text-[10px]", getStatusColor(item.status))}>
-                      {getStatusLabel(item.status)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-center px-6">
-                    <div className="flex justify-center gap-2">
-                      <Link href={`/admin/quotations/${item.id}`}>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 h-9 w-9 rounded-xl transition-all active:scale-90"
-                          title="Lihat Detail"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </Link>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-9 w-9 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all active:scale-90"
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem onClick={() => handleClone(item.id)}><Copy className="mr-2 h-4 w-4" /> Duplikasi</DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleStatusUpdate(item.id, 'accepted')}>Tandai Diterima</DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleDelete(item.id)} className="text-red-600"><Trash2 className="mr-2 h-4 w-4" /> Hapus</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-
-        {/* Pagination */}
-        <div className="p-4 border-t flex flex-col md:flex-row items-center justify-between bg-slate-50/50 gap-4">
-          <div className="flex items-center gap-4">
-            <p className="text-xs text-slate-500 font-medium">Total {data.total} penawaran</p>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 font-medium">Tampil:</span>
-              <Select value={limit.toString()} onValueChange={(val) => {
-                setLimit(parseInt(val));
-                setPage(1);
-              }}>
-                <SelectTrigger className="h-8 w-[70px] bg-white text-xs cursor-pointer">
-                  <SelectValue placeholder={limit.toString()} />
+          
+          <TooltipProvider>
+            <div className="flex flex-wrap gap-2 w-full md:w-auto items-center">
+              <Select value={filterStatus} onValueChange={(val) => { setFilterStatus(val); setPage(1); }}>
+                <SelectTrigger className="w-full md:w-40 h-10 rounded-xl border-slate-100 bg-slate-50 font-bold uppercase text-[9px] tracking-widest">
+                  <SelectValue placeholder="Status" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="10" className="cursor-pointer">10</SelectItem>
-                  <SelectItem value="30" className="cursor-pointer">30</SelectItem>
-                  <SelectItem value="50" className="cursor-pointer">50</SelectItem>
-                  <SelectItem value="100" className="cursor-pointer">100</SelectItem>
+                <SelectContent className="rounded-xl border-emerald-50">
+                  {statusOptions.map(opt => <SelectItem key={opt.value} value={opt.value} className="text-[9px] font-bold uppercase">{opt.label}</SelectItem>)}
                 </SelectContent>
               </Select>
+
+              {selectedIds.length > 0 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="destructive" onClick={() => setDeleteId("bulk")} className="h-10 px-4 rounded-xl animate-in zoom-in duration-300 font-black text-[10px] gap-2">
+                      <Trash2 className="h-4 w-4" />
+                      <span>{selectedIds.length}</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p className="text-[10px] font-bold uppercase">Hapus Semua Terpilih</p></TooltipContent>
+                </Tooltip>
+              )}
+
+              <div className="flex gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" onClick={handleExportCSV} className="h-10 w-10 p-0 rounded-xl border-slate-200 bg-white hover:bg-slate-50 transition-all">
+                      <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p className="text-[10px] font-bold uppercase">Export ke CSV</p></TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button onClick={async () => { 
+                      const num = await getNextInvoiceNumber();
+                      setNextQuoNum(num);
+                      setIsDialogOpen(true); 
+                    }} className="h-10 w-10 p-0 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-900/10 active:scale-95 transition-all">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p className="text-[10px] font-bold uppercase">Buat Penawaran Baru</p></TooltipContent>
+                </Tooltip>
+              </div>
             </div>
-          </div>
+          </TooltipProvider>
+        </div>
+
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader className="bg-slate-50/50">
+              <TableRow className="border-b border-slate-100">
+                <TableHead className="w-12 pl-6"><Checkbox checked={data.items.length > 0 && selectedIds.length === data.items.length} onCheckedChange={toggleSelectAll} /></TableHead>
+                <TableHead className="px-4 py-4 font-black uppercase tracking-widest text-[9px] text-slate-400">No. Penawaran</TableHead>
+                <TableHead className="px-4 py-4 font-black uppercase tracking-widest text-[9px] text-slate-400">Informasi Klien</TableHead>
+                <TableHead className="px-4 py-4 font-black uppercase tracking-widest text-[9px] text-slate-400 text-right">Tagihan</TableHead>
+                <TableHead className="px-4 py-4 font-black uppercase tracking-widest text-[9px] text-slate-400 text-center">Status</TableHead>
+                <TableHead className="px-6 py-4 font-black uppercase tracking-widest text-[9px] text-slate-400 text-center">Aksi</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow><TableCell colSpan={6} className="p-0"><TableSkeleton rows={limit} className="p-6" /></TableCell></TableRow>
+              ) : data.items.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-24"><FileText className="h-10 w-10 text-slate-100 mx-auto mb-3" /><p className="text-slate-400 font-black uppercase tracking-widest text-[9px]">Data tidak ditemukan</p></TableCell></TableRow>
+              ) : (
+                data.items.map((item: any) => (
+                  <TableRow key={item.id} className="hover:bg-emerald-50/20 transition-all group">
+                    <TableCell className="pl-6"><Checkbox checked={selectedIds.includes(item.id)} onCheckedChange={() => toggleSelect(item.id)} /></TableCell>
+                    <TableCell className="font-bold text-slate-900 px-4">{item.quotation_number}</TableCell>
+                    <TableCell className="px-4">
+                      <div className="flex flex-col">
+                        <span className="font-black text-slate-700 uppercase tracking-tighter text-[11px]">{item.profile.full_name}</span>
+                        <span className="text-[8px] font-bold text-slate-400 uppercase">{item.profile.company_name || "PERSONAL"}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-black text-emerald-700 px-4 text-xs">Rp {Number(item.total_amount).toLocaleString("id-ID")}</TableCell>
+                    <TableCell className="px-4 text-center">
+                      <Badge variant="outline" className={cn("text-[8px] font-black tracking-widest px-2 py-0.5 rounded-full uppercase", 
+                        item.status === 'draft' ? "bg-amber-50 text-amber-700 border-amber-100 animate-pulse" : 
+                        item.status === 'accepted' ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-slate-50 text-slate-500")}>
+                        {item.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center px-6">
+                      <div className="flex justify-center gap-1.5">
+                        <Link href={`/admin/quotations/${item.id}`}><Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg bg-slate-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all"><Eye className="h-3.5 w-3.5" /></Button></Link>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400 hover:text-emerald-600"><MoreVertical className="h-3.5 w-3.5" /></Button></DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48 p-1.5 rounded-xl border-emerald-50 shadow-xl">
+                            <DropdownMenuItem onClick={() => cloneQuotation(item.id).then(() => loadData())} className="rounded-lg p-2 text-[9px] font-bold uppercase tracking-widest"><Copy className="mr-2 h-3.5 w-3.5 text-emerald-500" /> Duplikasi</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleStatusUpdate(item.id, 'accepted')} className="rounded-lg p-2 text-[9px] font-bold uppercase tracking-widest"><CheckCircle className="mr-2 h-3.5 w-3.5 text-emerald-500" /> Terima</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleStatusUpdate(item.id, 'rejected')} className="rounded-lg p-2 text-[9px] font-bold uppercase tracking-widest text-rose-600"><XCircle className="mr-2 h-3.5 w-3.5" /> Tolak</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => setDeleteId(item.id)} className="rounded-lg p-2 text-[9px] font-bold uppercase tracking-widest text-rose-600"><Trash2 className="mr-2 h-3.5 w-3.5" /> Hapus</DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="p-4 border-t flex items-center justify-between bg-slate-50/50">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total {data.total} Data</p>
           <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="h-9 w-9 rounded-xl cursor-pointer border-slate-200 hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-95" 
-              disabled={page === 1} 
-              onClick={() => setPage(p => p - 1)}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div className="flex items-center px-4 text-xs font-bold bg-white border border-slate-200 rounded-xl shadow-sm text-slate-600">
-              {page} / {data.pages}
-            </div>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="h-9 w-9 rounded-xl cursor-pointer border-slate-200 hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-95" 
-              disabled={page === data.pages} 
-              onClick={() => setPage(p => p + 1)}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+            <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg bg-white border-slate-200" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft className="h-3.5 w-3.5" /></Button>
+            <div className="flex items-center px-4 text-[9px] font-black bg-white border border-slate-200 rounded-lg text-emerald-900 tracking-widest">{page} / {data.pages}</div>
+            <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg bg-white border-slate-200" disabled={page === data.pages} onClick={() => setPage(p => p + 1)}><ChevronRight className="h-3.5 w-3.5" /></Button>
           </div>
         </div>
       </div>
 
-      {/* CREATE QUOTATION DIALOG (MODAL) */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto p-0 border-none shadow-2xl rounded-3xl">
-          {/* Emerald Glassmorphism Header */}
-          <div className="bg-emerald-700/80 backdrop-blur-md p-4 text-white sticky top-0 z-20 border-b border-emerald-600/50 shadow-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-white border border-white/20 shadow-inner">
-                  <FileText className="h-4 w-4" />
-                </div>
-                <DialogTitle className="text-base font-black uppercase tracking-widest">Buat Penawaran Baru</DialogTitle>
-              </div>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={() => setIsDialogOpen(false)} 
-                className="text-white/60 hover:text-white hover:bg-white/10 rounded-xl h-8 w-8 transition-all"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="p-6 space-y-6">
-            {/* Step 1: Klien */}
-            <div className="space-y-3">
-              <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-[2px] flex items-center gap-2">
-                <span className="w-5 h-5 rounded bg-emerald-600 text-white flex items-center justify-center text-[9px]">01</span>
-                Informasi Pelanggan
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Nomor Penawaran</label>
-                  <Input {...register("quotation_number")} readOnly className="bg-slate-100 font-mono font-bold text-emerald-700 h-9 text-xs" />
-                </div>
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Nama Pelanggan</label>
-                    <Button type="button" variant="link" size="sm" className="h-auto p-0 text-emerald-600 font-bold text-[10px]" onClick={() => setIsCustomerDialogOpen(true)}>+ BARU (Alt+K)</Button>
-                  </div>
-                  <Controller
-                    control={control}
-                    name="user_id"
-                    render={({ field }) => (
-                      <Select value={field.value || ""} onValueChange={field.onChange}>
-                        <SelectTrigger className="h-9 border-slate-300 bg-white text-xs"><SelectValue placeholder="Pilih klien..." /></SelectTrigger>
-                        <SelectContent>{clients.map(c => <SelectItem key={c.id} value={c.id} className="text-xs">{c.full_name} - {c.company_name || "Personal"}</SelectItem>)}</SelectContent>
-                      </Select>
-                    )}
-                  />
-                  {errors.user_id && <p className="text-[9px] text-red-500 font-bold">{errors.user_id.message as string}</p>}
-                </div>
-              </div>
-            </div>
-
-            {/* Step 2: Layanan */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-[2px] flex items-center gap-2">
-                  <span className="w-5 h-5 rounded bg-emerald-600 text-white flex items-center justify-center text-[9px]">02</span>
-                  Layanan & Parameter
-                </h4>
-                <Button type="button" variant="outline" size="sm" onClick={() => append({ service_id: "", equipment_id: "", qty: 1, price: 0 })} className="border-emerald-600 text-emerald-700 font-bold h-7 text-[10px]">Tambah Item (Alt+N)</Button>
-              </div>
-              <div className="space-y-2">
-                {fields.map((field, index) => {
-                  if (watchedItems[index]?.equipment_id) return null;
-                  const itemParams = watchedItems[index]?.parameters || [];
-                  
-                  return (
-                    <div key={field.id} className="bg-white border border-slate-100 p-4 rounded-2xl relative shadow-sm hover:border-emerald-200 transition-all space-y-3">
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                        <div className="md:col-span-6 space-y-1">
-                          <label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Layanan Lab</label>
-                          <Controller
-                            control={control}
-                            name={`items.${index}.service_id`}
-                            render={({ field }) => (
-                              <Select value={field.value || ""} onValueChange={(val) => { field.onChange(val); handleServiceChange(index, val); }}>
-                                <SelectTrigger className="h-9 border-slate-200 text-xs"><SelectValue placeholder="Pilih layanan..." /></SelectTrigger>
-                                <SelectContent>{services.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}</SelectContent>
-                              </Select>
-                            )}
-                          />
-                        </div>
-                        <div className="md:col-span-2 space-y-1 text-center">
-                          <label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Qty</label>
-                          <Input type="number" {...register(`items.${index}.qty`)} className="h-9 text-center font-bold text-xs" />
-                        </div>
-                        <div className="md:col-span-3 space-y-1">
-                          <label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Harga (Rp)</label>
-                          <Input type="number" {...register(`items.${index}.price`)} className="h-9 font-bold text-emerald-700 text-xs" />
-                        </div>
-                        <div className="md:col-span-1">
-                          <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="w-full h-9 text-slate-300 hover:text-red-500"><Trash2 className="h-4 w-4" /></Button>
-                        </div>
-                      </div>
-
-                      {/* PARAMETER TAGS UI */}
-                      {itemParams.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {itemParams.map((param: string, pIdx: number) => (
-                            <Badge 
-                              key={`${index}-${pIdx}`} 
-                              variant="secondary" 
-                              className="text-[8px] font-bold bg-blue-50 text-blue-600 border border-blue-100 pl-2 pr-1 py-0.5 rounded-md flex items-center gap-1 group/tag"
-                            >
-                              {param}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const newList = [...itemParams];
-                                  newList.splice(pIdx, 1);
-                                  setValue(`items.${index}.parameters`, newList);
-                                }}
-                                className="hover:bg-blue-200 rounded-sm p-0.5 transition-colors"
-                              >
-                                <X className="h-2 w-2" />
-                              </button>
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Step 3: Biaya Tambahan */}
-            <div className="space-y-3">
-              <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-[2px] flex items-center gap-2">
-                <span className="w-5 h-5 rounded bg-emerald-600 text-white flex items-center justify-center text-[9px]">03</span>
-                Biaya Tambahan
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Perdiem */}
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 shadow-sm relative">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-slate-700">
-                      <MapPin className="h-3 w-3 text-emerald-500" />
-                      <span className="text-[11px] font-bold uppercase tracking-tight">Perdiem</span>
-                    </div>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setIsPerdiemDialogOpen(true)} className="h-6 text-[8px] font-black border-emerald-300 text-emerald-700 bg-white">KATALOG (Alt+P)</Button>
-                  </div>
-                  {watchedPerdiemName && <p className="text-[9px] text-emerald-600 font-bold bg-emerald-100/50 px-2 py-0.5 rounded w-fit italic">{watchedPerdiemName}</p>}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1"><span className="text-[8px] font-bold text-slate-400">HARGA</span><Input type="number" {...register("perdiem_price", { valueAsNumber: true })} className="h-8 bg-white font-bold text-xs" /></div>
-                    <div className="space-y-1"><span className="text-[8px] font-bold text-slate-400">HARI</span><Input type="number" {...register("perdiem_qty", { valueAsNumber: true })} className="h-8 bg-white text-center font-bold text-xs" /></div>
-                  </div>
-                </div>
-                {/* Transport */}
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 shadow-sm relative">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-slate-700">
-                      <Car className="h-3 w-3 text-blue-500" />
-                      <span className="text-[11px] font-bold uppercase tracking-tight">Transport</span>
-                    </div>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setIsTransportDialogOpen(true)} className="h-6 text-[8px] font-black border-blue-300 text-blue-700 bg-white">KATALOG (Alt+T)</Button>
-                  </div>
-                  {watchedTransportName && <p className="text-[9px] text-blue-600 font-bold bg-blue-100/50 px-2 py-0.5 rounded w-fit italic">{watchedTransportName}</p>}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1"><span className="text-[8px] font-bold text-slate-400">HARGA</span><Input type="number" {...register("transport_price", { valueAsNumber: true })} className="h-8 bg-white font-bold text-xs" /></div>
-                    <div className="space-y-1"><span className="text-[8px] font-bold text-slate-400">QTY</span><Input type="number" {...register("transport_qty", { valueAsNumber: true })} className="h-8 bg-white text-center font-bold text-xs" /></div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Equipment */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 shadow-sm">
-                <div className="flex items-center justify-between border-b pb-2">
-                  <div className="flex items-center gap-2 text-slate-700 font-bold text-[11px] uppercase tracking-tight">
-                    <Wrench className="h-3 w-3 text-amber-500" /> 
-                    Sewa Alat Tambahan
-                  </div>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setIsEquipmentDialogOpen(true)} className="h-6 text-[8px] font-black border-amber-300 text-amber-700 bg-white uppercase">Katalog Alat (Alt+E)</Button>
-                </div>
-                
-                <div className="space-y-2">
-                  {fields.filter((item: any) => item.equipment_id).length === 0 ? (
-                    <div className="text-center py-2 bg-white/50 rounded-lg border border-dashed border-slate-300">
-                      <span className="text-[10px] text-slate-400 italic">Belum ada alat dipilih...</span>
-                    </div>
-                  ) : (
-                    fields.map((field, index) => {
-                      if (!watchedItems[index]?.equipment_id) return null;
-                      return (
-                        <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end bg-white border border-slate-200 p-2 rounded-lg shadow-sm">
-                          <div className="md:col-span-5 flex items-center gap-2">
-                            <div className="w-6 h-6 rounded bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
-                              <Wrench className="h-3 w-3" />
-                            </div>
-                            <span className="text-[10px] font-bold text-slate-700 truncate">{watchedItems[index]?.name}</span>
-                          </div>
-                          <div className="md:col-span-3">
-                            <Input type="number" {...register(`items.${index}.price`, { valueAsNumber: true })} className="h-7 text-[10px] font-bold bg-slate-50 border-none" />
-                          </div>
-                          <div className="md:col-span-2">
-                            <Input type="number" {...register(`items.${index}.qty`, { valueAsNumber: true })} className="h-7 text-[10px] font-bold text-center bg-slate-50 border-none" />
-                          </div>
-                          <div className="md:col-span-2 flex justify-end">
-                            <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="h-6 w-6 text-slate-300 hover:text-red-500"><XCircle className="h-3 w-3" /></Button>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Step 4: Final Summary */}
-            <div className="space-y-3">
-              <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-[2px] flex items-center gap-2">
-                <span className="w-5 h-5 rounded bg-emerald-600 text-white flex items-center justify-center text-[9px]">04</span>
-                Pajak & Total
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-inner">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Diskon (Rp)</label>
-                    <Input type="number" {...register("discount_amount", { valueAsNumber: true })} className="h-9 font-bold text-sm rounded-lg" />
-                  </div>
-                  <div className="flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-100">
-                    <Checkbox id="use_tax" checked={watchedUseTax} onCheckedChange={(val) => setValue("use_tax", val === true)} className="h-4 w-4" />
-                    <label htmlFor="use_tax" className="text-xs font-bold text-slate-700 cursor-pointer">Gunakan Pajak PPN (11%)</label>
-                  </div>
-                </div>
-                {/* INVOICE SUMMARY UI */}
-                <div className="bg-emerald-950 p-6 rounded-[1.5rem] text-white shadow-2xl relative overflow-hidden flex flex-col justify-center border-2 border-emerald-900">
-                  <div className="relative space-y-2">
-                    <div className="flex justify-between text-[10px] font-black opacity-50 uppercase tracking-[2px]"><span>Subtotal</span><span>Rp {subtotalBeforeDiscount.toLocaleString("id-ID")}</span></div>
-                    <div className="flex justify-between text-[10px] font-black text-red-400 uppercase tracking-[2px]"><span>Diskon</span><span>- Rp {watchedDiscount.toLocaleString("id-ID")}</span></div>
-                    {watchedUseTax && <div className="flex justify-between text-[10px] font-black text-emerald-400 uppercase tracking-[2px]"><span>Pajak 11%</span><span>Rp {tax.toLocaleString("id-ID")}</span></div>}
-                    <div className="border-t border-white/10 pt-3 mt-2 flex justify-between items-end">
-                      <span className="text-[10px] font-black text-emerald-300 uppercase tracking-[3px]">TOTAL</span>
-                      <span className="text-2xl font-black font-mono tracking-tighter">Rp {total.toLocaleString("id-ID")}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Sticky Footer */}
-            <div className="sticky bottom-0 bg-white/80 backdrop-blur-md border-t -mx-6 px-8 py-4 mt-6 flex items-center justify-between z-30">
-              <div className="flex flex-col">
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Estimasi</span>
-                <span className="text-xl font-black text-emerald-800 font-mono tracking-tight leading-none">Rp {total.toLocaleString("id-ID")}</span>
-              </div>
-              <div className="flex gap-3">
-                <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)} className="font-bold text-slate-400 text-xs uppercase px-6 h-10 rounded-xl">Batal</Button>
-                <LoadingButton type="submit" loading={submitting} loadingText="MEMPROSES..." className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-8 h-12 rounded-xl shadow-lg shadow-emerald-900/20 text-xs tracking-wide uppercase transition-all active:scale-95 group">
-                  <div className="flex flex-col items-center leading-none gap-1">
-                    <span className="flex items-center gap-2">
-                      SIMPAN DRAFT 
-                      <FileText className="h-4 w-4" />
-                    </span>
-                    <span className="text-[7px] opacity-60 font-bold tracking-[0.1em] hidden md:block lowercase">
-                      [ ctrl + enter ]
-                    </span>
-                  </div>
-                </LoadingButton>
-              </div>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* DELETE CONFIRMATION DIALOG */}
-      <AlertDialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
-        <AlertDialogContent className="sm:max-w-[425px] rounded-3xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
-              <Trash2 className="h-5 w-5" />
-              Konfirmasi Hapus
-            </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="pt-4 text-sm text-muted-foreground">
-                {deleteId === "bulk" ? (
-                  <>
-                    <p>Apakah Anda yakin ingin menghapus <strong className="text-slate-900">{selectedIds.length} penawaran</strong> terpilih?</p>
-                    <p className="mt-2 text-sm text-amber-600 font-medium">⚠️ Tindakan ini tidak dapat dibatalkan.</p>
-                  </>
-                ) : (
-                  <>
-                    <p>Apakah Anda yakin ingin menghapus penawaran ini?</p>
-                    <p className="mt-2 text-sm text-amber-600 font-medium">⚠️ Data akan dihapus permanen dari sistem.</p>
-                  </>
-                )}
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2">
-            <AlertDialogCancel className="rounded-xl cursor-pointer">Batal</AlertDialogCancel>
-            <LoadingButton
-              loading={deleting}
-              onClick={(e) => {
-                e.preventDefault();
-                deleteId === "bulk" ? confirmBulkDelete() : confirmDelete();
-              }}
-              className="bg-red-600 hover:bg-red-700 rounded-xl cursor-pointer"
-            >
-              <Trash2 className="mr-2 h-4 w-4" /> Ya, Hapus
-            </LoadingButton>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Catalog Dialogs */}
-      <Dialog open={isPerdiemDialogOpen} onOpenChange={setIsPerdiemDialogOpen}>
-        <DialogContent className="sm:max-w-[500px] rounded-3xl"><DialogHeader><DialogTitle>Katalog Perdiem</DialogTitle></DialogHeader>
-          <div className="max-h-[400px] overflow-y-auto space-y-2 py-4">
-            {operationalCatalogs.filter(c => c.category === 'perdiem').map(c => (
-              <div key={c.id} className="p-4 border rounded-2xl hover:bg-emerald-50 cursor-pointer flex justify-between items-center group"
-                onClick={() => { setValue("perdiem_name", c.name); setValue("perdiem_price", Number(c.price)); setValue("perdiem_qty", 1); setIsPerdiemDialogOpen(false); }}>
-                <div><p className="font-bold text-slate-800">{c.name}</p><p className="text-xs text-slate-500">{c.location}</p></div>
-                <span className="font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-lg group-hover:bg-emerald-600 group-hover:text-white transition-all">Rp {Number(c.price).toLocaleString("id-ID")}</span>
-              </div>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isTransportDialogOpen} onOpenChange={setIsTransportDialogOpen}>
-        <DialogContent className="sm:max-w-[500px] rounded-3xl"><DialogHeader><DialogTitle>Katalog Transport</DialogTitle></DialogHeader>
-          <div className="max-h-[400px] overflow-y-auto space-y-2 py-4">
-            {operationalCatalogs.filter(c => c.category === 'transport').map(c => (
-              <div key={c.id} className="p-4 border rounded-2xl hover:bg-blue-50 cursor-pointer flex justify-between items-center group"
-                onClick={() => { setValue("transport_name", c.name); setValue("transport_price", Number(c.price)); setValue("transport_qty", 1); setIsTransportDialogOpen(false); }}>
-                <div><p className="font-bold text-slate-800">{c.name}</p><p className="text-xs text-slate-500">{c.unit}</p></div>
-                <span className="font-bold text-blue-700 bg-blue-100 px-3 py-1 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-all">Rp {Number(c.price).toLocaleString("id-ID")}</span>
-              </div>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isEquipmentDialogOpen} onOpenChange={setIsEquipmentDialogOpen}>
-        <DialogContent className="sm:max-w-[600px] rounded-3xl"><DialogHeader><DialogTitle>Katalog Alat Laboratorium</DialogTitle></DialogHeader>
-          <div className="max-h-[400px] overflow-y-auto space-y-2 py-4 px-1">
-            {equipment.map((eq) => {
-              const isSelected = watchedItems.some((item: any) => item.equipment_id === eq.id);
-              return (
-                <div key={eq.id} className={cn("flex items-center justify-between p-4 border rounded-2xl hover:bg-amber-50 cursor-pointer transition-all", isSelected ? "bg-amber-50 border-amber-300 ring-1 ring-amber-300" : "bg-white border-slate-200")}
-                  onClick={() => {
-                    if (isSelected) {
-                      const itemIndex = watchedItems.findIndex((item: any) => item.equipment_id === eq.id);
-                      if (itemIndex > -1) remove(itemIndex);
-                    } else {
-                      append({ service_id: "", equipment_id: eq.id, qty: 1, price: Number(eq.price), name: eq.name });
-                    }
-                    setIsEquipmentDialogOpen(false);
-                  }}>
-                  <div className="flex items-center gap-4"><div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", isSelected ? "bg-amber-200 text-amber-700" : "bg-slate-100 text-slate-400")}><Wrench className="h-6 w-6" /></div>
-                    <div><p className="font-bold text-slate-800">{eq.name}</p><p className="text-xs text-slate-500 font-medium">{eq.specification}</p></div></div>
-                  <div className="text-right"><p className="font-black text-amber-700">Rp {Number(eq.price).toLocaleString("id-ID")}</p><p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">per {eq.unit}</p></div>
-                </div>
-              );
-            })}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Save Confirmation AlertDialog */}
-      <AlertDialog open={isSaveConfirmOpen} onOpenChange={setIsSaveConfirmOpen}>
-        <AlertDialogContent className="sm:max-w-[425px] rounded-3xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-emerald-600">
-              <Check className="h-5 w-5" />
-              Konfirmasi Simpan
-            </AlertDialogTitle>
-            <AlertDialogDescription className="pt-4">
-              Apakah Anda yakin ingin menyimpan penawaran ini? Pastikan semua rincian layanan, alat, dan biaya tambahan sudah benar.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2">
-            <AlertDialogCancel className="rounded-xl cursor-pointer">Batal</AlertDialogCancel>
-            <LoadingButton
-              loading={submitting}
-              onClick={(e) => {
-                e.preventDefault();
-                handleConfirmSave();
-              }}
-              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl cursor-pointer"
-            >
-              Ya, Simpan & Kirim
-            </LoadingButton>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Loading Overlay */}
-      <LoadingOverlay 
-        isOpen={submitting || deleting} 
-        title={submitting ? "Menyimpan Penawaran..." : "Menghapus Data..."} 
-        description={submitting ? "Mohon tunggu sebentar, penawaran sedang diproses" : "Mohon tunggu sebentar, sedang menghapus data dari sistem"} 
+      {/* RENDER MODAL COMPONENT */}
+      <QuotationForm 
+        isOpen={isDialogOpen}
+        onClose={() => setIsDialogOpen(false)}
+        onSubmit={handleCreateQuotation}
+        clients={clients}
+        services={services}
+        operationalCatalogs={operationalCatalogs}
+        equipment={equipment}
+        nextQuotationNumber={nextQuoNum}
+        isSubmitting={submitting}
+        onAddCustomer={() => setIsCustomerDialogOpen(true)}
       />
 
-      {/* Add Customer Dialog */}
-      <Dialog open={isCustomerDialogOpen} onOpenChange={setIsCustomerDialogOpen}>
-        <DialogContent className="sm:max-w-[425px] rounded-3xl">
-          <DialogHeader><DialogTitle>Tambah Customer Baru</DialogTitle><DialogDescription>Masukkan data lengkap pelanggan baru.<span className="block mt-2 text-xs font-bold text-amber-600 bg-amber-50 p-2 rounded border border-amber-100">Catatan: Password default adalah: 123456</span></DialogDescription></DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2"><label className="text-sm font-medium">Nama Lengkap *</label><Input placeholder="Contoh: John Doe" value={customerData.full_name} onChange={(e) => setCustomerData({...customerData, full_name: e.target.value})} className="rounded-xl" /></div>
-            <div className="space-y-2"><label className="text-sm font-medium">Email *</label><Input type="email" placeholder="john@example.com" value={customerData.email} onChange={(e) => setCustomerData({...customerData, email: e.target.value})} className="rounded-xl" /></div>
-            <div className="space-y-2"><label className="text-sm font-medium">Nama Perusahaan</label><Input placeholder="PT. Maju Mundur" value={customerData.company_name} onChange={(e) => setCustomerData({...customerData, company_name: e.target.value})} className="rounded-xl" /></div>
-            <div className="space-y-2"><label className="text-sm font-medium">Alamat</label><Input placeholder="Jl. Raya No. 123..." value={customerData.address} onChange={(e) => setCustomerData({...customerData, address: e.target.value})} className="rounded-xl" /></div>
+      {/* Delete Confirmation */}
+      <AlertDialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <AlertDialogContent className="rounded-2xl border-none shadow-2xl p-6">
+          <AlertDialogHeader>
+            <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-4 border border-rose-100"><Trash2 className="h-6 w-6" /></div>
+            <AlertDialogTitle className="text-lg font-black uppercase text-center text-slate-900">Konfirmasi Hapus</AlertDialogTitle>
+            <AlertDialogDescription className="text-center text-slate-500 text-xs py-2">Data yang sudah dihapus tidak dapat dikembalikan.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 mt-4">
+            <AlertDialogCancel className="rounded-xl h-10 flex-1 font-bold text-slate-400 uppercase text-[9px]">Batal</AlertDialogCancel>
+            <Button onClick={confirmDelete} className="bg-rose-600 hover:bg-rose-700 rounded-xl h-10 flex-1 font-black text-white uppercase text-[9px] shadow-lg shadow-rose-900/20">Ya, Hapus</Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ADD CUSTOMER MODAL - COMPACT & RESPONSIVE VERSION */}
+      <AlertDialog open={isCustomerDialogOpen} onOpenChange={setIsCustomerDialogOpen}>
+        <AlertDialogContent className="max-w-[400px] w-[90vw] rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
+          <div className="bg-emerald-600 p-4 text-white flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center border border-white/20">
+              <UserPlus className="h-4 w-4" />
+            </div>
+            <div>
+              <AlertDialogTitle className="text-sm font-black uppercase tracking-widest leading-none">Registrasi Klien</AlertDialogTitle>
+              <p className="text-[8px] text-emerald-100 font-bold uppercase mt-1 opacity-70">Input data profil pelanggan baru</p>
+            </div>
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setIsCustomerDialogOpen(false)} className="rounded-xl">Batal</Button><LoadingButton onClick={handleCreateCustomer} loading={submitting} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl px-8">Simpan Customer</LoadingButton></DialogFooter>
-        </DialogContent>
-      </Dialog>
+
+          <div className="p-5 space-y-4 bg-white max-h-[70vh] overflow-y-auto">
+            <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl flex items-center gap-3">
+              <Lock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+              <p className="text-[10px] font-bold text-amber-700 leading-tight">
+                Password default: <span className="bg-amber-200 px-1.5 py-0.5 rounded font-black text-amber-900">123456</span>
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3.5">
+              <div className="space-y-1">
+                <label className="text-[8px] font-black text-slate-400 uppercase ml-1 flex items-center gap-1.5">
+                  <User className="h-2.5 w-2.5 text-emerald-500" /> Nama Lengkap *
+                </label>
+                <Input 
+                  placeholder="Nama lengkap klien..." 
+                  value={customerData.full_name} 
+                  onChange={(e) => setCustomerData({...customerData, full_name: e.target.value})} 
+                  className="h-9 rounded-xl bg-slate-50 border-none font-bold text-[11px] focus-visible:ring-emerald-500 transition-all px-4" 
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[8px] font-black text-slate-400 uppercase ml-1 flex items-center gap-1.5">
+                  <Mail className="h-2.5 w-2.5 text-emerald-500" /> Alamat Email *
+                </label>
+                <Input 
+                  type="email" 
+                  placeholder="email@example.com" 
+                  value={customerData.email} 
+                  onChange={(e) => setCustomerData({...customerData, email: e.target.value})} 
+                  className="h-9 rounded-xl bg-slate-50 border-none font-bold text-[11px] focus-visible:ring-emerald-500 transition-all px-4" 
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[8px] font-black text-slate-400 uppercase ml-1 flex items-center gap-1.5">
+                  <Building2 className="h-2.5 w-2.5 text-emerald-500" /> Nama Perusahaan
+                </label>
+                <Input 
+                  placeholder="PT / CV / Instansi..." 
+                  value={customerData.company_name} 
+                  onChange={(e) => setCustomerData({...customerData, company_name: e.target.value})} 
+                  className="h-9 rounded-xl bg-slate-50 border-none font-bold text-[11px] focus-visible:ring-emerald-500 transition-all px-4" 
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[8px] font-black text-slate-400 uppercase ml-1 flex items-center gap-1.5">
+                  <MapPin className="h-2.5 w-2.5 text-emerald-500" /> Alamat Lengkap
+                </label>
+                <Input 
+                  placeholder="Alamat kantor / rumah..." 
+                  value={customerData.address} 
+                  onChange={(e) => setCustomerData({...customerData, address: e.target.value})} 
+                  className="h-9 rounded-xl bg-slate-50 border-none font-bold text-[11px] focus-visible:ring-emerald-500 transition-all px-4" 
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-2">
+            <AlertDialogCancel className="rounded-xl h-10 flex-1 font-black text-slate-400 uppercase text-[9px] border-none hover:bg-slate-200 transition-all">Batal</AlertDialogCancel>
+            <LoadingButton 
+              loading={submitting} 
+              onClick={handleCreateCustomer} 
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl h-10 flex-1 font-black text-white uppercase text-[9px] shadow-md shadow-emerald-900/10 active:scale-95 transition-all"
+            >
+              SIMPAN KLIEN
+            </LoadingButton>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <LoadingOverlay isOpen={submitting || deleting} title="Sinkronisasi Database..." />
     </div>
   );
 }
