@@ -27,7 +27,14 @@ import {
   Map,
   Utensils,
   Shield,
-  ClipboardCheck
+  Server,
+  ClipboardCheck,
+  TrendingUp,
+  TrendingDown,
+  Image as ImageIcon,
+  Newspaper,
+  Mail,
+  ListTree
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -74,19 +81,38 @@ export const adminMenuItems = (pendingApprovals: number = 0) => [
     ]
   },
   {
-    group: "User",
+    group: "Manajemen User",
     icon: Users,
     items: [
-      { icon: Users, label: "Pengguna", href: "/admin/users" },
-      { icon: UserCheck, label: "Customer", href: "/admin/customers" },
+      { icon: Users, label: "Pengguna Staff", href: "/admin/users" },
+      { icon: UserCheck, label: "Data Customer", href: "/admin/customers" },
+      { icon: Users, label: "Asisten Lapangan", href: "/admin/assistants" },
     ]
   },
   {
-    group: "Settings",
+    group: "Konfigurasi & Web",
     icon: Settings,
     items: [
-      { icon: Building2, label: "Perusahaan", href: "/admin/settings/company" },
-      { icon: User, label: "Profil Saya", href: "/admin/settings/profile" },
+      { icon: Building2, label: "Profil Perusahaan", href: "/admin/settings/company" },
+      { icon: LayoutDashboard, label: "Data Home", href: "/admin/content-management" },
+      { icon: Server, label: "Sistem & Maintenance", href: "/admin/settings/system" },
+      { icon: User, label: "Akun Saya", href: "/admin/settings/profile" },
+    ]
+  },
+];
+
+export const contentManagerMenuItems = [
+  {
+    group: "Manajemen Konten",
+    icon: FileText,
+    items: [
+      { icon: LayoutDashboard, label: "Beranda", href: "/content-manager" },
+      { icon: FileText, label: "Data Home", href: "/content-manager/home" },
+      { icon: ListTree, label: "Manajemen Menu", href: "/content-manager/menus" },
+      { icon: ImageIcon, label: "Galeri Foto", href: "/content-manager/gallery" },
+      { icon: Newspaper, label: "Manajemen Berita", href: "/content-manager/news" },
+      { icon: Mail, label: "Pesan Masuk", href: "/content-manager/messages" },
+      { icon: User, label: "Profil Saya", href: "/content-manager/profile" },
     ]
   },
 ];
@@ -113,6 +139,13 @@ export const operatorMenuItems = [
     items: [
       { icon: Truck, label: "Biaya Transport", href: "/operator/transport-costs" },
       { icon: UserCheck, label: "Biaya Petugas Sampling", href: "/operator/engineer-costs" },
+    ]
+  },
+  {
+    group: "User",
+    icon: Users,
+    items: [
+      { icon: Users, label: "Asisten Lapangan", href: "/operator/assistants" },
     ]
   },
   {
@@ -180,11 +213,28 @@ const financeMenuItems = [
     ]
   },
   {
-    group: "Pembayaran",
-    icon: CreditCard,
+    group: "Manajemen Keuangan",
+    icon: Banknote,
     items: [
-      { icon: CreditCard, label: "Pembayaran Masuk", href: "/finance/payments" },
-      { icon: Banknote, label: "Transaksi", href: "/finance/transactions" },
+      { icon: CreditCard, label: "Verifikasi Bayar", href: "/finance/payments" },
+      { icon: TrendingUp, label: "Pemasukan", href: "/finance/income" },
+      { icon: TrendingDown, label: "Pengeluaran", href: "/finance/expense" },
+      { icon: Banknote, label: "Arus Kas / Saldo", href: "/finance/cashflow" },
+    ]
+  },
+  {
+    group: "Laporan",
+    icon: FileText,
+    items: [
+      { icon: FileText, label: "Laporan Invoice", href: "/finance/invoices" },
+      { icon: BookOpen, label: "Riwayat Transaksi", href: "/finance/transactions" },
+    ]
+  },
+  {
+    group: "Pengaturan",
+    icon: Settings,
+    items: [
+      { icon: Building2, label: "Daftar Bank", href: "/finance/settings/banks" },
     ]
   },
 ];
@@ -239,8 +289,10 @@ export function Sidebar({ className }: { className?: string }) {
 
   const menuItems = role === 'admin'
     ? adminMenuItems(pendingApprovals)
-    : role === 'operator'
-      ? operatorMenuItems
+    : role === 'content_manager'
+      ? contentManagerMenuItems
+      : role === 'operator'
+        ? operatorMenuItems
       : role === 'field_officer'
         ? fieldOfficerMenuItems
         : role === 'analyst'
@@ -328,7 +380,7 @@ export function NavContent({ isCollapsed, menuItems, pathname, companyName, logo
             <div className="space-y-1">
               {group.items.map((item: any) => (
                 <Link
-                  key={item.href}
+                  key={`${item.href}-${item.label}`}
                   href={item.href}
                   onClick={onItemClick}
                   className={cn(

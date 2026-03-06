@@ -4,15 +4,26 @@ import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from "@/components/ui/table";
+  DollarSign,
+  TrendingUp,
+  TrendingDown,
+  Wallet,
+  ArrowUpRight,
+  ArrowDownRight,
+  History,
+  CreditCard,
+  FileText,
+  PlusCircle,
+  AlertCircle,
+  FlaskConical,
+  User,
+  Package,
+  Wrench,
+  Building
+} from "lucide-react";
+import { toast } from "sonner";
+import Link from "next/link";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +32,8 @@ import {
   DialogDescription,
   DialogFooter
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -28,160 +41,108 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import {
-  DollarSign,
-  TrendingUp,
-  TrendingDown,
-  CheckCircle,
-  Clock,
-  XCircle,
-  CreditCard,
-  Wallet,
-  Banknote,
-  FileText
-} from "lucide-react";
-import Link from "next/link";
-import { getAllPayments, processPayment, cancelPayment, getPendingPaymentsCount } from "@/lib/actions/payment";
-import { verifyPayment } from "@/lib/actions/invoice";
+import { createFinancialRecord, getFinancialSummary, getMonthlyTrend, getFinancialRecords, getBankAccounts } from "@/lib/actions/finance";
+import { getInvoiceStats } from "@/lib/actions/invoice";
 import { ChemicalLoader, PageSkeleton, LoadingOverlay } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
-const statusColors: Record<string, string> = {
-  pending: "bg-amber-100 text-amber-700 border-amber-200",
-  paid: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  cancelled: "bg-red-100 text-red-700 border-red-200"
-};
+const incomeCategories = [
+  { value: 'lab_service', label: 'Layanan Lab', icon: FlaskConical },
+  { value: 'other', label: 'Lain-lain', icon: Wallet },
+];
 
-const statusLabels: Record<string, string> = {
-  pending: "Belum Bayar",
-  paid: "Lunas",
-  cancelled: "Dibatalkan"
-};
+const expenseCategories = [
+  { value: 'salary', label: 'Gaji Karyawan', icon: User },
+  { value: 'office_supply', label: 'ATK & Kantor', icon: Package },
+  { value: 'maintenance', label: 'Perawatan Alat', icon: Wrench },
+  { value: 'operational', label: 'Operasional Lapangan', icon: Building },
+  { value: 'other', label: 'Lain-lain', icon: Wallet },
+];
 
 export default function FinanceDashboardPage() {
-  const [stats, setStats] = useState({
-    pending: 0,
-    paid: 0,
-    cancelled: 0,
-    total: 0,
-    totalRevenue: 0,
-    pendingAmount: 0
-  });
-  const [data, setData] = useState<any>({ items: [], total: 0, pages: 1 });
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(10);
+  const [summary, setSummary] = useState<any>({ totalIncome: 0, totalExpense: 0, balance: 0 });
+  const [invoiceStats, setInvoiceStats] = useState<any>({});
+  const [trend, setTrend] = useState<any[]>([]);
+  const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState<string>("all");
-  
-  // Payment modal
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-  const [selectedPayment, setSelectedPayment] = useState<any>(null);
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "transfer">("cash");
-  const [transferReference, setTransferReference] = useState("");
   const [processing, setProcessing] = useState(false);
 
-  useEffect(() => {
-    loadData();
-    loadStats();
-  }, [page, filterStatus]);
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalType, setModalType] = useState<'income' | 'expense'>('income');
+  const [formData, setFormData] = useState({
+    amount: '',
+    description: '',
+    category: 'other',
+    bank_account_id: '',
+    date: new Date().toISOString().split('T')[0]
+  });
 
-  async function loadData() {
+  useEffect(() => {
+    loadAllData();
+  }, []);
+
+  async function loadAllData() {
     setLoading(true);
     try {
-      const result = await getAllPayments(page, limit, filterStatus === "all" ? undefined : filterStatus);
-      setData(result);
+      const [sum, stats, history, monthly, banks] = await Promise.all([
+        getFinancialSummary(),
+        getInvoiceStats(),
+        getFinancialRecords(1, 5),
+        getMonthlyTrend(6),
+        getBankAccounts()
+      ]);
+
+      setSummary(sum);
+      setInvoiceStats(stats);
+      setRecentTransactions(history.items || []);
+      setTrend(monthly);
+      setBankAccounts(banks);
     } catch (error) {
-      console.error('Load payments error:', error);
+      console.error("Load dashboard data error:", error);
     } finally {
       setLoading(false);
     }
   }
 
-  async function loadStats() {
-    try {
-      const allData = await getAllPayments(1, 1000);
-      const items = allData.items || [];
-      
-      const pending = items.filter((i: any) => i.payment_status === 'pending');
-      const paid = items.filter((i: any) => i.payment_status === 'paid');
-      const cancelled = items.filter((i: any) => i.payment_status === 'cancelled');
-      
-      setStats({
-        pending: pending.length,
-        paid: paid.length,
-        cancelled: cancelled.length,
-        total: items.length,
-        totalRevenue: paid.reduce((sum: number, i: any) => sum + parseFloat(i.amount || 0), 0),
-        pendingAmount: pending.reduce((sum: number, i: any) => sum + parseFloat(i.amount || 0), 0)
-      });
-    } catch (error) {
-      console.error('Load stats error:', error);
-    }
-  }
-
-  const handleProcessPayment = (payment: any) => {
-    setSelectedPayment(payment);
-    setPaymentMethod(payment.payment_method || "cash");
-    setTransferReference(payment.transfer_reference || "");
-    setIsPaymentModalOpen(true);
+  const handleOpenModal = (type: 'income' | 'expense') => {
+    setModalType(type);
+    setFormData({
+      amount: '',
+      description: '',
+      category: 'other',
+      bank_account_id: '',
+      date: new Date().toISOString().split('T')[0]
+    });
+    setIsModalOpen(true);
   };
 
-  const handleVerify = async (paymentId: string, approved: boolean) => {
-    setProcessing(true);
-    try {
-      const result = await verifyPayment(paymentId, approved);
-      if (result.error) throw new Error(result.error);
-      toast.success(approved ? 'Pembayaran berhasil dikonfirmasi' : 'Pembayaran ditolak');
-      setIsPaymentModalOpen(false);
-      loadData();
-      loadStats();
-    } catch (error: any) {
-      toast.error(error.message || 'Gagal memproses verifikasi');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const handleCancelPayment = async (payment: any) => {
-    if (!confirm(`Batalkan tagihan ${payment.invoice_number}?`)) return;
-
-    try {
-      const result = await cancelPayment(payment.id);
-      if (result.error) throw new Error(result.error);
-      toast.success('Tagihan berhasil dibatalkan');
-      loadData();
-      loadStats();
-    } catch (error) {
-      toast.error('Gagal membatalkan tagihan');
-    }
-  };
-
-  const confirmProcessPayment = async () => {
-    if (!selectedPayment) return;
-
-    if (paymentMethod === "transfer" && !transferReference.trim()) {
-      toast.error("Mohon isi nomor referensi transfer");
+  const handleTransactionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.amount || !formData.description || !formData.bank_account_id) {
+      toast.error("Mohon lengkapi data transaksi dan pilih Bank");
       return;
     }
 
     setProcessing(true);
     try {
-      const result = await processPayment(
-        selectedPayment.id,
-        paymentMethod,
-        paymentMethod === "transfer" ? transferReference : undefined
-      );
+      const result = await createFinancialRecord({
+        type: modalType,
+        category: formData.category,
+        amount: parseFloat(formData.amount),
+        description: formData.description,
+        bank_account_id: formData.bank_account_id,
+        date: new Date(formData.date)
+      });
 
       if (result.error) throw new Error(result.error);
 
-      toast.success("✅ Pembayaran berhasil diproses!");
-      setIsPaymentModalOpen(false);
-      loadData();
-      loadStats();
-    } catch (error) {
-      toast.error("Gagal memproses pembayaran");
+      toast.success(`✅ ${modalType === 'income' ? 'Pemasukan' : 'Pengeluaran'} berhasil dicatat`);
+      setIsModalOpen(false);
+      loadAllData();
+    } catch (error: any) {
+      toast.error(error.message || "Gagal mencatat transaksi");
     } finally {
       setProcessing(false);
     }
@@ -195,471 +156,366 @@ export default function FinanceDashboardPage() {
     }).format(amount);
   };
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('id-ID', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+  if (loading) return (
+    <div className="min-h-[80vh] flex flex-col items-center justify-center p-8 space-y-6">
+      <ChemicalLoader />
+      <div className="flex flex-col items-center gap-2">
+        <p className="text-[10px] font-black text-emerald-900/40 uppercase tracking-[0.4em] animate-pulse">Memuat Arus Kas</p>
+        <div className="h-1 w-32 bg-emerald-100 rounded-full overflow-hidden">
+          <div className="h-full bg-emerald-500 animate-[loading_2s_ease-in-out_infinite]" style={{ width: '40%' }} />
+        </div>
+      </div>
+    </div>
+  );
+
+  const categories = modalType === 'income' ? incomeCategories : expenseCategories;
 
   return (
-    <div className="p-4 md:p-8 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-emerald-900 font-[family-name:var(--font-montserrat)] uppercase flex items-center gap-3">
-          <DollarSign className="h-6 w-6 text-emerald-600" />
-          Dashboard Keuangan
-        </h1>
-        <p className="text-slate-500 text-sm mt-1">
-          Kelola pembayaran dan monitor keuangan laboratorium
-        </p>
+    <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
+      {/* Header Dashboard */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-emerald-950 font-[family-name:var(--font-montserrat)] uppercase tracking-tight flex items-center gap-3">
+            <div className="h-8 w-1.5 bg-emerald-600 rounded-full" />
+            Financial Hub
+          </h1>
+          <p className="text-slate-500 text-xs font-medium mt-1 ml-4">
+            Overview Arus Kas & Analisis Keuangan Laboratorium
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button 
+            onClick={() => handleOpenModal('income')}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-5 rounded-xl shadow-md shadow-emerald-200 text-xs"
+          >
+            <PlusCircle className="mr-2 h-4 w-4" /> Pemasukan
+          </Button>
+          <Button 
+            onClick={() => handleOpenModal('expense')}
+            variant="outline" 
+            className="border-red-200 text-red-600 hover:bg-red-50 font-bold h-10 px-5 rounded-xl text-xs"
+          >
+            <PlusCircle className="mr-2 h-4 w-4" /> Pengeluaran
+          </Button>
+        </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
-        <Card className="border-amber-200 shadow-sm">
-          <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-sm font-medium text-slate-600 flex items-center gap-2">
-              <Clock className="h-4 w-4 text-amber-600" />
-              Belum Bayar
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-2">
-              <p className="text-2xl font-bold text-amber-600">{stats.pending}</p>
-              <p className="text-xs text-amber-700">
-                Total: {formatCurrency(stats.pendingAmount)}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-emerald-200 shadow-sm">
-          <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-sm font-medium text-slate-600 flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-emerald-600" />
-              Lunas
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-2">
-              <p className="text-2xl font-bold text-emerald-600">{stats.paid}</p>
-              <p className="text-xs text-emerald-700">
-                Total: {formatCurrency(stats.totalRevenue)}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-blue-200 shadow-sm">
-          <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-sm font-medium text-slate-600 flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-blue-600" />
-              Total Tagihan
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-2">
-              <p className="text-2xl font-bold text-blue-600">{stats.total}</p>
-              <p className="text-xs text-blue-700">
-                Semua tagihan
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-purple-200 shadow-sm">
-          <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-sm font-medium text-slate-600 flex items-center gap-2">
-              <Wallet className="h-4 w-4 text-purple-600" />
-              Pendapatan
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-2">
-              <p className="text-2xl font-bold text-purple-600">
-                {formatCurrency(stats.totalRevenue)}
-              </p>
-              <p className="text-xs text-purple-700">
-                Total pendapatan bulan ini
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="grid gap-4 md:grid-cols-3 mb-6">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 bg-emerald-100 rounded-full flex items-center justify-center">
-                <FileText className="h-6 w-6 text-emerald-600" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-slate-700">Tagihan Pending</p>
-                <p className="text-xs text-slate-500">{stats.pending} tagihan menunggu pembayaran</p>
-              </div>
-              <Button
-                size="sm"
-                onClick={() => setFilterStatus('pending')}
-                variant="outline"
-                className="text-emerald-600 border-emerald-200 hover:bg-emerald-50"
-              >
-                Lihat
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
-                <Banknote className="h-6 w-6 text-blue-600" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-slate-700">Proses Pembayaran</p>
-                <p className="text-xs text-slate-500">Terima pembayaran customer</p>
-              </div>
-              <Link href="/finance/payments">
-                <Button size="sm" variant="outline" className="text-blue-600 border-blue-200 hover:bg-blue-50">
-                  Buka
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 bg-purple-100 rounded-full flex items-center justify-center">
-                <DollarSign className="h-6 w-6 text-purple-600" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-slate-700">Laporan Keuangan</p>
-                <p className="text-xs text-slate-500">Lihat semua transaksi</p>
-              </div>
-              <Link href="/finance/transactions">
-                <Button size="sm" variant="outline" className="text-purple-600 border-purple-200 hover:bg-purple-50">
-                  Buka
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recent Payments Table */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Tagihan Terbaru</CardTitle>
-            <Select value={filterStatus} onValueChange={(v) => { setFilterStatus(v); setPage(1); }}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Status</SelectItem>
-                <SelectItem value="pending">Belum Bayar</SelectItem>
-                <SelectItem value="paid">Lunas</SelectItem>
-                <SelectItem value="cancelled">Dibatalkan</SelectItem>
-              </SelectContent>
-            </Select>
+      {/* Main Stats: The "Buku Besar" Card */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="lg:col-span-2 bg-gradient-to-br from-emerald-900 via-emerald-800 to-teal-900 border-none shadow-xl rounded-[24px] overflow-hidden relative group">
+          <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
+            <Wallet className="h-32 w-32 text-white rotate-12" />
           </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-          <PageSkeleton />
-        ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-slate-50/50">
-                    <TableHead className="font-bold text-emerald-900">Invoice</TableHead>
-                    <TableHead className="font-bold text-emerald-900">Customer</TableHead>
-                    <TableHead className="font-bold text-emerald-900">Job Order</TableHead>
-                    <TableHead className="font-bold text-emerald-900 text-right">Jumlah</TableHead>
-                    <TableHead className="font-bold text-emerald-900">Metode</TableHead>
-                    <TableHead className="font-bold text-emerald-900">Status</TableHead>
-                    <TableHead className="font-bold text-emerald-900">Tanggal</TableHead>
-                    <TableHead className="text-center font-bold text-emerald-900">Aksi</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.items?.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="text-center py-20">
-                        <div className="flex flex-col items-center gap-4">
-                          <div className="h-20 w-20 rounded-full bg-slate-50 flex items-center justify-center">
-                            <DollarSign className="h-10 w-10 text-slate-300" />
-                          </div>
-                          <div className="text-center">
-                            <p className="text-lg font-semibold text-slate-700">Belum ada tagihan</p>
-                            <p className="text-sm text-slate-500 mt-1">Tagihan akan muncul setelah sampling selesai</p>
-                          </div>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    data.items?.map((item: any) => (
-                      <TableRow key={item.id} className="hover:bg-slate-50">
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-2">
-                            <CreditCard className="h-4 w-4 text-slate-400" />
-                            <span className="font-mono text-sm">{item.invoice_number}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="font-medium text-sm">{item.job_order.quotation.profile.full_name}</span>
-                            {item.job_order.quotation.profile.company_name && (
-                              <span className="text-xs text-slate-500">{item.job_order.quotation.profile.company_name}</span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Link
-                            href={`/finance/jobs/${item.job_order.id}`}
-                            className="text-emerald-600 hover:underline text-sm font-mono"
-                          >
-                            {item.job_order.tracking_code}
-                          </Link>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <span className="font-semibold text-emerald-700">
-                            {formatCurrency(parseFloat(item.amount))}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          {item.payment_method ? (
-                            <Badge variant="outline" className="text-xs">
-                              {item.payment_method === 'cash' ? '💵 Tunai' : '🏦 Transfer'}
-                            </Badge>
-                          ) : (
-                            <span className="text-slate-400 text-sm">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={cn("text-[10px]", statusColors[item.payment_status])}>
-                            {statusLabels[item.payment_status]}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm text-slate-600">
-                          {formatDate(item.created_at)}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            {item.payment_status === 'pending' && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="default"
-                                  onClick={() => handleProcessPayment(item)}
-                                  className="bg-emerald-600 hover:bg-emerald-700 text-xs h-8"
-                                >
-                                  <CheckCircle className="h-3 w-3 mr-1" />
-                                  Proses
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleCancelPayment(item)}
-                                  className="text-red-600 hover:bg-red-50 text-xs h-8"
-                                >
-                                  <XCircle className="h-3 w-3" />
-                                </Button>
-                              </>
-                            )}
-                            {item.payment_status === 'paid' && (
-                              <Badge className="bg-emerald-100 text-emerald-700 text-xs">
-                                <CheckCircle className="h-3 w-3 mr-1" />
-                                Lunas
-                              </Badge>
-                            )}
-                            {item.payment_status === 'cancelled' && (
-                              <Badge className="bg-red-100 text-red-700 text-xs">
-                                <XCircle className="h-3 w-3 mr-1" />
-                                Batal
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-
-          {/* Pagination */}
-          {data.pages > 1 && (
-            <div className="flex items-center justify-between mt-6 pt-6 border-t">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-              >
-                Sebelumnya
-              </Button>
-              <span className="text-sm text-slate-600">
-                Halaman {page} dari {data.pages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.min(data.pages, p + 1))}
-                disabled={page === data.pages}
-              >
-                Berikutnya
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Payment Processing Modal */}
-      <Dialog open={isPaymentModalOpen} onOpenChange={setIsPaymentModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <div className="flex flex-col gap-4">
-            {/* Icon */}
-            <div className="mx-auto h-16 w-16 rounded-full bg-emerald-100 flex items-center justify-center">
-              <DollarSign className="h-8 w-8 text-emerald-600" />
-            </div>
-
-            {/* Header */}
-            <DialogHeader>
-              <DialogTitle className="text-center text-lg font-bold text-emerald-900">
-                Proses Pembayaran
-              </DialogTitle>
-              <DialogDescription className="text-center text-sm">
-                Invoice: {selectedPayment?.invoice_number}
-              </DialogDescription>
-            </DialogHeader>
-
-            {/* Content */}
-            <div className="space-y-4">
-              {/* Customer Info */}
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm text-slate-600">Customer:</span>
-                  <span className="text-sm font-medium">{selectedPayment?.job_order.quotation.profile.full_name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-slate-600">Jumlah:</span>
-                  <span className="text-sm font-bold text-emerald-700">
-                    {formatCurrency(parseFloat(selectedPayment?.amount || 0))}
-                  </span>
-                </div>
+          <CardContent className="p-8 relative z-10 text-white">
+            <div className="flex justify-between items-start mb-8">
+              <div className="space-y-1">
+                <p className="text-emerald-200/80 text-[10px] font-bold uppercase tracking-widest">Total Arus Kas / Saldo</p>
+                <h2 className="text-4xl font-bold font-mono tracking-tighter">
+                  {formatCurrency(summary.balance)}
+                </h2>
               </div>
+              <Badge className="bg-white/10 text-white border-white/20 px-3 py-1 rounded-full backdrop-blur-md text-[9px] font-bold">
+                Updated Today
+              </Badge>
+            </div>
 
-              {/* Payment Proof (If exists) */}
-              {selectedPayment?.payment_proof_url && (
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Bukti Transfer Pelanggan</Label>
-                  <div className="relative aspect-video rounded-2xl overflow-hidden border-2 border-slate-200 group bg-slate-100">
-                    <img 
-                      src={selectedPayment.payment_proof_url} 
-                      alt="Bukti Transfer" 
-                      className="w-full h-full object-contain"
-                    />
-                    <a 
-                      href={selectedPayment.payment_proof_url} 
-                      target="_blank" 
-                      className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-black tracking-widest uppercase"
-                    >
-                      Perbesar Bukti
-                    </a>
+            <div className="grid grid-cols-2 gap-6 pt-6 border-t border-white/10">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="h-7 w-7 rounded-lg bg-emerald-400/20 flex items-center justify-center">
+                    <ArrowUpRight className="h-4 w-4 text-emerald-400" />
                   </div>
-                  <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
-                    <p className="text-[10px] text-blue-700 font-black uppercase">Referensi: {selectedPayment.transfer_reference || '-'}</p>
-                  </div>
+                  <span className="text-emerald-200/80 text-[10px] font-bold uppercase tracking-widest">Total Pemasukan</span>
                 </div>
-              )}
-
-              {/* Payment Method (Only if no proof yet) */}
-              {!selectedPayment?.payment_proof_url && (
-                <>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Metode Pembayaran</Label>
-                    <Select value={paymentMethod} onValueChange={(v: any) => setPaymentMethod(v)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Pilih metode" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="cash">💵 Tunai / Cash</SelectItem>
-                        <SelectItem value="transfer">🏦 Transfer Bank</SelectItem>
-                      </SelectContent>
-                    </Select>
+                <p className="text-xl font-bold">{formatCurrency(summary.totalIncome)}</p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="h-7 w-7 rounded-lg bg-rose-400/20 flex items-center justify-center">
+                    <ArrowDownRight className="h-4 w-4 text-rose-400" />
                   </div>
+                  <span className="text-emerald-200/80 text-[10px] font-bold uppercase tracking-widest">Total Pengeluaran</span>
+                </div>
+                <p className="text-xl font-bold">{formatCurrency(summary.totalExpense)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-                  {paymentMethod === "transfer" && (
-                    <div className="space-y-2">
-                      <Label htmlFor="reference" className="text-sm font-medium">
-                        Nomor Referensi Transfer
-                      </Label>
-                      <Input
-                        id="reference"
-                        value={transferReference}
-                        onChange={(e) => setTransferReference(e.target.value)}
-                        placeholder="Contoh: TRF123456789"
-                      />
+        {/* Quick Stats Grid */}
+        <div className="grid grid-cols-1 gap-4">
+          <Card className="border-amber-200 bg-amber-50/50 rounded-[20px] shadow-sm">
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className="h-12 w-12 rounded-xl bg-amber-100 flex items-center justify-center shadow-inner">
+                <AlertCircle className="h-6 w-6 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-[9px] font-bold text-amber-700 uppercase tracking-widest mb-1">Piutang Tertahan</p>
+                <p className="text-xl font-bold text-amber-900">{formatCurrency(invoiceStats.pendingAmount || 0)}</p>
+                <p className="text-[10px] text-amber-600/70 font-medium">{invoiceStats.overdue || 0} invoice jatuh tempo</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-blue-200 bg-blue-50/50 rounded-[20px] shadow-sm">
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className="h-12 w-12 rounded-xl bg-blue-100 flex items-center justify-center shadow-inner">
+                <FileText className="h-6 w-6 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-[9px] font-bold text-blue-700 uppercase tracking-widest mb-1">Invoice Bulan Ini</p>
+                <p className="text-xl font-bold text-blue-900">{invoiceStats.total || 0}</p>
+                <p className="text-[10px] text-blue-600/70 font-medium">Monitoring Penagihan Lab</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Visual Analysis Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Simple Bar Chart for Income vs Expense */}
+        <Card className="lg:col-span-2 border-slate-200 rounded-[24px] shadow-sm overflow-hidden">
+          <CardHeader className="p-6 border-b border-slate-100">
+            <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-3">
+              <TrendingUp className="h-4 w-4 text-emerald-600" />
+              Tren Keuangan (6 Bulan Terakhir)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            {trend.length === 0 ? (
+              <div className="h-48 flex flex-col items-center justify-center text-slate-400 text-xs italic">
+                Data tren belum tersedia
+              </div>
+            ) : (
+              <div className="flex items-end justify-between gap-4 h-48 mt-2">
+                {trend.map((data: any, idx: number) => {
+                  const maxAmount = Math.max(...trend.map(t => Math.max(t.income, t.expense)));
+                  const incomeHeight = (data.income / maxAmount) * 100;
+                  const expenseHeight = (data.expense / maxAmount) * 100;
+                  
+                  return (
+                    <div key={idx} className="flex-1 flex flex-col items-center gap-2 h-full">
+                      <div className="flex-1 w-full flex items-end justify-center gap-1">
+                        <div 
+                          className="w-3 bg-emerald-500 rounded-t-md transition-all duration-500 hover:bg-emerald-600 cursor-pointer" 
+                          style={{ height: `${incomeHeight}%` }}
+                          title={`Income: ${formatCurrency(data.income)}`}
+                        />
+                        <div 
+                          className="w-3 bg-rose-400 rounded-t-md transition-all duration-500 hover:bg-rose-500 cursor-pointer" 
+                          style={{ height: `${expenseHeight}%` }}
+                          title={`Expense: ${formatCurrency(data.expense)}`}
+                        />
+                      </div>
+                      <span className="text-[9px] font-bold uppercase text-slate-500 tracking-tighter">
+                        {data.month}
+                      </span>
                     </div>
-                  )}
-                </>
+                  );
+                })}
+              </div>
+            )}
+            <div className="flex justify-center gap-4 mt-8 pt-4 border-t border-slate-50">
+              <div className="flex items-center gap-2">
+                <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Pemasukan</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="h-2.5 w-2.5 rounded-full bg-rose-400" />
+                <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Pengeluaran</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Recent Activity */}
+        <Card className="border-slate-200 rounded-[24px] shadow-sm overflow-hidden">
+          <CardHeader className="p-6 border-b border-slate-100">
+            <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-3">
+              <History className="h-4 w-4 text-slate-600" />
+              Riwayat Terbaru
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="divide-y divide-slate-50">
+              {recentTransactions.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 text-xs italic">Belum ada transaksi</div>
+              ) : (
+                recentTransactions.map((tr: any) => (
+                  <div key={tr.id} className="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between group">
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "h-10 w-10 rounded-xl flex items-center justify-center shadow-sm transition-transform group-hover:scale-110",
+                        tr.type === 'income' ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600"
+                      )}>
+                        {tr.type === 'income' ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-900 line-clamp-1">{tr.description}</p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                          {tr.category.replace('_', ' ')} • {new Date(tr.transaction_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className={cn(
+                        "text-xs font-bold",
+                        tr.type === 'income' ? "text-emerald-600" : "text-rose-600"
+                      )}>
+                        {tr.type === 'income' ? '+' : '-'} {formatCurrency(Number(tr.amount))}
+                      </p>
+                    </div>
+                  </div>
+                ))
               )}
             </div>
+            {recentTransactions.length > 0 && (
+              <div className="p-4 bg-slate-50/50 text-center">
+                <Link href="/finance/transactions">
+                  <Button variant="link" className="text-[9px] font-bold uppercase text-emerald-700 tracking-widest p-0 h-auto">
+                    Lihat Semua Transaksi
+                  </Button>
+                </Link>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
-            {/* Actions */}
-            <DialogFooter className="gap-2 pt-4">
-              {selectedPayment?.payment_proof_url ? (
-                <>
-                  <Button
-                    variant="outline"
-                    onClick={() => handleVerify(selectedPayment.id, false)}
-                    disabled={processing}
-                    className="flex-1 border-red-200 text-red-600 hover:bg-red-50"
-                  >
-                    Tolak Bukti
-                  </Button>
-                  <Button
-                    onClick={() => handleVerify(selectedPayment.id, true)}
-                    disabled={processing}
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-                  >
-                    {processing ? "Memproses..." : "Setujui & Lunas"}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsPaymentModalOpen(false)}
-                    disabled={processing}
-                    className="flex-1"
-                  >
-                    Batal
-                  </Button>
-                  <Button
-                    onClick={confirmProcessPayment}
-                    disabled={processing}
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-                  >
-                    {processing ? "Memproses..." : "Konfirmasi Bayar"}
-                  </Button>
-                </>
-              )}
-            </DialogFooter>
+      <div className="flex items-center justify-center gap-2 text-slate-400 py-2">
+        <CreditCard className="h-3.5 w-3.5" />
+        <span className="text-[9px] font-bold uppercase tracking-[0.2em]">WahfaLab Finance Security Standard</span>
+      </div>
+
+      {/* Quick Transaction Modal */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="sm:max-w-md rounded-[32px] border-none shadow-2xl p-0 overflow-hidden">
+          <div className={cn(
+            "p-8 text-white flex justify-between items-center",
+            modalType === 'income' ? "bg-emerald-600" : "bg-rose-600"
+          )}>
+            <div>
+              <DialogTitle className="text-xl font-bold uppercase tracking-tight">
+                Catat {modalType === 'income' ? 'Pemasukan' : 'Pengeluaran'}
+              </DialogTitle>
+              <DialogDescription className="text-white/70 text-xs font-medium mt-1">
+                Data akan langsung memperbarui arus kas laboratorium
+              </DialogDescription>
+            </div>
+            <div className="h-12 w-12 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
+              {modalType === 'income' ? <TrendingUp className="h-6 w-6" /> : <TrendingDown className="h-6 w-6" />}
+            </div>
           </div>
+
+          <form onSubmit={handleTransactionSubmit} className="p-8 space-y-6 bg-white">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pilih Bank</Label>
+                <Select 
+                  value={formData.bank_account_id} 
+                  onValueChange={(v) => setFormData({...formData, bank_account_id: v})}
+                >
+                  <SelectTrigger className="h-12 rounded-xl border-slate-100 bg-slate-50 focus:ring-emerald-500">
+                    <SelectValue placeholder="Pilih Bank" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {bankAccounts.map(bank => (
+                      <SelectItem key={bank.id} value={bank.id}>
+                        {bank.bank_name} - {bank.account_number}
+                      </SelectItem>
+                    ))}
+                    {bankAccounts.length === 0 && (
+                      <div className="p-2 text-xs text-slate-400">Belum ada bank terdaftar</div>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Kategori</Label>
+                <Select 
+                  value={formData.category} 
+                  onValueChange={(v) => setFormData({...formData, category: v})}
+                >
+                  <SelectTrigger className="h-12 rounded-xl border-slate-100 bg-slate-50 focus:ring-emerald-500">
+                    <SelectValue placeholder="Pilih Kategori" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(modalType === 'income' ? incomeCategories : expenseCategories).map(cat => (
+                      <SelectItem key={cat.value} value={cat.value}>
+                        <div className="flex items-center gap-2">
+                          <cat.icon className="h-4 w-4 text-slate-500" />
+                          <span>{cat.label}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Jumlah (IDR)</Label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">Rp</span>
+                  <Input 
+                    type="number"
+                    value={formData.amount}
+                    onChange={(e) => setFormData({...formData, amount: e.target.value})}
+                    placeholder="0"
+                    className="pl-12 h-12 rounded-xl border-slate-100 bg-slate-50 text-lg font-bold focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Keterangan</Label>
+                <Input 
+                  value={formData.description}
+                  onChange={(e) => setFormData({...formData, description: e.target.value})}
+                  placeholder="Contoh: Pembayaran invoice lab"
+                  className="h-12 rounded-xl border-slate-100 bg-slate-50 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tanggal</Label>
+                <Input 
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => setFormData({...formData, date: e.target.value})}
+                  className="h-12 rounded-xl border-slate-100 bg-slate-50 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="pt-4">
+              <Button 
+                type="submit"
+                className={cn(
+                  "w-full text-white font-bold h-14 rounded-2xl shadow-lg uppercase tracking-widest text-xs",
+                  modalType === 'income' ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100" : "bg-rose-600 hover:bg-rose-700 shadow-rose-100"
+                )}
+              >
+                Simpan Transaksi
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
-      <LoadingOverlay isOpen={processing} title="Memproses..." description="Sistem sedang memverifikasi data pembayaran" />
+
+      <LoadingOverlay 
+        isOpen={processing} 
+        variant="fullscreen"
+        title="Menyimpan Transaksi" 
+        description="Sedang memperbarui buku besar keuangan WahfaLab secara real-time" 
+      />
+
+      {/* Footer / Info */}
+      <div className="flex items-center justify-center gap-2 text-slate-400 py-4">
+        <CreditCard className="h-4 w-4" />
+        <span className="text-[10px] font-black uppercase tracking-[0.2em]">WahfaLab Finance Security Standard</span>
+      </div>
     </div>
   );
 }

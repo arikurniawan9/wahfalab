@@ -24,6 +24,10 @@ interface TravelOrderData {
       full_name?: string | null;
       email?: string | null;
     };
+    assistants?: {
+      full_name?: string | null;
+      email?: string | null;
+    }[] | null;
     job_order: {
       tracking_code: string;
       quotation: {

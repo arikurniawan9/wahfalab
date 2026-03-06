@@ -366,7 +366,7 @@ export async function submitPaymentProof(invoiceId: string, proofUrl: string, re
 /**
  * Verify Payment (Finance Action)
  */
-export async function verifyPayment(paymentId: string, isApproved: boolean, notes?: string) {
+export async function verifyPayment(paymentId: string, isApproved: boolean, bankAccountId?: string, notes?: string) {
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -399,7 +399,8 @@ export async function verifyPayment(paymentId: string, isApproved: boolean, note
         data: { 
           payment_status: 'paid',
           paid_at: new Date(),
-          handled_by: user.id
+          handled_by: user.id,
+          bank_account_id: bankAccountId
         }
       })
 
@@ -409,9 +410,28 @@ export async function verifyPayment(paymentId: string, isApproved: boolean, note
         data: { status: 'paid', paid_at: new Date() }
       })
 
-      // 3. Update Job Order Status if needed (e.g. to paid or next step)
-      // Current system might have different status flow, but usually 'paid' is final or semi-final
-      
+      // 3. Create Financial Record (Income)
+      await prisma.financialRecord.create({
+        data: {
+          type: 'income',
+          category: 'lab_service',
+          amount: payment.amount,
+          description: `Pemasukan Lab: Invoice ${payment.invoice_number}`,
+          reference_id: payment.invoice_id,
+          recorded_by: user.id,
+          bank_account_id: bankAccountId,
+          transaction_date: new Date()
+        }
+      })
+
+      // 4. Update Bank Balance if bank selected
+      if (bankAccountId) {
+        await prisma.bankAccount.update({
+          where: { id: bankAccountId },
+          data: { balance: { increment: payment.amount } }
+        })
+      }
+
       // 4. Notify Customer
       await prisma.notification.create({
         data: {

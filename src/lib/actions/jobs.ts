@@ -124,6 +124,12 @@ export async function getJobOrders(
                 full_name: true
               }
             },
+            assistants: {
+              select: {
+                id: true,
+                full_name: true
+              }
+            },
             travel_order: {
               select: {
                 id: true,
@@ -193,7 +199,12 @@ export async function getJobOrders(
     prisma.jobOrder.count({ where })
   ])
 
-  return serializeData({ items, total, pages: Math.ceil(total / limit) })
+  // Deeply serialize decimals and dates to avoid Client Component errors
+  return JSON.parse(JSON.stringify(serializeData({ 
+    items, 
+    total, 
+    pages: Math.ceil(total / limit) 
+  })));
 }
 
 /**

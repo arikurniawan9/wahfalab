@@ -162,6 +162,7 @@ export const updateJobOrderSchema = jobOrderSchema.partial();
 export const samplingAssignmentSchema = z.object({
   job_order_id: z.string().min(1, "Job order wajib dipilih"),
   field_officer_id: z.string().min(1, "Field officer wajib dipilih"),
+  assistant_ids: z.array(z.string()).optional(),
   location: z.string().min(1, "Lokasi wajib diisi"),
   scheduled_date: z.string().min(1, "Tanggal wajib diisi"),
   notes: z.string().optional(),

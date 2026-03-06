@@ -31,6 +31,10 @@ interface TravelOrderData {
       full_name?: string | null;
       email?: string | null;
     };
+    assistants?: {
+      full_name?: string | null;
+      email?: string | null;
+    }[] | null;
     job_order: {
       tracking_code: string;
       quotation: {
@@ -302,19 +306,23 @@ export const TravelOrderPDF: React.FC<TravelOrderPDFProps> = ({
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>I. DATA PETUGAS</Text>
           <View style={styles.row}>
-            <Text style={styles.label}>Nama</Text>
+            <Text style={styles.label}>Petugas Utama</Text>
             <Text style={styles.separator}>:</Text>
             <Text style={styles.value}>{data.assignment.field_officer.full_name || '-'}</Text>
           </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Email</Text>
-            <Text style={styles.separator}>:</Text>
-            <Text style={styles.value}>{data.assignment.field_officer.email || '-'}</Text>
-          </View>
+          {data.assignment.assistants && data.assignment.assistants.length > 0 && (
+            <View style={styles.row}>
+              <Text style={styles.label}>Asisten Petugas</Text>
+              <Text style={styles.separator}>:</Text>
+              <Text style={styles.value}>
+                {data.assignment.assistants.map(a => a.full_name).join(', ')}
+              </Text>
+            </View>
+          )}
           <View style={styles.row}>
             <Text style={styles.label}>Jabatan</Text>
             <Text style={styles.separator}>:</Text>
-            <Text style={styles.value}>Petugas Lapangan</Text>
+            <Text style={styles.value}>Petugas Lapangan & Sampling</Text>
           </View>
         </View>
 
@@ -421,7 +429,7 @@ export const TravelOrderPDF: React.FC<TravelOrderPDFProps> = ({
         <View style={styles.signatureSection}>
           <View style={styles.signatureBox}>
             <Text style={styles.signatureTitle}>
-              Yang Ditugaskan,
+              Petugas Utama,
             </Text>
             <Text style={styles.signatureName}>
               {data.assignment.field_officer.full_name || '(..........................)'}
@@ -439,6 +447,22 @@ export const TravelOrderPDF: React.FC<TravelOrderPDFProps> = ({
             </Text>
           </View>
         </View>
+
+        {/* Assistant Signatures (if any) */}
+        {data.assignment.assistants && data.assignment.assistants.length > 0 && (
+          <View style={[styles.signatureSection, { marginTop: 10 }]}>
+            {data.assignment.assistants.map((assistant, idx) => (
+              <View key={idx} style={styles.signatureBox}>
+                <Text style={styles.signatureTitle}>
+                  Asisten Petugas,
+                </Text>
+                <Text style={styles.signatureName}>
+                  {assistant.full_name || '(..........................)'}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* Footer */}
         <Text style={styles.footer}>

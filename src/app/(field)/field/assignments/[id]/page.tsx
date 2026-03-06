@@ -26,7 +26,8 @@ import {
   Building,
   Receipt,
   Trash2,
-  ExternalLink
+  ExternalLink,
+  Car
 } from "lucide-react";
 import Link from "next/link";
 import { getAssignmentById, updateSamplingStatus, saveSamplingPhotosWithNames } from "@/lib/actions/sampling";
@@ -114,6 +115,10 @@ export default function AssignmentDetailPage() {
                 full_name: fieldOfficer.full_name,
                 email: fieldOfficer.email
               },
+              assistants: travelOrder.assignment?.assistants ? travelOrder.assignment.assistants.map((ast: any) => ({
+                full_name: ast.full_name,
+                email: ast.email
+              })) : [],
               job_order: {
                 tracking_code: jobOrder.tracking_code,
                 quotation: {
@@ -151,6 +156,10 @@ export default function AssignmentDetailPage() {
                 full_name: fieldOfficer.full_name,
                 email: fieldOfficer.email
               },
+              assistants: travelOrder.assignment?.assistants ? travelOrder.assignment.assistants.map((ast: any) => ({
+                full_name: ast.full_name,
+                email: ast.email
+              })) : [],
               job_order: {
                 tracking_code: jobOrder.tracking_code,
                 quotation: {
@@ -452,101 +461,75 @@ export default function AssignmentDetailPage() {
   };
 
   return (
-    <div className="p-4 md:p-8 max-w-7xl mx-auto pb-24 md:pb-8">
-      {/* Header */}
-      <div className="mb-6">
-        <Link 
-          href="/field" 
-          className="inline-flex items-center gap-2 text-slate-500 hover:text-emerald-600 transition-colors mb-4 text-sm"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Kembali ke Dashboard</span>
-        </Link>
-        
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <h1 className="text-2xl font-bold text-emerald-900 font-[family-name:var(--font-montserrat)] uppercase">
-                Detail Sampling
-              </h1>
-              <Badge className={cn(
-                "text-[10px] h-6 px-3 font-bold uppercase tracking-wide", 
-                statusColors[assignment.status] || statusColors.pending
-              )}>
-                {statusLabels[assignment.status] || assignment.status}
-              </Badge>
-            </div>
-            <div className="flex items-center gap-2 text-slate-500 text-sm">
-              <Package className="h-4 w-4" />
-              <span className="font-mono">{assignment.job_order.tracking_code}</span>
+    <div className="bg-slate-50 min-h-screen pb-32">
+      {/* Sticky Glassmorphism Header */}
+      <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 py-4 md:px-8 shadow-sm">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Link 
+              href="/field" 
+              className="h-10 w-10 bg-slate-100 hover:bg-emerald-50 text-slate-500 hover:text-emerald-600 rounded-full flex items-center justify-center transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl font-black text-emerald-900 uppercase tracking-tight">
+                  Detail Penugasan
+                </h1>
+                <Badge className={cn(
+                  "text-[10px] h-6 px-3 font-bold uppercase tracking-widest rounded-full", 
+                  statusColors[assignment.status] || statusColors.pending
+                )}>
+                  {statusLabels[assignment.status] || assignment.status}
+                </Badge>
+              </div>
+              <p className="text-xs font-bold text-slate-500 flex items-center gap-1 mt-1">
+                <Package className="h-3 w-3" />
+                {assignment.job_order.tracking_code}
+              </p>
             </div>
           </div>
           
-          {/* Quick Info */}
-          <div className="flex flex-wrap gap-3">
-            <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
-              <Calendar className="h-4 w-4 text-emerald-600" />
-              <div>
-                <p className="text-xs text-slate-500">Tanggal Rencana</p>
-                <p className="text-sm font-semibold text-slate-800">
-                  {new Date(assignment.scheduled_date).toLocaleDateString('id-ID', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric'
-                  })}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
-              <MapPin className="h-4 w-4 text-emerald-600" />
-              <div>
-                <p className="text-xs text-slate-500">Lokasi</p>
-                <p className="text-sm font-semibold text-slate-800 truncate max-w-[150px]">
-                  {assignment.location}
-                </p>
-              </div>
+          {/* Quick Info Badges */}
+          <div className="flex flex-wrap gap-2">
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-full border border-slate-200 shadow-sm">
+              <Calendar className="h-3.5 w-3.5 text-emerald-600" />
+              <span className="text-[11px] font-bold text-slate-700">
+                {new Date(assignment.scheduled_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </span>
             </div>
           </div>
         </div>
       </div>
 
+      <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
       {/* Info Cards Grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-6">
+      <div className="grid gap-4 md:gap-6 md:grid-cols-3">
         {/* Location Card */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-700">
-              <MapPin className="h-4 w-4 text-emerald-600" />
+        <Card className="rounded-2xl border-none shadow-md overflow-hidden">
+          <div className="bg-emerald-600 h-2 w-full"></div>
+          <CardHeader className="pb-2 bg-white">
+            <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2 text-slate-400">
+              <MapPin className="h-3.5 w-3.5 text-emerald-500" />
               Lokasi Sampling
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-slate-800 font-medium leading-relaxed">{assignment.location}</p>
+          <CardContent className="bg-white">
+            <p className="text-slate-800 font-bold text-sm leading-relaxed">{assignment.location}</p>
             
-            <div className="pt-2 border-t border-slate-100">
-              <div className="flex items-center gap-2 text-sm">
-                <Calendar className="h-4 w-4 text-slate-400" />
-                <span className="text-slate-600">Rencana:</span>
-                <span className="font-medium">
-                  {new Date(assignment.scheduled_date).toLocaleDateString('id-ID', {
-                    weekday: 'short',
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric'
-                  })}
+            <div className="mt-4 pt-3 border-t border-slate-100 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400 font-semibold">Rencana:</span>
+                <span className="font-bold text-slate-700">
+                  {new Date(assignment.scheduled_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </span>
               </div>
               {assignment.actual_date && (
-                <div className="flex items-center gap-2 text-sm mt-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  <span className="text-slate-600">Aktual:</span>
-                  <span className="font-medium text-emerald-600">
-                    {new Date(assignment.actual_date).toLocaleDateString('id-ID', {
-                      weekday: 'short',
-                      day: 'numeric',
-                      month: 'long',
-                      year: 'numeric'
-                    })}
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400 font-semibold flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-emerald-500"/> Aktual:</span>
+                  <span className="font-black text-emerald-600">
+                    {new Date(assignment.actual_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </span>
                 </div>
               )}
@@ -555,75 +538,75 @@ export default function AssignmentDetailPage() {
         </Card>
 
         {/* Job Order Card */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-700">
-              <FileText className="h-4 w-4 text-emerald-600" />
-              Job Order
+        <Card className="rounded-2xl border-none shadow-md overflow-hidden">
+          <div className="bg-blue-600 h-2 w-full"></div>
+          <CardHeader className="pb-2 bg-white">
+            <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2 text-slate-400">
+              <FileText className="h-3.5 w-3.5 text-blue-500" />
+              Informasi Order
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div>
-              <p className="text-xs text-slate-500 mb-1">Tracking Code</p>
-              <p className="font-mono text-sm font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded inline-block">
-                {assignment.job_order.tracking_code}
+          <CardContent className="bg-white space-y-3">
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+              <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Customer / Klien</p>
+              <p className="text-sm font-black text-slate-800">
+                {assignment.job_order.quotation.profile?.company_name || assignment.job_order.quotation.profile?.full_name || 'N/A'}
               </p>
+              {assignment.job_order.quotation.profile?.company_name && (
+                <p className="text-xs font-medium text-slate-500 mt-0.5">{assignment.job_order.quotation.profile?.full_name}</p>
+              )}
             </div>
             
-            <div>
-              <p className="text-xs text-slate-500 mb-1">Layanan</p>
-              <p className="text-sm font-medium text-slate-800">
-                {assignment.job_order.quotation.items?.[0]?.service?.name || 
-                 assignment.job_order.quotation.items?.[0]?.equipment?.name || 'N/A'}
-              </p>
-            </div>
-            
-            <div>
-              <p className="text-xs text-slate-500 mb-1">Customer</p>
-              <div className="flex items-center gap-2">
-                <Building className="h-4 w-4 text-slate-400" />
-                <p className="text-sm font-medium text-slate-800">
-                  {assignment.job_order.quotation.profile?.full_name || 
-                   assignment.job_order.quotation.profile?.company_name || 'N/A'}
+            <div className="flex items-start gap-2">
+              <div className="h-6 w-6 rounded bg-blue-50 flex items-center justify-center shrink-0 mt-0.5"><Package className="h-3 w-3 text-blue-600"/></div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Layanan Utama</p>
+                <p className="text-xs font-bold text-slate-700 line-clamp-2">
+                  {assignment.job_order.quotation.items?.[0]?.service?.name || 'Multi Layanan'}
                 </p>
               </div>
             </div>
-            
-            {assignment.job_order.quotation.quotation_number && (
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Penawaran</p>
-                <div className="flex items-center gap-1">
-                  <Receipt className="h-3 w-3 text-slate-400" />
-                  <p className="text-xs font-medium text-slate-600">
-                    {assignment.job_order.quotation.quotation_number}
-                  </p>
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
 
         {/* Field Officer Card */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-700">
-              <User className="h-4 w-4 text-emerald-600" />
+        <Card className="rounded-2xl border-none shadow-md overflow-hidden">
+          <div className="bg-amber-500 h-2 w-full"></div>
+          <CardHeader className="pb-2 bg-white">
+            <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2 text-slate-400">
+              <User className="h-3.5 w-3.5 text-amber-500" />
               Petugas Lapangan
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm">
-                {assignment.field_officer?.full_name?.charAt(0).toUpperCase() || 'F'}
+          <CardContent className="bg-white h-full pb-6 pt-2">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full flex items-center justify-center text-white font-black text-lg shadow-inner border-2 border-amber-50">
+                  {assignment.field_officer?.full_name?.charAt(0).toUpperCase() || 'F'}
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Petugas Utama</p>
+                  <p className="font-black text-slate-800 text-sm">
+                    {assignment.field_officer?.full_name || 'N/A'}
+                  </p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-slate-800 text-sm truncate">
-                  {assignment.field_officer?.full_name || 'N/A'}
-                </p>
-                <p className="text-xs text-slate-500 truncate">
-                  {assignment.field_officer?.email || 'N/A'}
-                </p>
-              </div>
+
+              {assignment.assistants && assignment.assistants.length > 0 && (
+                <div className="flex flex-col gap-3 pt-3 border-t border-slate-50">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Asisten Petugas</p>
+                  {assignment.assistants.map((ast: any) => (
+                    <div key={ast.id} className="flex items-center gap-3">
+                      <div className="h-10 w-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 font-bold text-base border border-slate-200 shadow-sm">
+                        {ast.full_name?.charAt(0).toUpperCase() || 'A'}
+                      </div>
+                      <p className="font-bold text-slate-700 text-xs">
+                        {ast.full_name || 'N/A'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -631,75 +614,60 @@ export default function AssignmentDetailPage() {
 
       {/* Travel Order Card - Full Width */}
       {travelOrder && (
-        <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50/50 to-white mb-6">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-emerald-900">
+        <Card className="rounded-2xl border-none shadow-md overflow-hidden bg-gradient-to-br from-emerald-50/50 to-white">
+          <div className="bg-emerald-600/20 h-1 w-full"></div>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2 text-emerald-800">
               <FileText className="h-4 w-4 text-emerald-600" />
               Surat Tugas Perjalanan Dinas
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid md:grid-cols-4 gap-4 mb-4">
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Nomor Surat</p>
-                <p className="font-mono text-sm font-bold text-emerald-700">{travelOrder.document_number}</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 bg-white p-4 rounded-xl border border-emerald-100/50 shadow-sm">
+              <div className="col-span-2 md:col-span-1">
+                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Nomor Surat</p>
+                <p className="font-mono text-sm font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded w-fit">{travelOrder.document_number}</p>
               </div>
               <div>
-                <p className="text-xs text-slate-500 mb-1">Berangkat</p>
-                <p className="text-sm font-medium text-slate-800">
-                  {new Date(travelOrder.departure_date).toLocaleDateString('id-ID', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric'
-                  })}
+                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Berangkat</p>
+                <p className="text-sm font-black text-slate-800">
+                  {new Date(travelOrder.departure_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-slate-500 mb-1">Kembali</p>
-                <p className="text-sm font-medium text-slate-800">
-                  {new Date(travelOrder.return_date).toLocaleDateString('id-ID', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric'
-                  })}
+                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Kembali</p>
+                <p className="text-sm font-black text-slate-800">
+                  {new Date(travelOrder.return_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </p>
               </div>
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Tujuan</p>
-                <p className="text-sm font-medium text-slate-800 truncate">{travelOrder.destination}</p>
+              <div className="col-span-2 md:col-span-4 pt-2 border-t border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Tujuan</p>
+                <p className="text-sm font-bold text-slate-700 leading-snug">{travelOrder.destination}</p>
               </div>
             </div>
             
             {(travelOrder.transportation_type || travelOrder.daily_allowance) && (
-              <div className="flex flex-wrap gap-4 pt-3 border-t border-emerald-200">
+              <div className="flex flex-col sm:flex-row gap-4 pt-2">
                 {travelOrder.transportation_type && (
-                  <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 bg-emerald-100 rounded-full flex items-center justify-center">
-                      <svg className="h-4 w-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                      </svg>
+                  <div className="flex items-center gap-3 bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex-1">
+                    <div className="h-10 w-10 bg-emerald-50 rounded-full flex items-center justify-center">
+                      <Car className="h-5 w-5 text-emerald-600" />
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500">Transportasi</p>
-                      <p className="text-sm font-medium text-slate-800">{travelOrder.transportation_type}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">Transportasi</p>
+                      <p className="text-sm font-black text-slate-800">{travelOrder.transportation_type}</p>
                     </div>
                   </div>
                 )}
                 {travelOrder.daily_allowance && (
-                  <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 bg-emerald-100 rounded-full flex items-center justify-center">
-                      <svg className="h-4 w-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
+                  <div className="flex items-center gap-3 bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex-1">
+                    <div className="h-10 w-10 bg-emerald-50 rounded-full flex items-center justify-center">
+                      <Receipt className="h-5 w-5 text-emerald-600" />
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500">Uang Harian</p>
-                      <p className="text-sm font-bold text-emerald-600">
-                        {new Intl.NumberFormat('id-ID', {
-                          style: 'currency',
-                          currency: 'IDR',
-                          minimumFractionDigits: 0
-                        }).format(travelOrder.daily_allowance)}
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">Uang Harian</p>
+                      <p className="text-sm font-black text-emerald-700">
+                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(travelOrder.daily_allowance)}
                       </p>
                     </div>
                   </div>
@@ -707,22 +675,21 @@ export default function AssignmentDetailPage() {
               </div>
             )}
             
-            <div className="flex gap-2 mt-4 pt-4 border-t border-emerald-200">
-              <Link href={`/field/travel-orders/${travelOrder.id}/preview`} target="_blank" className="flex-1 md:flex-none">
-                <Button variant="outline" size="sm" className="w-full">
-                  <FileText className="h-3 w-3 mr-2" />
-                  Preview
+            <div className="flex gap-3 mt-5 pt-5 border-t border-emerald-200/50">
+              <Link href={`/field/travel-orders/${travelOrder.id}/preview`} target="_blank" className="flex-1">
+                <Button variant="outline" className="w-full rounded-xl h-11 border-emerald-200 text-emerald-700 hover:bg-emerald-50 font-bold text-xs uppercase tracking-wider">
+                  <FileText className="h-4 w-4 mr-2" />
+                  Lihat Surat
                 </Button>
               </Link>
               <Button
                 variant="default"
-                size="sm"
-                className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700"
+                className="flex-1 rounded-xl h-11 bg-emerald-600 hover:bg-emerald-700 font-bold text-xs uppercase tracking-wider shadow-lg shadow-emerald-900/20"
                 onClick={handleDownloadPdf}
                 disabled={!travelOrder}
               >
-                <Download className="h-3 w-3 mr-2" />
-                Download PDF
+                <Download className="h-4 w-4 mr-2" />
+                Unduh PDF
               </Button>
             </div>
           </CardContent>
@@ -730,19 +697,19 @@ export default function AssignmentDetailPage() {
       )}
 
       {/* Photo Documentation */}
-      <Card className="mb-6 border-emerald-200/50 shadow-md">
-        <CardHeader className="pb-3 bg-gradient-to-r from-emerald-50 to-white border-b border-emerald-100">
+      <Card className="rounded-2xl border-none shadow-md overflow-hidden bg-white">
+        <CardHeader className="pb-4 bg-slate-50 border-b border-slate-100">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 bg-emerald-100 rounded-full flex items-center justify-center">
-                <ImageIcon className="h-4 w-4 text-emerald-600" />
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 bg-white rounded-xl shadow-sm flex items-center justify-center">
+                <ImageIcon className="h-5 w-5 text-slate-500" />
               </div>
               <div>
-                <CardTitle className="text-sm font-semibold text-emerald-900">
+                <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-700">
                   Dokumentasi Foto
                 </CardTitle>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {assignment.photos?.length || 0} foto tersimpan • {photos.length} foto baru
+                <p className="text-[10px] font-bold text-emerald-600 mt-0.5 uppercase">
+                  {assignment.photos?.length || 0} TERSIMPAN • {photos.length} BARU
                 </p>
               </div>
             </div>
@@ -750,15 +717,15 @@ export default function AssignmentDetailPage() {
               <Button
                 size="sm"
                 onClick={handleSavePhotoNames}
-                className="h-9 text-xs bg-emerald-600 hover:bg-emerald-700 shadow-sm"
+                className="h-10 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-900/20"
               >
-                <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                <CheckCircle2 className="h-4 w-4 mr-2" />
                 Simpan Nama
               </Button>
             )}
           </div>
         </CardHeader>
-        <CardContent className="pt-4">
+        <CardContent className="pt-6">
           {/* Existing Photos */}
           {(assignment.photos?.length || 0) > 0 && (
             <div className="mb-6">
@@ -955,140 +922,105 @@ export default function AssignmentDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Notes & Actions */}
-      <Card className="mb-6">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold text-slate-700">
+      {/* Notes Section */}
+      <Card className="rounded-2xl border-none shadow-md overflow-hidden bg-white mt-6 mb-24">
+        <CardHeader className="pb-3 bg-slate-50 border-b border-slate-100">
+          <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2 text-slate-700">
+            <FileText className="h-4 w-4 text-slate-400" />
             Catatan Sampling
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 pt-4">
           <div>
-            <Label className="text-xs text-slate-500 mb-2 block">Catatan Assignment</Label>
             {assignment.notes ? (
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                <p className="text-sm text-slate-700 whitespace-pre-wrap">{assignment.notes}</p>
+              <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
+                <p className="text-sm font-medium text-slate-800 whitespace-pre-wrap leading-relaxed">{assignment.notes}</p>
               </div>
             ) : (
-              <p className="text-sm text-slate-400 italic">Tidak ada catatan</p>
+              <p className="text-sm text-slate-400 italic bg-slate-50 p-4 rounded-xl text-center">Tidak ada catatan tugas.</p>
             )}
           </div>
 
           {assignment.status !== 'completed' && assignment.status !== 'cancelled' && (
             <div>
-              <Label htmlFor="notes" className="text-xs text-slate-500 mb-2 block">
-                Tambah / Update Catatan
+              <Label htmlFor="notes" className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">
+                Tambah / Update Catatan (Opsional)
               </Label>
               <Textarea
                 id="notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Catatan pengambilan sampel, kondisi lokasi, dll..."
-                className="min-h-[100px] resize-none"
+                placeholder="Tuliskan kondisi lokasi, kendala, atau info penting lainnya di sini..."
+                className="min-h-[120px] resize-none rounded-xl border-slate-200 focus:border-emerald-400 focus:ring-emerald-400 bg-slate-50/50"
               />
             </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t">
-            {assignment.status === 'pending' && (
-              <Button
-                onClick={() => handleStatusUpdate('in_progress')}
-                disabled={isPending}
-                className="bg-blue-600 hover:bg-blue-700 flex-1 sm:flex-none"
-              >
-                <Play className="h-4 w-4 mr-2" />
-                Mulai Sampling
-              </Button>
-            )}
-            {assignment.status === 'in_progress' && (
-              <>
-                <Button
-                  onClick={() => handleStatusUpdate('completed')}
-                  disabled={isPending}
-                  className="bg-emerald-600 hover:bg-emerald-700 flex-1 sm:flex-none"
-                >
-                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                  Selesai Sampling
-                </Button>
-                <Button
-                  onClick={() => handleStatusUpdate('pending')}
-                  disabled={isPending}
-                  variant="outline"
-                  className="flex-1 sm:flex-none"
-                >
-                  <Pause className="h-4 w-4 mr-2" />
-                  Tunda
-                </Button>
-              </>
-            )}
-            <Button 
-              variant="outline" 
-              onClick={() => router.push('/field')}
-              className="flex-1 sm:flex-none"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Kembali
-            </Button>
-          </div>
-          
           {assignment.status === 'completed' && (
             <div className="space-y-4">
-              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
-                <div className="flex items-center gap-2 text-emerald-700">
-                  <CheckCircle2 className="h-5 w-5" />
-                  <p className="text-sm font-medium">Sampling telah selesai dilaksanakan</p>
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3">
+                <div className="h-10 w-10 bg-emerald-100 rounded-full flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                 </div>
-              </div>
-
-              {/* Invoice Link Card */}
-              <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center shrink-0">
-                    <FileText className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="text-sm font-semibold text-blue-900">Invoice Pembayaran</h4>
-                    <p className="text-xs text-blue-700 mt-1">
-                      Invoice telah dibuat otomatis dan siap untuk diunduh serta dikirim ke customer
-                    </p>
-                    <div className="flex flex-wrap gap-2 mt-3">
-                      <Link href={`/finance/invoices/${assignment.job_order?.invoice?.id || generatedInvoice?.id}`}>
-                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-xs h-9">
-                          <FileText className="h-3 w-3 mr-2" />
-                          Lihat Invoice
-                        </Button>
-                      </Link>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="border-blue-600 text-blue-600 hover:bg-blue-50 text-xs h-9"
-                        onClick={() => {
-                          toast.info("Invoice dapat diunduh dari halaman detail invoice", {
-                            duration: 3000
-                          });
-                        }}
-                      >
-                        <Download className="h-3 w-3 mr-2" />
-                        Unduh PDF
-                      </Button>
-                    </div>
-                  </div>
+                <div>
+                  <p className="text-sm font-black text-emerald-900">Sampling Telah Selesai</p>
+                  <p className="text-xs font-medium text-emerald-700">Terima kasih atas kerja keras Anda.</p>
                 </div>
               </div>
             </div>
           )}
           
           {assignment.status === 'cancelled' && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-              <div className="flex items-center gap-2 text-red-700">
-                <Pause className="h-5 w-5" />
-                <p className="text-sm font-medium">Sampling telah dibatalkan</p>
+            <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3">
+              <div className="h-10 w-10 bg-red-100 rounded-full flex items-center justify-center shrink-0">
+                <Pause className="h-5 w-5 text-red-600" />
               </div>
+              <p className="text-sm font-black text-red-900">Penugasan Dibatalkan</p>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Sticky Bottom Action Bar */}
+      {assignment.status !== 'completed' && assignment.status !== 'cancelled' && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-slate-200 p-4 md:px-8 z-40 pb-safe shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row gap-3">
+            {assignment.status === 'pending' && (
+              <Button
+                onClick={() => handleStatusUpdate('in_progress')}
+                disabled={isPending}
+                className="bg-blue-600 hover:bg-blue-700 w-full h-14 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-blue-900/20"
+              >
+                <Play className="h-5 w-5 mr-2" />
+                Mulai Perjalanan & Sampling
+              </Button>
+            )}
+            
+            {assignment.status === 'in_progress' && (
+              <>
+                <Button
+                  onClick={() => handleStatusUpdate('pending')}
+                  disabled={isPending}
+                  variant="outline"
+                  className="sm:flex-1 h-14 rounded-2xl font-black uppercase tracking-widest text-xs border-slate-200 text-slate-500 hover:bg-slate-50"
+                >
+                  <Pause className="h-4 w-4 mr-2" />
+                  Tunda
+                </Button>
+                <Button
+                  onClick={() => handleStatusUpdate('completed')}
+                  disabled={isPending}
+                  className="sm:flex-[3] bg-emerald-600 hover:bg-emerald-700 h-14 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-emerald-900/20"
+                >
+                  <CheckCircle2 className="h-5 w-5 mr-2" />
+                  Selesai & Laporkan Tugas
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
     </div>
   );
 }

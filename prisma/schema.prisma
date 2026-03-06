@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
@@ -16,6 +17,88 @@ enum UserRole {
   finance
   analyst      // Laboratorium analis - melakukan analisis sampel
   reporting    // Staff reporting - menerbitkan laporan hasil uji
+  content_manager // Pengelola konten website (Halaman Depan)
+}
+
+model LandingPageConfig {
+  id              String   @id @default("singleton") // Hanya ada satu row
+  
+  // Hero Section
+  hero_title       String   @default("Solusi Terpercaya untuk Analisis Kimia & Lingkungan")
+  hero_description String   @default("WahfaLab menyediakan layanan laboratorium profesional dengan akurasi tinggi dan hasil yang cepat. Mendukung kebutuhan industri Anda dengan standar internasional.")
+  hero_image_url   String?
+  hero_cta_text    String   @default("Mulai Penawaran")
+  hero_cta_link    String   @default("/login")
+
+  // Banner Slider (Stored as JSON array of objects)
+  // [{image_url, title, subtitle}]
+  banners          Json?    @default("[]")
+
+  // Navigation Menus
+  navbar_menus     Json?    @default("[]")
+
+  // Keunggulan Section (Stored as JSON array of objects)
+  // [{icon, title, description}]
+  features         Json?    @default("[{\"icon\": \"ShieldCheck\", \"title\": \"Terakreditasi\", \"description\": \"Metode pengujian kami sesuai dengan standar regulasi nasional dan internasional (ISO/IEC 17025).\"}, {\"icon\": \"Clock\", \"title\": \"Hasil Cepat\", \"description\": \"Kami memahami urgensi bisnis Anda. Proses analisis dilakukan secara efisien tanpa mengurangi akurasi.\"}, {\"icon\": \"Beaker\", \"title\": \"Layanan Lengkap\", \"description\": \"Mulai dari pengujian air, udara, tanah, hingga kalibrasi alat industri di satu tempat.\"}]")
+
+  // Portfolio Section (Stored as JSON array of objects)
+  // [{image, title, client, year}]
+  portfolio        Json?    @default("[]")
+  portfolio_title  String   @default("Mitra Industri Kami")
+  portfolio_description String @default("Telah dipercaya oleh berbagai perusahaan terkemuka di Indonesia untuk memastikan standar kualitas dan kepatuhan lingkungan.")
+
+  // Gallery Section (Stored as JSON array of objects)
+  // [{image_url, caption, category}]
+  gallery          Json?    @default("[]")
+
+  // Commitment Section
+  commitment_title String   @default("Komitmen Kami")
+  commitment_content String @default("Integritas, inovasi, dan kualitas menjadi pondasi dalam setiap layanan yang kami tawarkan. Kami berusaha untuk memberikan solusi yang paling efektif, efisien, dan sesuai dengan perkembangan terbaru dalam ilmu lingkungan juga membantu mewujudkan masa depan yang lebih hijau, bersih, dan berkelanjutan.")
+
+  // Other Sections (Legalitas, Galeri, etc could also be managed here)
+  legal_content    String?  @db.Text
+  contact_email    String?
+  contact_phone    String?
+  contact_address  String?
+
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  @@map("landing_page_configs")
+}
+
+model News {
+  id          String   @id @default(uuid())
+  title       String
+  slug        String   @unique
+  content     String   @db.Text
+  image_url   String?
+  category    String   @default("Umum")
+  tags        String[] @default([])
+  show_tags   Boolean  @default(true)
+  is_published Boolean  @default(true)
+  view_count  Int      @default(0)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@map("news")
+  @@index([slug])
+  @@index([created_at])
+}
+
+model ContactMessage {
+  id          String   @id @default(uuid())
+  name        String
+  email       String
+  phone       String?
+  subject     String
+  message     String   @db.Text
+  is_read     Boolean  @default(false)
+  created_at  DateTime @default(now())
+
+  @@map("contact_messages")
+  @@index([email])
+  @@index([created_at])
 }
 
 // Notification Types
@@ -115,7 +198,7 @@ model Profile {
   phone                String?
   created_at           DateTime            @default(now())
   quotations           Quotation[]
-  sampling_assignments SamplingAssignment[]
+  sampling_assignments SamplingAssignment[] @relation("LeadOfficer")
   approval_requests    ApprovalRequest[]
   notifications        Notification[]
 
@@ -130,11 +213,64 @@ model Profile {
 
   // Finance Relations
   payments_handled     Payment[]           @relation("FinanceHandler")
+  recorded_transactions FinancialRecord[] @relation("FinanceRecorder")
 
   @@map("profiles")
   @@index([email])
   @@index([role])
   @@index([created_at])
+}
+
+enum TransactionType {
+  income
+  expense
+}
+
+enum TransactionCategory {
+  lab_service      // Otomatis dari invoice
+  operational      // Biaya operasional lapangan
+  salary           // Penggajian
+  office_supply    // ATK & Peralatan kantor
+  maintenance      // Perawatan alat lab
+  other            // Lain-lain
+}
+
+model FinancialRecord {
+  id               String              @id @default(uuid())
+  type             TransactionType
+  category         TransactionCategory @default(other)
+  amount           Decimal             @db.Decimal(15, 2)
+  description      String
+  bank_account_id  String?             // Link to Bank Account
+  bank_account     BankAccount?        @relation(fields: [bank_account_id], references: [id])
+  reference_id     String?             // Link ke Invoice ID atau Payment ID jika ada
+  transaction_date DateTime            @default(now())
+  recorded_by      String?
+  handler          Profile?            @relation("FinanceRecorder", fields: [recorded_by], references: [id])
+  created_at       DateTime            @default(now())
+  updated_at       DateTime            @updatedAt
+
+  @@map("financial_records")
+  @@index([type])
+  @@index([category])
+  @@index([transaction_date])
+  @@index([bank_account_id])
+}
+
+model BankAccount {
+  id             String            @id @default(uuid())
+  bank_name      String            // e.g., BCA, Mandiri, BRI
+  account_number String            @unique
+  account_holder String            // Nama pemilik rekening
+  balance        Decimal           @default(0) @db.Decimal(15, 2)
+  is_active      Boolean           @default(true)
+  created_at     DateTime          @default(now())
+  updated_at     DateTime          @updatedAt
+  
+  transactions   FinancialRecord[]
+  payments       Payment[]
+
+  @@map("bank_accounts")
 }
 
 model ServiceCategory {
@@ -276,12 +412,26 @@ model SampleHandover {
   @@index([receiver_id])
 }
 
+model FieldAssistant {
+  id               String          @id @default(uuid())
+  full_name        String
+  phone            String?
+  address          String?
+  email            String?
+  created_at       DateTime        @default(now())
+  updated_at       DateTime        @updatedAt
+  assignments      SamplingAssignment[] @relation("SamplingAssistants")
+
+  @@map("field_assistants")
+}
+
 model SamplingAssignment {
   id               String          @id @default(uuid())
   job_order_id     String          @unique
   job_order        JobOrder        @relation(fields: [job_order_id], references: [id], onDelete: Cascade)
   field_officer_id String
-  field_officer    Profile         @relation(fields: [field_officer_id], references: [id])
+  field_officer    Profile         @relation("LeadOfficer", fields: [field_officer_id], references: [id])
+  assistants       FieldAssistant[] @relation("SamplingAssistants")
   status           SamplingStatus  @default(pending)
   scheduled_date   DateTime
   actual_date      DateTime?
@@ -551,6 +701,8 @@ model Payment {
   invoice_number    String        @unique
   amount            Decimal       @db.Decimal(10, 2)
   payment_method    PaymentMethod?
+  bank_account_id   String?       // Destination Bank
+  bank_account      BankAccount?  @relation(fields: [bank_account_id], references: [id])
   payment_status    PaymentStatus @default(pending)
   transfer_reference String?      // Nomor referensi transfer
   payment_proof_url  String?      // URL bukti transfer (Supabase Storage)
@@ -558,11 +710,12 @@ model Payment {
   handled_by        String?       // Finance user who processed
   handler           Profile?      @relation("FinanceHandler", fields: [handled_by], references: [id])
   created_at        DateTime      @default(now())
-  updated_at        DateTime      @default(now())
+  updated_at        DateTime      @updatedAt
 
   @@map("payments")
   @@index([job_order_id])
   @@index([invoice_number])
   @@index([payment_status])
   @@index([handled_by])
+  @@index([bank_account_id])
 }

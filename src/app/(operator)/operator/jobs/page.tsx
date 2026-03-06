@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { ChemicalLoader, LoadingOverlay, LoadingButton } from "@/components/ui";
 import { getJobOrders, updateJobStatus, uploadCertificate, getFieldOfficers, getCustomers, getJobStats } from "@/lib/actions/jobs";
+import { getFieldAssistants } from "@/lib/actions/field-assistant";
 import { createSamplingAssignment } from "@/lib/actions/sampling";
 import { createTravelOrder } from "@/lib/actions/travel-order";
 import { getUsers } from "@/lib/actions/users";
@@ -179,6 +180,7 @@ export default function OperatorJobProgressPage() {
     customerId: "",
   });
   const [fieldOfficers, setFieldOfficers] = useState<any[]>([]);
+  const [assistants, setAssistants] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -189,9 +191,10 @@ export default function OperatorJobProgressPage() {
 
   // Assign modal states
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
-  const [assignFormData, setAssignFormData] = useState({
+  const [assignFormData, setAssignFormData] = useState<any>({
     job_order_id: "",
     field_officer_id: "",
+    assistant_ids: [],
     scheduled_date: "",
     scheduled_time: "08:00",
     location: "",
@@ -283,12 +286,27 @@ export default function OperatorJobProgressPage() {
     setAssignFormData({
       job_order_id: job.id,
       field_officer_id: "",
+      assistant_ids: [],
       scheduled_date: new Date().toISOString().split('T')[0],
       scheduled_time: "08:00",
       location: job.quotation?.profile?.address || "",
       notes: ""
     });
-    await loadFieldOfficers();
+    
+    setLoading(true);
+    try {
+      const [officers, assistantList] = await Promise.all([
+        getFieldOfficers(),
+        getFieldAssistants()
+      ]);
+      setFieldOfficers(officers);
+      setAssistants(assistantList);
+    } catch (error) {
+      toast.error("Gagal memuat data petugas");
+    } finally {
+      setLoading(false);
+    }
+    
     setIsAssignDialogOpen(true);
   };
 
@@ -540,6 +558,15 @@ export default function OperatorJobProgressPage() {
                             <User className="h-3 w-3" />
                             <span className="text-[10px] font-black uppercase">{item.sampling_assignment.field_officer?.full_name}</span>
                           </div>
+                          {item.sampling_assignment.assistants && item.sampling_assignment.assistants.length > 0 && (
+                            <div className="flex flex-col gap-1 mt-1">
+                              {item.sampling_assignment.assistants.map((ast: any) => (
+                                <div key={ast.id} className="flex items-center gap-1.5 bg-slate-50 text-slate-700 px-2 py-0.5 rounded border border-slate-100">
+                                  <span className="text-[8px] font-bold uppercase">{ast.full_name}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                           {item.sampling_assignment.travel_order && (
                             <Button variant="ghost" size="icon" className="h-6 w-6 text-emerald-600" onClick={() => window.open(`/operator/travel-orders/${item.sampling_assignment.travel_order.id}/preview`, '_blank')}>
                               <Printer className="h-3 w-3" />
@@ -593,11 +620,43 @@ export default function OperatorJobProgressPage() {
           <div className="p-8 space-y-6">
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Petugas Lapangan</Label>
+                <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Petugas Lapangan Utama</Label>
                 <Select value={assignFormData.field_officer_id} onValueChange={(val) => setAssignFormData({ ...assignFormData, field_officer_id: val })}>
-                  <SelectTrigger className="h-12 rounded-2xl bg-slate-50/50 border-slate-200"><SelectValue placeholder="Pilih Petugas..." /></SelectTrigger>
+                  <SelectTrigger className="h-12 rounded-2xl bg-slate-50/50 border-slate-200"><SelectValue placeholder="Pilih Petugas Utama..." /></SelectTrigger>
                   <SelectContent className="rounded-2xl">{fieldOfficers.map((o) => <SelectItem key={o.id} value={o.id} className="cursor-pointer">{o.full_name}</SelectItem>)}</SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Asisten Petugas (Bisa Lebih Dari 1)</Label>
+                <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50/50 rounded-2xl border border-slate-200 max-h-[120px] overflow-y-auto">
+                  {assistants.map((o) => (
+                    <div key={o.id} className="flex items-center space-x-2 bg-white p-2 rounded-xl border border-slate-100">
+                      <input 
+                        type="checkbox" 
+                        id={`ast-${o.id}`}
+                        checked={assignFormData.assistant_ids.includes(o.id)}
+                        onChange={(e) => {
+                          const ids = [...assignFormData.assistant_ids];
+                          if (e.target.checked) {
+                            ids.push(o.id);
+                          } else {
+                            const index = ids.indexOf(o.id);
+                            if (index > -1) ids.splice(index, 1);
+                          }
+                          setAssignFormData({ ...assignFormData, assistant_ids: ids });
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <label htmlFor={`ast-${o.id}`} className="text-[10px] font-bold text-slate-600 cursor-pointer truncate">
+                        {o.full_name}
+                      </label>
+                    </div>
+                  ))}
+                  {assistants.length === 0 && (
+                    <p className="col-span-2 text-center py-2 text-[10px] text-slate-400 font-bold uppercase">Tidak ada data asisten</p>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

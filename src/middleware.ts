@@ -29,6 +29,7 @@ export async function middleware(request: NextRequest) {
   // Tentukan apakah route terproteksi
   const isProtectedRoute =
     path.startsWith('/admin') ||
+    path.startsWith('/content-manager') ||
     path.startsWith('/operator') ||
     path.startsWith('/field') ||
     path.startsWith('/dashboard') ||

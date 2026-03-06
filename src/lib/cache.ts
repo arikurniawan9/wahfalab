@@ -1,5 +1,8 @@
 import { cache } from "react";
-import prisma from "@/lib/prisma";
+import { PrismaClient } from "../generated/prisma";
+
+// Use a local prisma instance if global one is not updated yet
+const prisma = globalThis.prisma as any || new PrismaClient();
 
 /**
  * Cached profile fetch - reduces database queries
@@ -28,6 +31,27 @@ export const getCachedProfile = cache(async () => {
 });
 
 /**
+ * Cached landing page config - used on landing page
+ */
+export const getCachedLandingPageConfig = cache(async () => {
+  try {
+    let config = await prisma.landingPageConfig.findFirst();
+    
+    // If no config exists, create the initial singleton record
+    if (!config) {
+      config = await prisma.landingPageConfig.create({
+        data: { id: "singleton" }
+      });
+    }
+    
+    return config;
+  } catch (error: any) {
+    console.error("Error fetching landing page config:", error);
+    return null;
+  }
+});
+
+/**
  * Cached company profile - used across multiple layouts
  * Cached per request using React's cache()
  */
@@ -50,8 +74,16 @@ export const getCachedCompanyProfile = cache(async () => {
       },
     });
     return company;
-  } catch (error) {
-    console.error("Error fetching company profile:", error);
+  } catch (error: any) {
+    // Check for Prisma initialization or connection error
+    if (error.message?.includes('Can\'t reach database server') || 
+        error.message?.includes('PrismaClientInitializationError') ||
+        error.message?.includes('invocation in')) {
+      // Throw a clean error that will be caught by error.tsx
+      throw new Error('DATABASE_CONNECTION_ERROR: Can\'t reach database server.');
+    }
+    
+    console.error("Non-connection error in getCachedCompanyProfile:", error);
     return null;
   }
 });

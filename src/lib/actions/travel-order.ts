@@ -41,6 +41,7 @@ export async function createTravelOrder(data: {
         assignment: {
           include: {
             field_officer: true,
+            assistants: true,
             job_order: {
               include: {
                 quotation: {
@@ -84,6 +85,7 @@ export async function getTravelOrderById(id: string) {
         assignment: {
           include: {
             field_officer: true,
+            assistants: true,
             job_order: {
               include: {
                 quotation: {
@@ -123,6 +125,7 @@ export async function getTravelOrderByAssignmentId(assignmentId: string) {
         assignment: {
           include: {
             field_officer: true,
+            assistants: true,
             job_order: {
               include: {
                 quotation: {
@@ -189,6 +192,7 @@ export async function updateTravelOrder(id: string, data: {
         assignment: {
           include: {
             field_officer: true,
+            assistants: true,
             job_order: {
               include: {
                 quotation: {
@@ -268,18 +272,22 @@ export async function deleteTravelOrder(id: string) {
   }
 }
 
-export async function getMyTravelOrders(fieldOfficerId: string) {
+export async function getMyTravelOrders(userId: string) {
   try {
     const travelOrders = await prisma.travelOrder.findMany({
       where: {
         assignment: {
-          field_officer_id: fieldOfficerId
+          OR: [
+            { field_officer_id: userId },
+            { assistants: { some: { id: userId } } }
+          ]
         }
       },
       include: {
         assignment: {
           include: {
             field_officer: true,
+            assistants: true,
             job_order: {
               include: {
                 quotation: {

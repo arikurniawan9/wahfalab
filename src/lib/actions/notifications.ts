@@ -363,3 +363,29 @@ export async function notifyPaymentReceived(
     return { error: error.message }
   }
 }
+
+/**
+ * Notify field officer and assistants when a job is assigned to them
+ */
+export async function notifyJobAssigned(
+  userIds: string[],
+  assignmentId: string,
+  trackingCode: string,
+  location: string
+) {
+  try {
+    const notifications = userIds.map(userId => ({
+      user_id: userId,
+      type: 'job_assigned' as NotificationType,
+      title: 'Tugas Sampling Baru',
+      message: `Anda telah ditugaskan untuk melakukan sampling ${trackingCode} di ${location}`,
+      link: `/field/assignments/${assignmentId}`,
+      metadata: { assignment_id: assignmentId, tracking_code: trackingCode }
+    }))
+
+    return await createNotifications(notifications)
+  } catch (error: any) {
+    console.error('Error notifying job assignment:', error)
+    return { error: error.message }
+  }
+}

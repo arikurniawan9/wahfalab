@@ -153,7 +153,12 @@ export async function getQuotations(
     prisma.quotation.count({ where })
   ])
 
-  return serializeData({ items, total, pages: Math.ceil(total / limit) })
+  // Deeply serialize decimals and dates to avoid Client Component errors
+  return JSON.parse(JSON.stringify(serializeData({ 
+    items, 
+    total, 
+    pages: Math.ceil(total / limit) 
+  })));
 }
 
 export async function updateQuotationStatus(id: string, status: any) {

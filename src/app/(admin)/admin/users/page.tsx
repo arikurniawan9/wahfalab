@@ -40,7 +40,8 @@ import {
   FlaskConical,
   FileText,
   Users,
-  Shield
+  Shield,
+  LayoutDashboard
 } from "lucide-react";
 import { ChemicalLoader } from "@/components/ui";
 import { LoadingOverlay, LoadingButton, TableSkeleton, EmptyState } from "@/components/ui";
@@ -79,6 +80,7 @@ import { cn } from "@/lib/utils";
 const roleOptions = [
   { value: "admin", label: "Administrator", color: "bg-red-100 text-red-700 border-red-200", icon: Shield },
   { value: "operator", label: "Petugas / Operator", color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: UsersIcon },
+  { value: "content_manager", label: "Content Manager", color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: LayoutDashboard },
   { value: "client", label: "Customer / Client", color: "bg-slate-100 text-slate-700 border-slate-200", icon: User },
   { value: "field_officer", label: "Petugas Lapangan", color: "bg-blue-100 text-blue-700 border-blue-200", icon: User },
   { value: "analyst", label: "Analis Laboratorium", color: "bg-violet-100 text-violet-700 border-violet-200", icon: FlaskConical },

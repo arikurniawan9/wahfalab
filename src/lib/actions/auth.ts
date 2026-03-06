@@ -41,6 +41,8 @@ export async function login(formData: FormData) {
   // Redirect berdasarkan role
   if (profile?.role === 'admin') {
     redirect('/admin')
+  } else if (profile?.role === 'content_manager') {
+    redirect('/content-manager')
   } else if (profile?.role === 'operator') {
     redirect('/operator')
   } else if (profile?.role === 'field_officer') {
@@ -111,6 +113,26 @@ export async function logout() {
   const supabase = await createClient()
   await supabase.auth.signOut()
   redirect('/login')
+}
+
+export async function verifyPassword(password: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user || !user.email) {
+    return { error: "Sesi berakhir, silakan login kembali" }
+  }
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email: user.email,
+    password,
+  })
+
+  if (error) {
+    return { error: "Password yang Anda masukkan salah" }
+  }
+
+  return { success: true }
 }
 
 export async function getProfile() {

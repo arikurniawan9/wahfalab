@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getQuotationById, deleteQuotation, updateQuotationStatus } from "@/lib/actions/quotation";
-import { ChemicalLoader } from "@/components/ui";
+import { ChemicalLoader, LoadingOverlay, LoadingButton } from "@/components/ui";
 import Link from "next/link";
 import {
   DropdownMenu,
@@ -51,6 +51,7 @@ export default function QuotationDetailPage() {
   const [loading, setLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const loadQuotation = async () => {
     setLoading(true);
@@ -78,6 +79,7 @@ export default function QuotationDetailPage() {
   };
 
   const confirmDelete = async () => {
+    setSubmitting(true);
     try {
       await deleteQuotation(quotation.id);
       toast.success("Penawaran berhasil dihapus");
@@ -85,6 +87,7 @@ export default function QuotationDetailPage() {
     } catch (error) {
       toast.error("Gagal menghapus penawaran");
     } finally {
+      setSubmitting(false);
       setIsDeleting(false);
     }
   };
@@ -102,12 +105,15 @@ export default function QuotationDetailPage() {
   };
 
   const handleStatusUpdate = async (newStatus: string) => {
+    setSubmitting(true);
     try {
       await updateQuotationStatus(quotation.id, newStatus);
       toast.success(`Status berhasil diubah menjadi ${newStatus.toUpperCase()}`);
       setQuotation({ ...quotation, status: newStatus });
     } catch (error) {
       toast.error("Gagal mengubah status");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -388,15 +394,25 @@ export default function QuotationDetailPage() {
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2">
             <AlertDialogCancel onClick={() => setIsDeleting(false)}>Batal</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDelete}
+            <LoadingButton
+              loading={submitting}
+              onClick={(e) => {
+                e.preventDefault();
+                confirmDelete();
+              }}
               className="bg-red-600 hover:bg-red-700"
             >
               <Trash2 className="mr-2 h-4 w-4" /> Ya, Hapus
-            </AlertDialogAction>
+            </LoadingButton>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <LoadingOverlay 
+        isOpen={submitting} 
+        title="Sedang Memproses..." 
+        description="Mohon tunggu sebentar, permintaan Anda sedang diproses" 
+      />
     </div>
   );
 }

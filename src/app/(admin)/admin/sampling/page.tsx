@@ -46,6 +46,7 @@ import {
 import { ChemicalLoader, LoadingOverlay, LoadingButton } from "@/components/ui";
 import { getAllSamplingAssignments, createSamplingAssignment } from "@/lib/actions/sampling";
 import { getFieldOfficers, getCustomers, getJobOrders } from "@/lib/actions/jobs";
+import { getFieldAssistants } from "@/lib/actions/field-assistant";
 import { toast } from "sonner";
 import {
   Select,
@@ -123,6 +124,7 @@ export default function AdminSamplingMonitoringPage() {
     customerId: "",
   });
   const [fieldOfficers, setFieldOfficers] = useState<any[]>([]);
+  const [assistants, setAssistants] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [availableJobs, setAvailableJobs] = useState<any[]>([]);
   const [showFilters, setShowFilters] = useState(false);
@@ -130,9 +132,20 @@ export default function AdminSamplingMonitoringPage() {
   // Create Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
+  
+  interface SamplingFormData {
+    job_order_id: string;
+    field_officer_id: string;
+    assistant_ids: string[];
+    scheduled_date: string;
+    location: string;
+    notes: string;
+  }
+
+  const [formData, setFormData] = useState<SamplingFormData>({
     job_order_id: "",
     field_officer_id: "",
+    assistant_ids: [],
     scheduled_date: "",
     location: "",
     notes: ""
@@ -164,12 +177,14 @@ export default function AdminSamplingMonitoringPage() {
 
   const loadFilterOptions = useCallback(async () => {
     try {
-      const [officers, clientList, jobsData] = await Promise.all([
+      const [officers, clientList, jobsData, assistantList] = await Promise.all([
         getFieldOfficers(),
         getCustomers(),
-        getJobOrders(1, 100, "")
+        getJobOrders(1, 100, ""),
+        getFieldAssistants()
       ]);
       setFieldOfficers(officers || []);
+      setAssistants(assistantList || []);
       setCustomers(clientList || []);
       
       // Filter jobs yang belum ditugaskan
@@ -205,16 +220,16 @@ export default function AdminSamplingMonitoringPage() {
       toast.success("Penugasan berhasil dibuat", {
         description: `Job Order telah ditugaskan ke personel terkait`
       });
-
-      setIsCreateModalOpen(false);
-      setFormData({
-        job_order_id: "",
-        field_officer_id: "",
-        scheduled_date: "",
-        location: "",
-        notes: ""
-      });
-      loadData();
+setIsCreateModalOpen(false);
+setFormData({
+  job_order_id: "",
+  field_officer_id: "",
+  assistant_ids: [],
+  scheduled_date: "",
+  location: "",
+  notes: ""
+});
+loadData();
 
       // Redirect ke travel order setelah delay jika diperlukan
       const assignmentId = result.assignment?.id;
@@ -374,9 +389,18 @@ export default function AdminSamplingMonitoringPage() {
                       </TableCell>
                       <TableCell className="px-4">
                         <div className="flex flex-col gap-2">
-                            <div className="flex items-center gap-2">
-                                <User className="h-3.5 w-3.5 text-emerald-600" />
-                                <span className="text-xs font-black text-slate-700 uppercase tracking-tighter">{item.field_officer.full_name}</span>
+                            <div className="flex flex-col gap-0.5">
+                                <div className="flex items-center gap-2">
+                                    <User className="h-3.5 w-3.5 text-emerald-600" />
+                                    <span className="text-xs font-black text-slate-700 uppercase tracking-tighter">{item.field_officer.full_name}</span>
+                                </div>
+                                {item.assistants && item.assistants.length > 0 && (
+                                    <div className="flex flex-col gap-0.5 pl-5.5">
+                                        {item.assistants.map((ast: any) => (
+                                          <span key={ast.id} className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter line-clamp-1">Asisten: {ast.full_name}</span>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                             <div className="flex items-center gap-2">
                                 <MapPin className="h-3.5 w-3.5 text-slate-300" />
@@ -493,7 +517,7 @@ export default function AdminSamplingMonitoringPage() {
                   onValueChange={(val) => handleFormDataChange("field_officer_id", val)}
                 >
                   <SelectTrigger className="h-12 rounded-2xl border-slate-200 bg-slate-50/50">
-                    <SelectValue placeholder="Pilih Personel..." />
+                    <SelectValue placeholder="Pilih Personel Utama..." />
                   </SelectTrigger>
                   <SelectContent className="rounded-2xl">
                     {fieldOfficers.map((officer: any) => (
@@ -506,6 +530,38 @@ export default function AdminSamplingMonitoringPage() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Asisten Petugas (Bisa Lebih Dari 1)</Label>
+                <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50/50 rounded-2xl border border-slate-200 max-h-[120px] overflow-y-auto">
+                  {assistants.map((o) => (
+                    <div key={o.id} className="flex items-center space-x-2 bg-white p-2 rounded-xl border border-slate-100">
+                      <input 
+                        type="checkbox" 
+                        id={`admin-ast-${o.id}`}
+                        checked={formData.assistant_ids.includes(o.id)}
+                        onChange={(e) => {
+                          const ids = [...formData.assistant_ids];
+                          if (e.target.checked) {
+                            ids.push(o.id);
+                          } else {
+                            const index = ids.indexOf(o.id);
+                            if (index > -1) ids.splice(index, 1);
+                          }
+                          setFormData({ ...formData, assistant_ids: ids });
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <label htmlFor={`admin-ast-${o.id}`} className="text-[10px] font-bold text-slate-600 cursor-pointer truncate">
+                        {o.full_name}
+                      </label>
+                    </div>
+                  ))}
+                  {assistants.length === 0 && (
+                    <p className="col-span-2 text-center py-2 text-[10px] text-slate-400 font-bold uppercase">Tidak ada data asisten</p>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

@@ -1,11 +1,17 @@
 import React from "react";
+import { cn } from "@/lib/utils";
 
 export interface ChemicalLoaderProps {
   className?: string;
   size?: "xs" | "sm" | "md" | "lg";
+  fullScreen?: boolean;
 }
 
-export function ChemicalLoader({ className = "", size = "sm" }: ChemicalLoaderProps) {
+export function ChemicalLoader({ 
+  className = "", 
+  size = "sm",
+  fullScreen = false
+}: ChemicalLoaderProps) {
   const sizeClasses = {
     xs: "h-2 w-2",
     sm: "h-3 w-3",
@@ -20,8 +26,8 @@ export function ChemicalLoader({ className = "", size = "sm" }: ChemicalLoaderPr
     lg: "h-20",
   };
 
-  return (
-    <div className={`flex items-end space-x-5 ${containerSizeClasses[size]} ${className}`}>
+  const content = (
+    <div className={cn(`flex items-end space-x-5 ${containerSizeClasses[size]}`, className)}>
       <div className="animate-bounce [animation-delay:-0.3s]">
         <div className={`relative flex ${sizeClasses[size]}`}>
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-lime-400 opacity-75"></span>
@@ -51,4 +57,17 @@ export function ChemicalLoader({ className = "", size = "sm" }: ChemicalLoaderPr
       </div>
     </div>
   );
+
+  if (fullScreen) {
+    return (
+      <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white/80 backdrop-blur-md">
+        {content}
+        <p className="mt-8 text-xs font-black uppercase tracking-[0.3em] text-emerald-900 animate-pulse">
+          Memuat Sistem...
+        </p>
+      </div>
+    );
+  }
+
+  return content;
 }

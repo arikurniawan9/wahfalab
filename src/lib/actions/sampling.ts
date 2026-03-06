@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
 import { createClient } from '@/lib/supabase/server'
 import { generateInvoice } from '@/lib/actions/payment'
-import { notifySamplingCompleted, notifyInvoiceGenerated } from '@/lib/actions/notifications'
+import { notifySamplingCompleted, notifyInvoiceGenerated, notifyJobAssigned } from '@/lib/actions/notifications'
 
 export async function getSamplingAssignments(fieldOfficerId: string) {
   const assignments = await prisma.samplingAssignment.findMany({
@@ -43,7 +43,12 @@ export async function getMySamplingAssignments(page = 1, limit = 10, status?: st
   }
 
   const skip = (page - 1) * limit
-  const where: any = { field_officer_id: user.id }
+  const where: any = {
+    OR: [
+      { field_officer_id: user.id },
+      { assistants: { some: { id: user.id } } }
+    ]
+  }
 
   if (status && status !== 'all') {
     where.status = status
@@ -70,7 +75,9 @@ export async function getMySamplingAssignments(page = 1, limit = 10, status?: st
               }
             }
           }
-        }
+        },
+        field_officer: true,
+        assistants: true
       },
       orderBy: { scheduled_date: 'desc' }
     }),
@@ -355,8 +362,14 @@ export async function getAssignmentById(assignmentId: string) {
     return null
   }
 
-  const assignment = await prisma.samplingAssignment.findUnique({
-    where: { id: assignmentId },
+  // Cari berdasarkan ID Assignment atau Job Order ID
+  const assignment = await prisma.samplingAssignment.findFirst({
+    where: {
+      OR: [
+        { id: assignmentId },
+        { job_order_id: assignmentId }
+      ]
+    },
     include: {
       job_order: {
         include: {
@@ -382,7 +395,8 @@ export async function getAssignmentById(assignmentId: string) {
           }
         }
       },
-      field_officer: true
+      field_officer: true,
+      assistants: true
     }
   })
 
@@ -396,12 +410,12 @@ export async function getAssignmentById(assignmentId: string) {
     select: { role: true }
   })
 
-  if (profile?.role === 'admin') {
+  if (profile?.role === 'admin' || profile?.role === 'operator') {
     return serializeData(assignment)
   }
 
-  // Field officer hanya bisa akses assignment mereka sendiri
-  if (assignment.field_officer_id !== user.id) {
+  // Field officer atau assistant hanya bisa akses assignment mereka sendiri
+  if (assignment.field_officer_id !== user.id && !assignment.assistants.some((a: any) => a.id === user.id)) {
     return null
   }
 
@@ -411,6 +425,7 @@ export async function getAssignmentById(assignmentId: string) {
 export async function createSamplingAssignment(data: {
   job_order_id: string
   field_officer_id: string
+  assistant_ids?: string[]
   scheduled_date: string
   location: string
   notes?: string
@@ -420,6 +435,9 @@ export async function createSamplingAssignment(data: {
       data: {
         job_order_id: data.job_order_id,
         field_officer_id: data.field_officer_id,
+        assistants: {
+          connect: data.assistant_ids?.map(id => ({ id })) || []
+        },
         scheduled_date: new Date(data.scheduled_date),
         location: data.location,
         notes: data.notes,
@@ -427,7 +445,8 @@ export async function createSamplingAssignment(data: {
       },
       include: {
         job_order: true,
-        field_officer: true
+        field_officer: true,
+        assistants: true
       }
     })
 
@@ -439,11 +458,27 @@ export async function createSamplingAssignment(data: {
       }
     })
 
+    // Kirim notifikasi ke petugas lapangan secara aman (Hanya petugas utama karena asisten tidak punya akun user)
+    try {
+      if (assignment.job_order?.tracking_code) {
+        // Hanya kirim ke petugas utama karena relasi notification ke profile/user
+        await notifyJobAssigned(
+          [data.field_officer_id],
+          assignment.id,
+          assignment.job_order.tracking_code,
+          data.location
+        )
+      }
+    } catch (notificationError) {
+      console.error('Failed to send assignment notification:', notificationError)
+    }
+
     revalidatePath('/operator/jobs')
     revalidatePath('/field')
     revalidatePath('/admin')
 
-    return { success: true, assignment }
+    // Gunakan JSON.parse(JSON.stringify()) sebagai fallback jika serializeData tidak menangani Decimal secara mendalam
+    return { success: true, assignment: JSON.parse(JSON.stringify(serializeData(assignment))) }
   } catch (error: any) {
     console.error('Error creating sampling assignment:', error)
     return { error: error.message }
@@ -475,7 +510,8 @@ export async function getAllSamplingAssignments(page = 1, limit = 10, search = "
             }
           }
         },
-        field_officer: true
+        field_officer: true,
+        assistants: true
       },
       orderBy: { created_at: 'desc' }
     }),

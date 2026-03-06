@@ -165,6 +165,7 @@ export default function QuotationListPage() {
   const [isTransportDialogOpen, setIsTransportDialogOpen] = useState(false);
   const [isEquipmentDialogOpen, setIsEquipmentDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
@@ -454,6 +455,7 @@ export default function QuotationListPage() {
   const handleDelete = (id: string) => setDeleteId(id);
   const confirmDelete = async () => {
     if (!deleteId) return;
+    setDeleting(true);
     try {
       await deleteQuotation(deleteId);
       loadData();
@@ -461,11 +463,14 @@ export default function QuotationListPage() {
       setDeleteId(null);
     } catch (error: any) {
       toast.error("Gagal menghapus");
+    } finally {
+      setDeleting(false);
     }
   };
 
   const handleBulkDelete = () => setDeleteId("bulk");
   const confirmBulkDelete = async () => {
+    setDeleting(true);
     try {
       await deleteManyQuotations(selectedIds);
       loadData();
@@ -473,6 +478,8 @@ export default function QuotationListPage() {
       setDeleteId(null);
     } catch (error: any) {
       toast.error("Gagal menghapus");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -487,21 +494,27 @@ export default function QuotationListPage() {
   };
 
   const handleClone = async (id: string) => {
+    setSubmitting(true);
     try {
       const result = await cloneQuotation(id);
       if (result.success) { toast.success("Duplikasi berhasil"); loadData(); }
     } catch (error: any) {
       toast.error("Gagal duplikasi");
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleStatusUpdate = async (id: string, status: string) => {
+    setSubmitting(true);
     try {
       await updateQuotationStatus(id, status);
       toast.success("Status diperbarui");
       loadData();
     } catch (error: any) {
       toast.error("Gagal update status");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -1058,12 +1071,16 @@ export default function QuotationListPage() {
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2">
             <AlertDialogCancel className="rounded-xl cursor-pointer">Batal</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={deleteId === "bulk" ? confirmBulkDelete : confirmDelete}
+            <LoadingButton
+              loading={deleting}
+              onClick={(e) => {
+                e.preventDefault();
+                deleteId === "bulk" ? confirmBulkDelete() : confirmDelete();
+              }}
               className="bg-red-600 hover:bg-red-700 rounded-xl cursor-pointer"
             >
               <Trash2 className="mr-2 h-4 w-4" /> Ya, Hapus
-            </AlertDialogAction>
+            </LoadingButton>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1137,21 +1154,25 @@ export default function QuotationListPage() {
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2">
             <AlertDialogCancel className="rounded-xl cursor-pointer">Batal</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmSave}
+            <LoadingButton
+              loading={submitting}
+              onClick={(e) => {
+                e.preventDefault();
+                handleConfirmSave();
+              }}
               className="bg-emerald-600 hover:bg-emerald-700 rounded-xl cursor-pointer"
             >
               Ya, Simpan & Kirim
-            </AlertDialogAction>
+            </LoadingButton>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
       {/* Loading Overlay */}
       <LoadingOverlay 
-        isOpen={submitting} 
-        title="Menyimpan Penawaran..." 
-        description="Mohon tunggu sebentar, penawaran sedang diproses" 
+        isOpen={submitting || deleting} 
+        title={submitting ? "Menyimpan Penawaran..." : "Menghapus Data..."} 
+        description={submitting ? "Mohon tunggu sebentar, penawaran sedang diproses" : "Mohon tunggu sebentar, sedang menghapus data dari sistem"} 
       />
 
       {/* Add Customer Dialog */}

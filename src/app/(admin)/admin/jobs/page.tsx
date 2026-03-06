@@ -53,6 +53,9 @@ import {
 } from "lucide-react";
 import { ChemicalLoader, LoadingOverlay, LoadingButton } from "@/components/ui";
 import { getJobOrders, getJobStats, getFieldOfficers, getCustomers, deleteJobOrderWithPhotos } from "@/lib/actions/jobs";
+import { getFieldAssistants } from "@/lib/actions/field-assistant";
+import { createSamplingAssignment } from "@/lib/actions/sampling";
+import { createTravelOrder } from "@/lib/actions/travel-order";
 import { toast } from "sonner";
 import {
   Select,
@@ -78,6 +81,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 // Stat Card Component
@@ -121,10 +125,10 @@ function StatCard({ title, value, subValue, icon: Icon, color, onClick, active }
 function WorkflowTimeline({ status }: any) {
   const stages = [
     { id: 1, name: "Order", icon: FileText, complete: true },
-    { id: 2, name: "Sampling", icon: MapPin, complete: ["sampling", "analysis_ready", "analysis", "analysis_done", "reporting", "completed"].includes(status) },
+    { id: 2, name: "Sampling", icon: MapPin, complete: ["analysis_ready", "analysis", "analysis_done", "reporting", "completed"].includes(status) },
     { id: 3, name: "BAST", icon: ClipboardCheck, complete: ["analysis_ready", "analysis", "analysis_done", "reporting", "completed"].includes(status) },
-    { id: 4, name: "Analisis", icon: FlaskConical, complete: ["analysis", "analysis_done", "reporting", "completed"].includes(status) },
-    { id: 5, name: "Reporting", icon: FileText, complete: ["reporting", "completed"].includes(status) },
+    { id: 4, name: "Analisis", icon: FlaskConical, complete: ["analysis_done", "reporting", "completed"].includes(status) },
+    { id: 5, name: "Reporting", icon: FileText, complete: ["completed"].includes(status) },
     { id: 6, name: "Selesai", icon: CheckCircle, complete: status === "completed" },
   ];
 
@@ -198,6 +202,18 @@ export default function AdminJobProgressPage() {
   const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
+  const [assistants, setAssistants] = useState<any[]>([]);
+  const [assignFormData, setAssignFormData] = useState<any>({
+    job_order_id: "",
+    field_officer_id: "",
+    assistant_ids: [],
+    scheduled_date: "",
+    scheduled_time: "08:00",
+    location: "",
+    notes: ""
+  });
 
   // Debounced search
   const useDebounce = (value: string, delay: number) => {
@@ -263,6 +279,73 @@ export default function AdminJobProgressPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const openAssignDialog = async (job: any) => {
+    setSelectedJob(job);
+    setAssignFormData({
+      job_order_id: job.id,
+      field_officer_id: "",
+      assistant_ids: [],
+      scheduled_date: new Date().toISOString().split('T')[0],
+      scheduled_time: "08:00",
+      location: job.quotation?.profile?.address || "",
+      notes: ""
+    });
+
+    setLoading(true);
+    try {
+      const [officers, assistantList] = await Promise.all([
+        getFieldOfficers(),
+        getFieldAssistants()
+      ]);
+      setFieldOfficers(officers || []);
+      setAssistants(assistantList || []);
+    } catch (error) {
+      toast.error("Gagal memuat data petugas");
+    } finally {
+      setLoading(false);
+    }
+
+    setIsAssignDialogOpen(true);
+  };
+
+  const handleAssignSubmit = async () => {
+    if (!selectedJob) return;
+    if (!assignFormData.field_officer_id || !assignFormData.scheduled_date || !assignFormData.location) {
+      toast.error("Harap lengkapi semua data wajib");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const assignmentResult = await createSamplingAssignment({
+        ...assignFormData,
+        scheduled_date: `${assignFormData.scheduled_date}T${assignFormData.scheduled_time}:00`
+      });
+
+      if (assignmentResult.error || !assignmentResult.assignment) {
+        throw new Error(assignmentResult.error || "Failed to create assignment");
+      }
+
+      const travelOrderData = {
+        assignment_id: assignmentResult.assignment.id,
+        departure_date: `${assignFormData.scheduled_date}T${assignFormData.scheduled_time}:00`,
+        return_date: `${assignFormData.scheduled_date}T17:00:00`,
+        destination: assignFormData.location,
+        purpose: assignFormData.notes || `Sampling untuk ${selectedJob.tracking_code}`,
+      };
+
+      await createTravelOrder(travelOrderData);
+      toast.success("Penugasan & Surat Tugas Berhasil!");
+      setIsAssignDialogOpen(false);
+      loadData();
+      loadStats();
+    } catch (error: any) {
+      toast.error(error.message || "Gagal membuat penugasan");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handlePreviewJob = (job: any) => {
     setSelectedJob(job);
@@ -508,6 +591,15 @@ export default function AdminJobProgressPage() {
                       </TableCell>
                       <TableCell className="px-8 text-right">
                         <div className="flex justify-end gap-1">
+                          {item.status === 'scheduled' && !item.sampling_assignment && (
+                            <Button
+                              size="sm"
+                              onClick={() => openAssignDialog(item)}
+                              className="bg-amber-100 text-amber-700 hover:bg-amber-200 border-amber-200 font-black text-[10px] uppercase rounded-xl h-10 px-4 mr-1"
+                            >
+                              Tugaskan
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"
@@ -757,6 +849,90 @@ export default function AdminJobProgressPage() {
             </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ASSIGN FIELD OFFICER MODAL */}
+      <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
+        <DialogContent className="sm:max-w-xl p-0 border-none shadow-2xl rounded-2xl overflow-hidden">
+          <div className="bg-emerald-700 p-6 text-white flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center border border-white/20"><MapPin className="h-5 w-5" /></div>
+              <div><DialogTitle className="text-lg font-black uppercase tracking-tight">Penugasan Sampling</DialogTitle><DialogDescription className="text-emerald-200 text-[10px] font-bold uppercase tracking-widest">Tugaskan Petugas Lapangan</DialogDescription></div>
+            </div>
+          </div>
+
+          <div className="p-8 space-y-6">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Petugas Lapangan Utama</Label>
+                <Select value={assignFormData.field_officer_id} onValueChange={(val) => setAssignFormData({ ...assignFormData, field_officer_id: val })}>
+                  <SelectTrigger className="h-12 rounded-2xl bg-slate-50/50 border-slate-200"><SelectValue placeholder="Pilih Petugas Utama..." /></SelectTrigger>
+                  <SelectContent className="rounded-2xl">{fieldOfficers.map((o) => <SelectItem key={o.id} value={o.id} className="cursor-pointer">{o.full_name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Asisten Petugas (Bisa Lebih Dari 1)</Label>
+                <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50/50 rounded-2xl border border-slate-200 max-h-[120px] overflow-y-auto">
+                  {assistants.map((o) => (
+                    <div key={o.id} className="flex items-center space-x-2 bg-white p-2 rounded-xl border border-slate-100">
+                      <input
+                        type="checkbox"
+                        id={`ast-${o.id}`}
+                        checked={assignFormData.assistant_ids.includes(o.id)}
+                        onChange={(e) => {
+                          const ids = [...assignFormData.assistant_ids];
+                          if (e.target.checked) {
+                            ids.push(o.id);
+                          } else {
+                            const index = ids.indexOf(o.id);
+                            if (index > -1) ids.splice(index, 1);
+                          }
+                          setAssignFormData({ ...assignFormData, assistant_ids: ids });
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <label htmlFor={`ast-${o.id}`} className="text-[10px] font-bold text-slate-600 cursor-pointer truncate">
+                        {o.full_name}
+                      </label>
+                    </div>
+                  ))}
+                  {assistants.length === 0 && (
+                    <p className="col-span-2 text-center py-2 text-[10px] text-slate-400 font-bold uppercase">Tidak ada data asisten</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Tanggal</Label>
+                  <Input type="date" value={assignFormData.scheduled_date} onChange={(e) => setAssignFormData({ ...assignFormData, scheduled_date: e.target.value })} className="h-12 rounded-2xl bg-slate-50/50 border-slate-200" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Jam</Label>
+                  <Input type="time" value={assignFormData.scheduled_time} onChange={(e) => setAssignFormData({ ...assignFormData, scheduled_time: e.target.value })} className="h-12 rounded-2xl bg-slate-50/50 border-slate-200" />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Lokasi Sampling</Label>
+                <Textarea value={assignFormData.location} onChange={(e) => setAssignFormData({ ...assignFormData, location: e.target.value })} placeholder="Alamat lengkap lokasi..." className="rounded-2xl bg-slate-50/50 border-slate-200 min-h-[100px] resize-none" />
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-4 border-t border-slate-100">
+              <Button variant="ghost" onClick={() => setIsAssignDialogOpen(false)} className="flex-1 font-black text-[10px] uppercase h-12 rounded-2xl text-slate-400">Batal</Button>
+              <LoadingButton onClick={handleAssignSubmit} loading={submitting} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase h-12 rounded-2xl shadow-lg shadow-emerald-900/20">Konfirmasi Tugas</LoadingButton>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Loading Overlay */}
+      <LoadingOverlay 
+        isOpen={deleting || submitting} 
+        title={deleting ? "Menghapus Job Order..." : "Memproses Penugasan..."} 
+        description={deleting ? "Mohon tunggu sebentar, data sedang dihapus dari sistem" : "Sedang membuat penugasan dan surat tugas..."} 
+      />
     </div>
   );
 }
