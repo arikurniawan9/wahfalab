@@ -24,7 +24,7 @@ import {
   ChevronRight,
   FlaskConical,
   ClipboardList,
-  HandThumbUp,
+  ThumbsUp,
   Handshake,
   LayoutList
 } from "lucide-react";
