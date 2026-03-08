@@ -273,14 +273,14 @@ export function QuotationForm({
                           {(() => {
                             const service = services.find(s => s.id === watchedItems[index]?.service_id);
                             const regulationText = service?.regulation_ref?.name || service?.regulation;
-                            const hasParams = watchedItems[index]?.parameters?.length > 0;
+                            const hasParams = (watchedItems[index]?.parameters?.length ?? 0) > 0;
                             if (!regulationText && !hasParams) return null;
                             return (
                               <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-slate-50/50 rounded-xl border border-slate-100 space-y-3 animate-in fade-in slide-in-from-top-1 duration-300">
                                 {regulationText && <span className="inline-block text-[9px] sm:text-[10px] font-black text-emerald-700 uppercase tracking-tight bg-emerald-50 px-3 py-1 rounded-md border border-emerald-100/50">{regulationText}</span>}
                                 {hasParams && (
                                   <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                                    {watchedItems[index].parameters.map((param: string, pIdx: number) => (
+                                    {watchedItems[index]?.parameters?.map((param: string, pIdx: number) => (
                                       <span key={pIdx} className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded-md bg-blue-500 text-[9px] sm:text-[10px] font-bold text-white uppercase tracking-tighter group/param hover:bg-blue-600 transition-all shadow-sm">
                                         {param}
                                         <button type="button" onClick={() => handleRemoveParameter(index, pIdx)} className="text-blue-100 hover:text-white transition-colors"><X className="h-2.5 w-2.5 sm:h-3 sm:w-3" /></button>

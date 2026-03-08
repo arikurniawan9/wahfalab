@@ -15,6 +15,125 @@ import { serializeData } from "@/lib/utils/serialize";
  */
 
 /**
+ * Klaim/Terima job order oleh staff reporting
+ */
+export async function claimReportingJob(jobOrderId: string) {
+  try {
+    const { profile } = await getCurrentUser();
+
+    if (profile.role !== "reporting") {
+      throw new Error("Hanya staff reporting yang dapat mengambil tugas");
+    }
+
+    const jobOrder = await prisma.jobOrder.findUnique({
+      where: { id: jobOrderId },
+    });
+
+    if (!jobOrder) throw new Error("Job order tidak ditemukan");
+    
+    if (jobOrder.reporting_id) {
+      if (jobOrder.reporting_id === profile.id) {
+        return { success: true, message: "Job sudah Anda ambil sebelumnya" };
+      }
+      throw new Error("Job sudah diambil oleh staff reporting lain");
+    }
+
+    const updated = await prisma.jobOrder.update({
+      where: { id: jobOrderId },
+      data: {
+        reporting_id: profile.id,
+        status: "reporting", // Pastikan status berubah ke reporting saat diklaim
+      }
+    });
+
+    await logAudit({
+      action: "job_claimed_by_reporting",
+      entity_type: "job_order",
+      entity_id: jobOrderId,
+      user_id: profile.id!,
+      user_email: profile.email!,
+      user_role: profile.role,
+      new_data: { reporting_id: profile.id },
+    });
+
+    revalidatePath("/reporting");
+    revalidatePath(`/reporting/jobs/${jobOrderId}`);
+
+    return { success: true, jobOrder: updated };
+  } catch (error: any) {
+    console.error("Error claiming reporting job:", error);
+    return {
+      success: false,
+      error: error.message || "Gagal mengambil tugas",
+    };
+  }
+}
+
+/**
+ * Simpan hasil analisis (Input oleh Reporting Staff)
+ */
+export async function saveReportingResults(
+  jobOrderId: string,
+  data: {
+    test_results?: any[];
+    analysis_notes?: string;
+  }
+) {
+  try {
+    const { profile } = await getCurrentUser();
+
+    if (profile.role !== "reporting") {
+      throw new Error("Only reporting staff can save results");
+    }
+
+    const jobOrder = await prisma.jobOrder.findUnique({
+      where: { id: jobOrderId },
+    });
+
+    if (!jobOrder) {
+      throw new Error("Job order not found");
+    }
+
+    // Upsert lab analysis
+    const labAnalysis = await prisma.labAnalysis.upsert({
+      where: { job_order_id: jobOrderId },
+      create: {
+        job_order_id: jobOrderId,
+        analyst_id: jobOrder.analyst_id || profile.id!, // Gunakan ID analis asli jika ada
+        test_results: data.test_results as any,
+        analysis_notes: data.analysis_notes,
+      },
+      update: {
+        test_results: data.test_results as any,
+        analysis_notes: data.analysis_notes,
+        updated_at: new Date(),
+      },
+    });
+
+    await logAudit({
+      action: "reporting_results_saved",
+      entity_type: "lab_analysis",
+      entity_id: labAnalysis.id,
+      user_id: profile.id!,
+      user_email: profile.email!,
+      user_role: profile.role,
+      new_data: data,
+    });
+
+    revalidatePath("/reporting");
+    revalidatePath(`/reporting/jobs/${jobOrderId}`);
+
+    return { success: true, labAnalysis };
+  } catch (error) {
+    console.error("Error saving reporting results:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to save results",
+    };
+  }
+}
+
+/**
  * Auto-generate LHU dengan data dari job order
  */
 export async function generateLHU(jobOrderId: string) {
@@ -690,13 +809,13 @@ export async function getMyReportingJobs(
       prisma.jobOrder.count({ where }),
     ]);
 
-    return {
+    return serializeData({
       jobOrders,
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
-    };
+    });
   } catch (error) {
     console.error("Error getting reporting jobs:", error);
     return {
@@ -712,7 +831,6 @@ export async function getMyReportingJobs(
 
 /**
  * Get job orders yang ready untuk reporting (status: analysis_done)
- * Untuk admin/operator
  */
 export async function getJobsReadyForReporting(
   page = 1,
@@ -721,8 +839,9 @@ export async function getJobsReadyForReporting(
   try {
     const { profile } = await getCurrentUser();
 
-    if (!["admin", "operator"].includes(profile.role)) {
-      throw new Error("Only admin/operator can access this");
+    // Allow admin, operator, and reporting staff to see available jobs
+    if (!["admin", "operator", "reporting"].includes(profile.role)) {
+      throw new Error("Unauthorized access to job queue");
     }
 
     const skip = (page - 1) * limit;
@@ -731,6 +850,7 @@ export async function getJobsReadyForReporting(
       prisma.jobOrder.findMany({
         where: {
           status: "analysis_done",
+          reporting_id: null, // Only show jobs that haven't been claimed/assigned yet
         },
         skip,
         take: limit,
@@ -773,17 +893,18 @@ export async function getJobsReadyForReporting(
       prisma.jobOrder.count({
         where: {
           status: "analysis_done",
+          reporting_id: null,
         },
       }),
     ]);
 
-    return {
+    return serializeData({
       jobOrders,
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
-    };
+    });
   } catch (error) {
     console.error("Error getting jobs ready for reporting:", error);
     return {
@@ -847,7 +968,7 @@ export const getReportingJobById = cache(async (jobOrderId: string) => {
     }
 
     // Return with serialized data
-    return { 
+    return serializeData({ 
       jobOrder: {
         ...jobOrder,
         lab_analysis: jobOrder.lab_analysis,
@@ -855,7 +976,7 @@ export const getReportingJobById = cache(async (jobOrderId: string) => {
         sampling_assignment: jobOrder.sampling_assignment,
       }, 
       success: true 
-    };
+    });
   } catch (error) {
     console.error("Error getting reporting job:", error);
     return {
@@ -922,7 +1043,7 @@ export async function getReportingDashboard() {
       },
     });
 
-    return {
+    return serializeData({
       stats: {
         pending,
         inProgress,
@@ -930,7 +1051,7 @@ export async function getReportingDashboard() {
         total,
       },
       recentJobs,
-    };
+    });
   } catch (error) {
     console.error("Error getting reporting dashboard:", error);
     return {

@@ -14,6 +14,10 @@ export function AuthNav({ initialUser, initialRole }: AuthNavProps) {
     if (initialRole === "admin") return "/admin";
     if (initialRole === "operator") return "/operator";
     if (initialRole === "content_manager") return "/content-manager";
+    if (initialRole === "analyst") return "/analyst";
+    if (initialRole === "field_officer") return "/field";
+    if (initialRole === "finance") return "/finance";
+    if (initialRole === "reporting") return "/reporting";
     return "/dashboard";
   };
 

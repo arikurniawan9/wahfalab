@@ -87,3 +87,84 @@ export const getCachedCompanyProfile = cache(async () => {
     return null;
   }
 });
+
+/**
+ * Global In-Memory Cache (Acting as a fast Redis alternative for Master Data)
+ */
+const globalCache: Record<string, { data: any; timestamp: number }> = {};
+const CACHE_TTL = 1000 * 60 * 60; // 1 hour for master data
+
+export function getFromGlobalCache(key: string) {
+  const entry = globalCache[key];
+  if (entry && Date.now() - entry.timestamp < CACHE_TTL) {
+    return entry.data;
+  }
+  return null;
+}
+
+export function setToGlobalCache(key: string, data: any) {
+  globalCache[key] = {
+    data,
+    timestamp: Date.now()
+  };
+}
+
+export function invalidateGlobalCache(key?: string) {
+  if (key) {
+    delete globalCache[key];
+  } else {
+    // Clear all if no key provided
+    Object.keys(globalCache).forEach(k => delete globalCache[k]);
+  }
+}
+
+/**
+ * Cached services fetch - Used by Operator Dashboard
+ */
+export const getCachedAllServices = cache(async () => {
+  const cacheKey = "all_services";
+  const cached = getFromGlobalCache(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const services = await prisma.service.findMany({
+      include: { 
+        category_ref: true,
+        regulation_ref: { select: { name: true } }
+      },
+      orderBy: { name: 'asc' }
+    });
+    const serialized = await import("@/lib/utils/serialize").then(m => m.serializeData(services));
+    setToGlobalCache(cacheKey, serialized);
+    return serialized;
+  } catch (error) {
+    console.error("Error fetching services:", error);
+    return [];
+  }
+});
+
+/**
+ * Cached categories fetch - Used by Operator Dashboard
+ */
+export const getCachedAllCategories = cache(async () => {
+  const cacheKey = "all_categories";
+  const cached = getFromGlobalCache(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const categories = await prisma.serviceCategory.findMany({
+      orderBy: { name: 'asc' },
+      include: {
+        _count: {
+          select: { services: true }
+        }
+      }
+    });
+    const serialized = await import("@/lib/utils/serialize").then(m => m.serializeData(categories));
+    setToGlobalCache(cacheKey, serialized);
+    return serialized;
+  } catch (error) {
+    console.error("Error fetching categories:", error);
+    return [];
+  }
+});

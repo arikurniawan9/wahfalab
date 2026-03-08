@@ -14,16 +14,20 @@ export async function GET() {
       })
     }
 
+    const p = profile as any;
     return NextResponse.json({
-      id: profile.id,
-      company_name: profile.company_name,
-      tagline: profile.tagline,
-      logo_url: profile.logo_url,
-      address: profile.address,
-      phone: profile.phone,
-      email: profile.email,
-      website: profile.website,
-      npwp: profile.npwp
+      id: p.id,
+      company_name: p.company_name,
+      tagline: p.tagline,
+      logo_url: p.logo_url,
+      address: p.address,
+      phone: p.phone,
+      email: p.email,
+      website: p.website,
+      npwp: p.npwp,
+      leader_name: p.leader_name,
+      signature_url: p.signature_url,
+      stamp_url: p.stamp_url
     })
   } catch (error) {
     console.error('Error fetching company profile:', error)

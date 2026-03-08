@@ -177,6 +177,7 @@ const fieldOfficerMenuItems = [
     items: [
       { icon: LayoutDashboard, label: "Beranda", href: "/field" },
       { icon: MapPin, label: "Tugas Sampling", href: "/field/assignments" },
+      { icon: History, label: "Riwayat", href: "/field/history" },
     ]
   },
 ];
@@ -187,7 +188,8 @@ const analystMenuItems = [
     icon: LayoutDashboard,
     items: [
       { icon: LayoutDashboard, label: "Beranda", href: "/analyst" },
-      { icon: FlaskConical, label: "Analisis", href: "/analyst/jobs" },
+      { icon: FlaskConical, label: "Tugas Analisis", href: "/analyst/jobs" },
+      { icon: History, label: "Riwayat Analisis", href: "/analyst/history" },
     ]
   },
 ];

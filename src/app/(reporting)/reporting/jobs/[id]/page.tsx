@@ -1,8 +1,19 @@
+// ============================================================================
+// PREMIUM REPORTING DETAIL - v4.1
+// Optimized for direct result input with Analyst reference tracking.
+// ============================================================================
+
 "use client";
 
-import React, { useEffect, useState, use } from "react";
-import { getReportingJobById, uploadLHUPDF, publishLabReport, generateLHU } from "@/lib/actions/reporting";
-import { ChemicalLoader, LoadingButton } from "@/components/ui";
+import React, { useEffect, useState, use, useCallback } from "react";
+import { 
+  getReportingJobById, 
+  uploadLHUPDF, 
+  publishLabReportWithLHU, 
+  generateLHU,
+  saveReportingResults
+} from "@/lib/actions/reporting";
+import { ChemicalLoader, LoadingOverlay } from "@/components/ui";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +22,32 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, FileText, Upload, CheckCircle, Eye, Download, Edit2, Sparkles, X } from "lucide-react";
+import { 
+  ArrowLeft, 
+  FileText, 
+  CheckCircle, 
+  Eye, 
+  Download, 
+  Sparkles, 
+  X,
+  FileCheck,
+  ShieldCheck,
+  Send,
+  History,
+  Beaker,
+  Printer,
+  ChevronRight,
+  ClipboardList,
+  Save,
+  Plus,
+  Trash2,
+  AlertCircle,
+  Activity,
+  Layers,
+  Search,
+  RefreshCw,
+  Info
+} from "lucide-react";
 import Link from "next/link";
 import {
   Dialog,
@@ -23,6 +59,21 @@ import {
 } from "@/components/ui/dialog";
 import { pdf } from "@react-pdf/renderer";
 import { LHUPDF } from "@/components/pdf/LHUPDF";
+import { cn } from "@/lib/utils";
+
+const statusConfig: Record<string, { label: string; color: string; bg: string; icon: any; progress: number }> = {
+  analysis_done: { label: 'Siap Laporan', color: 'text-amber-600', bg: 'bg-amber-50', icon: Beaker, progress: 85 },
+  reporting: { label: 'Penyusunan LHU', color: 'text-indigo-600', bg: 'bg-indigo-50', icon: FileText, progress: 95 },
+  completed: { label: 'LHU Terbit (Selesai)', color: 'text-emerald-600', bg: 'bg-emerald-50', icon: CheckCircle, progress: 100 }
+};
+
+interface TestResult {
+  parameter: string;
+  result: string;
+  unit: string;
+  method: string;
+  limit?: string;
+}
 
 export default function ReportingJobDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -31,563 +82,487 @@ export default function ReportingJobDetailPage({ params }: { params: Promise<{ i
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [job, setJob] = useState<any>(null);
-  const [lhuData, setLhuData] = useState<any>(null);
   const [lhuNumber, setLhuNumber] = useState("");
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [generatedLHU, setGeneratedLHU] = useState<any>(null);
 
-  useEffect(() => {
-    async function loadJob() {
-      try {
-        const data = await getReportingJobById(id);
-        console.log('Load job response:', data);
-        
-        if (!data.success || !data.jobOrder) {
-          console.error('Failed to load job:', data.error);
-          toast.error(data.error || "Gagal memuat job order");
-          return;
-        }
-        
-        setJob(data.jobOrder);
-      } catch (error) {
-        console.error("Failed to load job:", error);
-        toast.error("Gagal memuat data job order: " + (error as any)?.message || "Unknown error");
-      } finally {
-        setLoading(false);
+  // Results State
+  const [testResults, setTestResults] = useState<TestResult[]>([]);
+  const [reportingNotes, setReportingNotes] = useState("");
+
+  const loadData = useCallback(async () => {
+    try {
+      const data = await getReportingJobById(id);
+      if (!data.success || !data.jobOrder) {
+        toast.error("Gagal memuat data laporan");
+        return;
       }
+      const jobOrder = data.jobOrder;
+      setJob(jobOrder);
+
+      // Initialize results
+      // Priority 1: Already saved results by reporting
+      if (jobOrder.lab_analysis?.test_results && jobOrder.lab_analysis.test_results.length > 0) {
+        setTestResults(jobOrder.lab_analysis.test_results);
+      } else {
+        // Priority 2: Fallback to Quotation Items (SPLIT by parameters)
+        const initialResults: TestResult[] = [];
+        jobOrder.quotation?.items?.forEach((item: any) => {
+          if (item.parameter_snapshot) {
+            const params = item.parameter_snapshot.split(",").map((p: string) => p.trim());
+            params.forEach((pName: string) => {
+              if (pName) {
+                initialResults.push({
+                  parameter: pName,
+                  result: "",
+                  unit: item.service?.unit || "",
+                  method: item.service?.regulation || item.service?.regulation_ref?.name || "SOP Internal",
+                  limit: ""
+                });
+              }
+            });
+          } else {
+            initialResults.push({
+              parameter: item.service?.name || "Parameter Uji",
+              result: "",
+              unit: item.service?.unit || "",
+              method: item.service?.regulation || item.service?.regulation_ref?.name || "SOP Internal",
+              limit: ""
+            });
+          }
+        });
+        setTestResults(initialResults);
+      }
+
+      setReportingNotes(jobOrder.notes || "");
+    } catch (error) {
+      toast.error("Kesalahan sinkronisasi data");
+    } finally {
+      setLoading(false);
     }
-    loadJob();
   }, [id]);
 
-  const handleGenerateLHU = async () => {
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleAddParameter = () => {
+    setTestResults([...testResults, { parameter: "", result: "", unit: "", method: "", limit: "" }]);
+  };
+
+  const handleRemoveParameter = (index: number) => {
+    setTestResults(testResults.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateParameter = (index: number, field: keyof TestResult, value: string) => {
+    const updated = [...testResults];
+    updated[index] = { ...updated[index], [field]: value };
+    setTestResults(updated);
+  };
+
+  const handleSaveResults = async () => {
     setSubmitting(true);
     try {
-      const result = await generateLHU(id);
-      
-      if (result.success && result.lhuNumber) {
-        setLhuNumber(result.lhuNumber);
-        setGeneratedLHU(result.lhuData);
-        setPreviewDialogOpen(true);
-        toast.success("✅ LHU berhasil di-generate!", {
-          description: "Silakan preview dan terbitkan LHU"
-        });
+      const result = await saveReportingResults(id, {
+        test_results: testResults,
+        analysis_notes: reportingNotes // We'll use this as reporting notes for LHU
+      });
+      if (result.success) {
+        toast.success("✅ Hasil pengujian berhasil disimpan");
+        loadData();
       } else {
-        toast.error(result.error || "Gagal generate LHU");
+        toast.error(result.error || "Gagal menyimpan hasil");
       }
-    } catch (error: any) {
-      toast.error(error.message || "Gagal generate LHU");
+    } catch (error) {
+      toast.error("Terjadi kesalahan sistem");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDownloadLHU = async () => {
-    if (!generatedLHU) {
-      toast.error("Data LHU belum di-generate");
-      return;
-    }
-
+  const handleGenerateLHU = async () => {
+    await handleSaveResults();
+    setSubmitting(true);
     try {
-      console.log('Generating LHU PDF...');
-      console.log('LHU Data:', JSON.stringify(generatedLHU, null, 2));
-      
-      const doc = <LHUPDF data={generatedLHU} />;
-      const blob = await pdf(doc).toBlob();
-      
-      console.log('PDF blob created:', blob);
-      
-      if (!blob || blob.size === 0) {
-        throw new Error("PDF blob tidak berhasil dibuat atau kosong");
+      const result = await generateLHU(id);
+      if (result.success && result.lhuNumber) {
+        setLhuNumber(result.lhuNumber);
+        setGeneratedLHU(result.lhuData);
+        setPreviewDialogOpen(true);
+        toast.success("✅ LHU Berhasil Disusun!");
+      } else {
+        toast.error(result.error || "Gagal generate LHU");
       }
-
-      console.log('PDF size:', blob.size, 'bytes');
-
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `LHU-${generatedLHU.lhu_number}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      toast.success("✅ LHU berhasil diunduh");
     } catch (error: any) {
-      console.error('Download LHU error:', error);
-      console.error('Error stack:', error.stack);
-      toast.error("Gagal mengunduh LHU: " + (error.message || "Unknown error"));
+      toast.error("Gagal melakukan otomatisasi LHU");
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handlePublishWithLHU = async () => {
     if (!generatedLHU) return;
-
     setSubmitting(true);
     try {
-      // First, generate and upload the PDF
-      const blob = await pdf(<LHUPDF data={generatedLHU} />).toBlob();
+      const doc = <LHUPDF data={generatedLHU} />;
+      const blob = await pdf(doc).toBlob();
+      const formData = new FormData();
+      formData.append("file", new File([blob], `LHU-${generatedLHU.lhu_number}.pdf`, { type: 'application/pdf' }));
       
-      // Upload to Supabase Storage
-      const { createClient } = await import('@/lib/supabase/client');
-      const supabase = createClient();
-      
-      const fileName = `lhu/${generatedLHU.lhu_number}-${id}.pdf`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('documents')
-        .upload(fileName, blob, { upsert: true });
+      const { uploadLHUPDF } = await import('@/lib/actions/reporting');
+      const uploadResult = await uploadLHUPDF(id, formData);
 
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('documents')
-        .getPublicUrl(fileName);
-
-      // Update job order with LHU URL and publish
-      const { publishLabReportWithLHU } = await import('@/lib/actions/reporting');
-      const result = await publishLabReportWithLHU(id, publicUrl, generatedLHU.lhu_number);
-
-      if (result.success) {
-        toast.success(`✅ LHU ${generatedLHU.lhu_number} berhasil diterbitkan!`);
-        router.push("/reporting");
-      } else {
-        toast.error(result.error || "Gagal menerbitkan LHU");
+      if (uploadResult.success) {
+        const publishResult = await publishLabReportWithLHU(id, uploadResult.url!, generatedLHU.lhu_number);
+        if (publishResult.success) {
+          toast.success(`✅ LHU ${generatedLHU.lhu_number} Terbit & Selesai!`);
+          router.push("/reporting");
+        }
       }
     } catch (error: any) {
-      toast.error(error.message || "Gagal menerbitkan LHU");
+      toast.error("Gagal menerbitkan dokumen LHU");
     } finally {
       setSubmitting(false);
       setPreviewDialogOpen(false);
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  if (loading) return <div className="flex h-[80vh] items-center justify-center"><ChemicalLoader /></div>;
+  if (!job) return <div className="p-10 text-center">Laporan tidak ditemukan.</div>;
 
-    setSubmitting(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      
-      const result = await uploadLHUPDF(id, formData);
-      if (result.success) {
-        toast.success("LHU PDF berhasil diupload");
-        router.refresh();
-      } else {
-        toast.error(result.error || "Gagal upload LHU");
-      }
-    } catch (error: any) {
-      toast.error(error.message || "Gagal upload LHU");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handlePublish = async () => {
-    if (!confirm("Yakin ingin menerbitkan LHU ini? Job order akan ditandai selesai dan dikirim ke operator.")) return;
-    
-    setSubmitting(true);
-    try {
-      const result = await publishLabReport(id);
-      if (result.success) {
-        toast.success(`LHU berhasil diterbitkan dengan nomor ${result.lhuNumber}`);
-        router.push("/reporting");
-      } else {
-        toast.error(result.error || "Gagal menerbitkan LHU");
-      }
-    } catch (error: any) {
-      toast.error(error.message || "Gagal menerbitkan LHU");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="p-10 flex justify-center">
-        <ChemicalLoader />
-      </div>
-    );
-  }
-
-  if (!job) {
-    return (
-      <div className="p-10 text-center">
-        <h2 className="text-xl font-semibold text-slate-700">Job order tidak ditemukan</h2>
-        <Link href="/reporting/jobs">
-          <Button className="mt-4 cursor-pointer">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Kembali
-          </Button>
-        </Link>
-      </div>
-    );
-  }
-
-  const statusColors: any = {
-    analysis_done: "bg-amber-100 text-amber-700",
-    reporting: "bg-violet-100 text-violet-700",
-    completed: "bg-emerald-100 text-emerald-700"
-  };
-
-  const statusLabels: any = {
-    analysis_done: "Menunggu LHU",
-    reporting: "Proses LHU",
-    completed: "LHU Terbit"
-  };
+  const currentStatus = statusConfig[job.status] || statusConfig.reporting;
 
   return (
-    <div className="p-4 md:p-10 pb-24 md:pb-10">
-      {/* Header */}
-      <div className="mb-6">
-        <Link href="/reporting/jobs">
-          <Button variant="ghost" size="sm" className="mb-4 cursor-pointer">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Kembali
+    <div className="p-4 md:p-10 pb-24 md:pb-10 max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-700">
+      <LoadingOverlay isOpen={submitting} title="Sinkronisasi Data LHU..." description="Menyimpan hasil pengujian rill ke sistem WahfaLab" />
+
+      {/* Ramping Header */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-5">
+          <Button 
+            variant="ghost" 
+            size="icon"
+            onClick={() => router.push('/reporting')} 
+            className="h-12 w-12 rounded-2xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+          >
+            <ArrowLeft className="h-6 w-6" />
           </Button>
-        </Link>
-        <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-emerald-900 tracking-tight">{job.tracking_code}</h1>
-            <p className="text-slate-500 text-sm mt-1">Penerbitan Laporan Hasil Uji</p>
+            <div className="flex items-center gap-3 mb-1">
+               <span className="font-mono text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-xl uppercase tracking-tighter">#{job.tracking_code}</span>
+               <Badge className={cn("px-3 py-1 rounded-lg border-none font-black text-[9px] uppercase", currentStatus.bg, currentStatus.color)}>
+                  {currentStatus.label}
+               </Badge>
+            </div>
+            <h1 className="text-2xl font-black text-slate-800 uppercase tracking-tight font-[family-name:var(--font-montserrat)] leading-none">
+               Reporting Precision Console
+            </h1>
           </div>
-          <Badge className={`text-sm px-4 py-2 ${statusColors[job.status] || "bg-slate-100 text-slate-700"}`}>
-            {statusLabels[job.status] || job.status}
-          </Badge>
+        </div>
+        
+        <div className="flex items-center gap-4 bg-slate-50 p-2 rounded-2xl border border-slate-100">
+           <div className="px-4 text-right">
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Executor Account</p>
+              <p className="text-xs font-bold text-slate-700 uppercase">Reporting Team</p>
+           </div>
+           <div className="h-12 w-12 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-indigo-900/20">
+              R
+           </div>
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Job Info */}
-        <Card className="shadow-xl shadow-emerald-900/5">
-          <CardHeader>
-            <CardTitle className="text-emerald-900">Informasi Job Order</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label className="text-slate-500 text-xs">Customer</Label>
-              <div className="font-medium text-slate-900">
-                {job.quotation?.profile?.company_name || job.quotation?.profile?.full_name || "-"}
-              </div>
-            </div>
-            <div>
-              <Label className="text-slate-500 text-xs">Analis</Label>
-              <div className="font-medium text-slate-900">
-                {job.lab_analysis?.analyst?.full_name || "-"}
-              </div>
-            </div>
-            <div>
-              <Label className="text-slate-500 text-xs">Tanggal Analisis Selesai</Label>
-              <div className="font-medium text-slate-900">
-                {job.analysis_done_at 
-                  ? new Date(job.analysis_done_at).toLocaleDateString("id-ID", { 
-                      day: 'numeric', month: 'long', year: 'numeric' 
-                    })
-                  : "-"
-                }
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left: Analyst Reference (The "Why" and "How") */}
+        <div className="lg:col-span-3 space-y-6">
+           <Card className="border-none shadow-sm rounded-[2rem] bg-white overflow-hidden border border-slate-100">
+              <CardHeader className="p-6 pb-2 border-b border-slate-50">
+                 <h3 className="text-[10px] font-black text-amber-600 uppercase tracking-[0.2em] flex items-center gap-2">
+                    <AlertCircle className="h-3 w-3" /> Referensi Analis
+                 </h3>
+              </CardHeader>
+              <CardContent className="p-6 space-y-6">
+                 <div className="space-y-4">
+                    <div className="space-y-1">
+                       <p className="text-[9px] font-black text-slate-400 uppercase">Kondisi Sampel</p>
+                       <p className="text-[11px] font-bold text-slate-700 italic">"{job.lab_analysis?.sample_condition || 'Tidak dicatat'}"</p>
+                    </div>
+                    <div className="space-y-1">
+                       <p className="text-[9px] font-black text-slate-400 uppercase">Alat Digunakan</p>
+                       <p className="text-[11px] font-bold text-slate-700">
+                          {Array.isArray(job.lab_analysis?.equipment_used) ? job.lab_analysis.equipment_used.join(", ") : "Standar Lab"}
+                       </p>
+                    </div>
+                    <div className="space-y-2 pt-2 border-t border-slate-50">
+                       <p className="text-[9px] font-black text-slate-400 uppercase">Catatan Teknis Analis</p>
+                       <div className="p-4 bg-amber-50/50 rounded-2xl border border-amber-100/50 text-[11px] font-medium text-amber-900 leading-relaxed max-h-[200px] overflow-y-auto">
+                          {job.lab_analysis?.analysis_notes || "Analis tidak meninggalkan catatan tambahan."}
+                       </div>
+                    </div>
+                 </div>
 
-        {/* Analysis Results Summary */}
-        <Card className="shadow-xl shadow-emerald-900/5">
-          <CardHeader>
-            <CardTitle className="text-emerald-900 flex items-center gap-2">
-              <FileText className="h-5 w-5" /> Hasil Analisis
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {job.lab_analysis?.test_results && Array.isArray(job.lab_analysis.test_results) && (
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="text-left p-2 font-semibold">Parameter</th>
-                      <th className="text-left p-2 font-semibold">Hasil</th>
-                      <th className="text-left p-2 font-semibold">Limit</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {job.lab_analysis.test_results.map((result: any, idx: number) => (
-                      <tr key={idx}>
-                        <td className="p-2">{result.parameter}</td>
-                        <td className="p-2 font-medium">{result.result} {result.unit}</td>
-                        <td className="p-2">{result.limit || "-"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            
-            {job.lab_analysis?.analysis_notes && (
-              <div>
-                <Label className="text-slate-500 text-xs">Catatan Analis</Label>
-                <p className="text-sm text-slate-700 bg-slate-50 p-3 rounded-lg mt-1">
-                  {job.lab_analysis.analysis_notes}
-                </p>
-              </div>
-            )}
+                 {job.lab_analysis?.result_pdf_url && (
+                    <Button 
+                      variant="outline"
+                      onClick={() => window.open(job.lab_analysis.result_pdf_url, '_blank')}
+                      className="w-full h-12 rounded-2xl border-2 border-indigo-100 text-indigo-600 font-black text-[10px] uppercase tracking-widest bg-white hover:bg-indigo-50"
+                    >
+                       LIHAT LAPORAN ANALIS <ExternalLink className="ml-2 h-3 w-3" />
+                    </Button>
+                 )}
+              </CardContent>
+           </Card>
 
-            {job.lab_analysis?.result_pdf_url && (
-              <div>
-                <Label className="text-slate-500 text-xs">PDF Hasil Analisis</Label>
-                <div className="mt-1">
-                  <a 
-                    href={job.lab_analysis.result_pdf_url} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-emerald-600 hover:underline text-sm flex items-center gap-2"
-                  >
-                    <Eye className="h-4 w-4" /> Lihat PDF Hasil Analisis
-                  </a>
+           <Card className="border-none shadow-sm rounded-[2rem] bg-white overflow-hidden">
+              <CardHeader className="p-6 pb-2">
+                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Data Customer</h3>
+              </CardHeader>
+              <CardContent className="p-6 pt-0 space-y-4">
+                 <div className="p-4 bg-slate-50 rounded-2xl space-y-1">
+                    <p className="text-xs font-black text-slate-800 uppercase leading-tight">{job.quotation?.profile?.company_name || job.quotation?.profile?.full_name}</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Verified Partner</p>
+                 </div>
+              </CardContent>
+           </Card>
+        </div>
+
+        {/* Center: Main Input Table (The "Work") */}
+        <div className="lg:col-span-6 space-y-6">
+           <Card className="border-none shadow-2xl shadow-indigo-900/5 rounded-[2.5rem] overflow-hidden bg-white">
+              <CardHeader className="bg-slate-50/50 p-8 border-b border-slate-100 flex flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-900/20">
+                    <ClipboardList className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl font-black uppercase tracking-tight text-emerald-950">Hasil Parameter Uji</CardTitle>
+                    <CardDescription className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">Input data rill untuk sertifikat LHU</CardDescription>
+                  </div>
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                <div className="flex gap-2">
+                   <Button 
+                     onClick={() => loadData()}
+                     variant="ghost"
+                     size="icon"
+                     className="h-10 w-10 rounded-xl text-slate-400 hover:text-indigo-600"
+                   >
+                     <RefreshCw className="h-4 w-4" />
+                   </Button>
+                   <Button 
+                     onClick={handleAddParameter}
+                     className="rounded-xl bg-indigo-600 text-white font-black text-[10px] uppercase h-10 px-4 shadow-lg shadow-indigo-900/20"
+                   >
+                     <Plus className="mr-2 h-3 w-3" /> Tambah Manual
+                   </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                 <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                       <thead className="bg-slate-50/50 text-[9px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">
+                          <tr>
+                             <th className="px-6 py-4">Parameter</th>
+                             <th className="px-6 py-4 w-[120px]">Hasil Uji</th>
+                             <th className="px-6 py-4 w-[100px]">Satuan</th>
+                             <th className="px-6 py-4">Metode / Baku Mutu</th>
+                             <th className="px-4 py-4 w-[50px]"></th>
+                          </tr>
+                       </thead>
+                       <tbody className="divide-y divide-slate-50">
+                          {testResults.map((result, index) => (
+                             <tr key={index} className="group hover:bg-indigo-50/30 transition-colors">
+                                <td className="px-6 py-3">
+                                   <input 
+                                     value={result.parameter}
+                                     onChange={(e) => handleUpdateParameter(index, "parameter", e.target.value)}
+                                     placeholder="Nama Parameter"
+                                     className="w-full bg-transparent border-none text-xs font-black text-slate-800 focus:ring-0 placeholder:text-slate-300 uppercase"
+                                   />
+                                </td>
+                                <td className="px-6 py-3">
+                                   <input 
+                                     value={result.result}
+                                     onChange={(e) => handleUpdateParameter(index, "result", e.target.value)}
+                                     placeholder="Hasil"
+                                     className="w-full h-9 bg-indigo-50/50 rounded-lg px-3 border-2 border-transparent focus:border-indigo-200 text-xs font-black text-indigo-600 outline-none text-center"
+                                   />
+                                </td>
+                                <td className="px-6 py-3">
+                                   <input 
+                                     value={result.unit}
+                                     onChange={(e) => handleUpdateParameter(index, "unit", e.target.value)}
+                                     placeholder="mg/L"
+                                     className="w-full h-9 bg-slate-50 rounded-lg px-3 border border-transparent text-[10px] font-bold text-slate-500 outline-none text-center"
+                                   />
+                                </td>
+                                <td className="px-6 py-3">
+                                   <input 
+                                     value={result.method}
+                                     onChange={(e) => handleUpdateParameter(index, "method", e.target.value)}
+                                     placeholder="Metode Pengujian"
+                                     className="w-full bg-transparent border-none text-[10px] font-medium text-slate-500 focus:ring-0 placeholder:text-slate-300"
+                                   />
+                                </td>
+                                <td className="px-4 py-3">
+                                   <button 
+                                     onClick={() => handleRemoveParameter(index)}
+                                     className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-200 hover:text-rose-500 hover:bg-rose-50 transition-all opacity-0 group-hover:opacity-100"
+                                   >
+                                      <Trash2 className="h-4 w-4" />
+                                   </button>
+                                </td>
+                             </tr>
+                          ))}
+                       </tbody>
+                    </table>
+                 </div>
+
+                 {testResults.length === 0 && (
+                    <div className="p-20 text-center">
+                       <Layers className="h-12 w-12 text-slate-100 mx-auto mb-4" />
+                       <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Belum ada parameter terdaftar</p>
+                    </div>
+                 )}
+
+                 <div className="p-8 bg-slate-50/50 border-t border-slate-100">
+                    <div className="flex flex-col gap-3">
+                       <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Keterangan Tambahan LHU (Opsional)</Label>
+                       <Textarea 
+                         value={reportingNotes}
+                         onChange={(e) => setReportingNotes(e.target.value)}
+                         placeholder="Masukkan catatan hukum atau teknis yang akan muncul di dokumen LHU..."
+                         className="min-h-[100px] rounded-3xl border-2 border-slate-100 p-6 font-medium text-xs text-slate-600 focus:border-indigo-200 bg-white"
+                       />
+                    </div>
+                    <div className="mt-6 flex justify-end">
+                       <Button 
+                         onClick={handleSaveResults}
+                         disabled={submitting}
+                         className="h-12 bg-white hover:bg-slate-50 text-indigo-600 border-2 border-indigo-100 font-black uppercase text-[10px] tracking-widest rounded-xl px-10 shadow-sm flex items-center gap-3 transition-all active:scale-95"
+                       >
+                         <Save className="h-4 w-4" /> Simpan Draft Perubahan
+                       </Button>
+                    </div>
+                 </div>
+              </CardContent>
+           </Card>
+        </div>
+
+        {/* Right: Actions & Preview (The "Finalization") */}
+        <div className="lg:col-span-3 space-y-6">
+           <Card className="border-none shadow-2xl shadow-violet-900/10 rounded-[2.5rem] overflow-hidden bg-gradient-to-br from-indigo-950 to-slate-900 text-white">
+              <CardHeader className="p-8 pb-0">
+                 <div className="h-14 w-14 rounded-2xl bg-indigo-600/30 flex items-center justify-center border-2 border-indigo-500/30 mb-6 shadow-2xl shadow-indigo-950">
+                    <Sparkles className="h-7 w-7 text-indigo-400" />
+                 </div>
+                 <CardTitle className="text-xl font-black uppercase tracking-tight leading-tight">Penerbitan LHU</CardTitle>
+                 <CardDescription className="text-indigo-400 font-bold text-[9px] uppercase tracking-[3px] mt-2">Final Step Verification</CardDescription>
+              </CardHeader>
+              <CardContent className="p-8 space-y-6">
+                 <p className="text-indigo-200/70 text-[10px] leading-relaxed font-medium">
+                    Sistem akan mengolah hasil parameter di samping menjadi dokumen sertifikat digital yang sah.
+                 </p>
+                 
+                 {job.status !== 'completed' && (
+                    <Button 
+                      onClick={handleGenerateLHU}
+                      disabled={submitting}
+                      className="w-full h-16 bg-white hover:bg-indigo-50 text-indigo-950 font-black uppercase tracking-widest text-xs rounded-2xl shadow-xl shadow-indigo-950/40 flex items-center justify-center gap-3"
+                    >
+                       Preview LHU <Eye className="h-5 w-5" />
+                    </Button>
+                 )}
+
+                 {job.certificate_url && (
+                    <div className="bg-emerald-500/10 p-5 rounded-3xl border border-emerald-500/20 flex items-center justify-between group">
+                       <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                             <FileCheck className="h-5 w-5" />
+                          </div>
+                          <div>
+                             <p className="text-[9px] font-black uppercase tracking-widest">LHU Terbit</p>
+                             <p className="text-[10px] font-bold text-emerald-400 font-mono tracking-tighter">FINALIZED</p>
+                          </div>
+                       </div>
+                       <Link href={job.certificate_url} target="_blank" className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center text-white hover:bg-indigo-600 transition-colors">
+                          <Download className="h-4 w-4" />
+                       </Link>
+                    </div>
+                 )}
+              </CardContent>
+           </Card>
+
+           <div className="p-6 bg-indigo-50 rounded-[2rem] border-2 border-indigo-100 flex items-start gap-4 animate-pulse">
+              <Info className="h-5 w-5 text-indigo-600 shrink-0 mt-1" />
+              <p className="text-[9px] text-indigo-700 font-black uppercase leading-relaxed">
+                 Pastikan satuan (Unit) dan metode pengujian sudah sesuai dengan standar akreditasi KAN / ISO 17025.
+              </p>
+           </div>
+        </div>
       </div>
 
-      {/* LHU Upload & Publish */}
-      <Card className="mt-6 shadow-xl shadow-emerald-900/5 border-emerald-200">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-emerald-900 flex items-center gap-2">
-                <FileText className="h-5 w-5" /> Penerbitan LHU
-              </CardTitle>
-              <CardDescription>Pilih metode penerbitan LHU</CardDescription>
-            </div>
-            <Badge variant="outline" className="border-emerald-300 text-emerald-700">
-              {job.status === "completed" ? "✅ Selesai" : "⏳ Belum Terbit"}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Option 1: Auto-Generate LHU */}
-          {job.status !== "completed" && !job.certificate_url && (
-            <div className="bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-200 rounded-lg p-4">
-              <div className="flex items-start gap-3 mb-3">
-                <div className="h-10 w-10 bg-violet-100 rounded-lg flex items-center justify-center shrink-0">
-                  <Sparkles className="h-5 w-5 text-violet-600" />
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-semibold text-violet-900 text-sm">Auto-Generate LHU</h4>
-                  <p className="text-xs text-violet-700 mt-1">
-                    LHU otomatis dibuat dengan data dari hasil analisis
-                  </p>
-                </div>
-              </div>
-              <Button
-                onClick={handleGenerateLHU}
-                disabled={submitting || job.status !== "analysis_done"}
-                className="w-full bg-violet-600 hover:bg-violet-700 cursor-pointer"
-              >
-                <Sparkles className="mr-2 h-4 w-4" /> 
-                {submitting ? "Memproses..." : "🚀 Generate LHU Otomatis"}
-              </Button>
-              {job.status !== "analysis_done" && (
-                <p className="text-xs text-violet-600 mt-2">
-                  ⚠️ Job order harus dalam status "Menunggu LHU" (analysis_done)
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Option 2: Manual Upload */}
-          <div className="border-t pt-4">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="h-6 w-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">2</div>
-              <Label className="text-sm font-semibold">Upload Manual (Opsional)</Label>
-            </div>
-            <div className="mt-2 flex items-center gap-4">
-              <Input
-                type="file"
-                accept=".pdf"
-                onChange={handleFileUpload}
-                disabled={submitting || job.status === "completed"}
-                className="max-w-md"
-              />
-            </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Format: PDF, Max size: 10MB
-            </p>
-          </div>
-
-          {/* LHU Uploaded Status */}
-          {job.certificate_url && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <CheckCircle className="h-5 w-5 text-emerald-600 mt-0.5" />
-                <div className="flex-1">
-                  <h4 className="font-semibold text-emerald-900 text-sm">
-                    {job.notes?.includes("LHU") ? job.notes.replace("LHU Published: ", "") : "LHU Telah Diupload"}
-                  </h4>
-                  <p className="text-xs text-emerald-700 mt-1">
-                    File LHU telah siap untuk diterbitkan
-                  </p>
-                  <a
-                    href={job.certificate_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-emerald-600 hover:underline text-sm inline-flex items-center gap-1 mt-2"
-                  >
-                    <Eye className="h-4 w-4" /> Preview LHU
-                  </a>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Publish Button */}
-          {job.status !== "completed" && job.certificate_url && (
-            <div className="pt-4 border-t">
-              <Button
-                onClick={handlePublish}
-                disabled={submitting}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 cursor-pointer h-11"
-              >
-                <CheckCircle className="mr-2 h-4 w-4" /> Terbitkan LHU & Selesai
-              </Button>
-              <p className="text-xs text-slate-500 mt-2 text-center">
-                Setelah diterbitkan, job order akan ditandai selesai dan notifikasi akan dikirim ke operator
-              </p>
-            </div>
-          )}
-
-          {/* Completed Status */}
-          {job.status === "completed" && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-center">
-              <CheckCircle className="h-8 w-8 text-emerald-600 mx-auto mb-2" />
-              <h4 className="font-semibold text-emerald-900">
-                {job.notes?.includes("LHU") ? `LHU ${job.notes.replace("LHU Published: ", "")}` : "LHU Telah Diterbitkan"}
-              </h4>
-              <p className="text-sm text-emerald-700 mt-1">
-                Job order ini telah selesai dan LHU telah dikirim ke operator
-              </p>
-              {job.certificate_url && (
-                <a
-                  href={job.certificate_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-emerald-600 hover:underline text-sm inline-flex items-center gap-1 mt-3"
-                >
-                  <Download className="h-4 w-4" /> Unduh LHU
-                </a>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Preview Dialog */}
+      {/* Preview Dialog Premium */}
       <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
-        <DialogContent className="sm:max-w-3xl p-0 border-none shadow-2xl rounded-3xl overflow-hidden max-h-[90vh]">
-          <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 p-4 text-white flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center border border-white/20">
-                <FileText className="h-5 w-5" />
-              </div>
-              <div>
-                <DialogTitle className="text-base font-black uppercase tracking-widest">
-                  Preview LHU
-                </DialogTitle>
-                <DialogDescription className="text-xs text-white/80 mt-0.5">
-                  {lhuNumber}
-                </DialogDescription>
-              </div>
+        <DialogContent className="sm:max-w-3xl rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl">
+          <div className="bg-indigo-950 p-10 text-white text-center relative overflow-hidden">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-indigo-800/30 via-transparent to-transparent opacity-50" />
+            <div className="relative z-10 space-y-4">
+               <div className="h-16 w-16 rounded-3xl bg-indigo-600 flex items-center justify-center mx-auto shadow-2xl shadow-indigo-900/40 border-4 border-indigo-800">
+                  <FileText className="h-8 w-8 text-white" />
+               </div>
+               <div>
+                 <DialogTitle className="text-2xl font-black uppercase tracking-tight">Draf Laporan Hasil Uji</DialogTitle>
+                 <p className="text-indigo-400 text-xs font-bold uppercase tracking-widest mt-1">Nomor Registrasi: {lhuNumber}</p>
+               </div>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => setPreviewDialogOpen(false)} className="text-white/60 hover:text-white h-8 w-8">
-              <X className="h-4 w-4" />
-            </Button>
           </div>
-
-          <div className="p-6 space-y-4 overflow-y-auto max-h-[60vh]">
-            {/* LHU Info Preview */}
-            {generatedLHU && (
-              <div className="space-y-3">
-                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-                  <h4 className="font-semibold text-emerald-900 text-sm mb-3">Informasi LHU:</h4>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="text-slate-500">Nomor LHU:</span>
-                      <p className="font-semibold text-emerald-700">{generatedLHU.lhu_number}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Customer:</span>
-                      <p className="font-semibold text-emerald-700">{generatedLHU.customer.full_name}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Tracking Code:</span>
-                      <p className="font-semibold text-emerald-700">{generatedLHU.tracking_code}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Parameter:</span>
-                      <p className="font-semibold text-emerald-700">{generatedLHU.analysis.test_results?.length || 0} item</p>
-                    </div>
-                  </div>
+          <div className="p-10 bg-white space-y-8">
+             <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                   <Activity className="h-3 w-3 text-indigo-600" /> Ringkasan Data Rill
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                   {testResults.slice(0, 6).map((r, i) => (
+                      <div key={i} className="flex flex-col">
+                         <span className="text-[9px] font-bold text-slate-400 truncate uppercase">{r.parameter}</span>
+                         <span className="text-sm font-black text-slate-800">{r.result || '-'} <span className="text-[10px] font-medium text-slate-400">{r.unit}</span></span>
+                      </div>
+                   ))}
+                   {testResults.length > 6 && (
+                      <div className="text-[9px] font-black text-indigo-600 flex items-center bg-indigo-50 px-3 py-1 rounded-lg self-center">+ {testResults.length - 6} LAINNYA</div>
+                   )}
                 </div>
-
-                {/* Test Results Preview */}
-                {generatedLHU.analysis.test_results && generatedLHU.analysis.test_results.length > 0 && (
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-50">
-                        <tr>
-                          <th className="text-left p-2 font-semibold">Parameter</th>
-                          <th className="text-left p-2 font-semibold">Hasil</th>
-                          <th className="text-left p-2 font-semibold">Limit</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {generatedLHU.analysis.test_results.slice(0, 5).map((result: any, idx: number) => (
-                          <tr key={idx}>
-                            <td className="p-2">{result.parameter}</td>
-                            <td className="p-2 font-medium">{result.result} {result.unit}</td>
-                            <td className="p-2">{result.limit || "-"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {generatedLHU.analysis.test_results.length > 5 && (
-                      <p className="text-xs text-slate-500 p-2 text-center">
-                        +{generatedLHU.analysis.test_results.length - 5} parameter lainnya
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+             </div>
+             
+             <div className="grid grid-cols-2 gap-4">
+                <Button 
+                  variant="outline"
+                  onClick={async () => {
+                     const doc = <LHUPDF data={generatedLHU} />;
+                     const blob = await pdf(doc).toBlob();
+                     const url = URL.createObjectURL(blob);
+                     window.open(url, '_blank');
+                  }}
+                  className="h-16 rounded-2xl border-2 border-slate-100 font-black text-xs uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all"
+                >
+                   <Eye className="h-4 w-4 mr-2" /> Full Document
+                </Button>
+                <Button 
+                  onClick={handlePublishWithLHU}
+                  disabled={submitting}
+                  className="h-16 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl shadow-emerald-900/20 flex items-center justify-center gap-3"
+                >
+                   TERBITKAN SEKARANG <Send className="h-4 w-4" />
+                </Button>
+             </div>
           </div>
-
-          <DialogFooter className="p-4 border-t gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setPreviewDialogOpen(false)}
-              disabled={submitting}
-              className="flex-1"
-            >
-              Tutup
-            </Button>
-            <Button
-              onClick={handleDownloadLHU}
-              disabled={submitting}
-              variant="outline"
-              className="flex-1 border-violet-300 text-violet-700 hover:bg-violet-50"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Unduh PDF
-            </Button>
-            <Button
-              onClick={handlePublishWithLHU}
-              disabled={submitting}
-              className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-            >
-              <CheckCircle className="h-4 w-4 mr-2" />
-              {submitting ? "Memproses..." : "Terbitkan LHU"}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function ExternalLink({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
   );
 }

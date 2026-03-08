@@ -1,17 +1,12 @@
 // ============================================================================
-// STABLE QUOTATIONS PAGE (OPERATOR) - v3.0 (Simplified Layout)
-// Refactored to match Admin UX with Operator restrictions.
-// Fitur:
-// 1. ✅ No Tabs (Single Page Form) - Fix Infinite Loop Error
-// 2. ✅ Katalog Selection (Perdiem, Transport, Alat)
-// 3. ✅ Tambah Customer Baru Langsung
-// 4. ✅ Keyboard Shortcuts (Alt+N, Alt+P, Alt+T, Alt+E, Alt+K, Ctrl+Enter)
-// 5. ✅ Duplicate & Status Update
+// PREMIUM QUOTATIONS MANAGEMENT - v3.7 (DYNAMIC PARAMETERS)
+// Optimized for speed, precision, and dynamic lab parameter management.
 // ============================================================================
 
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Table,
@@ -44,7 +39,16 @@ import {
   X,
   Clock,
   Check,
-  AlertCircle
+  AlertCircle,
+  RefreshCw,
+  Filter,
+  Layers,
+  Printer,
+  ArrowRight,
+  Lock,
+  Beaker,
+  Calendar,
+  Send
 } from "lucide-react";
 import { ChemicalLoader, LoadingOverlay, LoadingButton } from "@/components/ui";
 import { 
@@ -61,6 +65,7 @@ import { getAllServices } from "@/lib/actions/services";
 import { getAllOperationalCatalogs } from "@/lib/actions/operational-catalog";
 import { getAllEquipment } from "@/lib/actions/equipment";
 import { toast } from "sonner";
+import { createClient } from "@/lib/supabase/client";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -73,9 +78,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-  DialogDescription
+  DialogDescription,
+  DialogFooter
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -90,40 +94,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useForm, useFieldArray, Controller } from "react-hook-form";
+import { useForm, useFieldArray, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 
-// Stat Card Component
-function StatCard({ title, value, icon: Icon, color }: any) {
-  const colors: any = {
-    emerald: "bg-emerald-50 text-emerald-600 border-emerald-100",
-    amber: "bg-amber-50 text-amber-600 border-amber-100",
-    blue: "bg-blue-50 text-blue-600 border-blue-100",
-    red: "bg-red-50 text-red-600 border-red-100",
-    purple: "bg-purple-50 text-purple-600 border-purple-100",
-  };
-
-  return (
-    <Card className={cn("border-none shadow-sm", colors[color])}>
-      <CardContent className="p-3 flex items-center gap-3">
-        <div className={cn("p-2 rounded-xl bg-white shadow-sm shrink-0")}>
-          <Icon className="h-4 w-4" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-[9px] font-bold uppercase opacity-60 tracking-wider truncate">{title}</p>
-          <p className="text-lg font-black tracking-tight leading-none">{value}</p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 const quotationSchema = z.object({
   quotation_number: z.string().min(1, "Nomor penawaran wajib diisi"),
-  user_id: z.string().optional().nullable(),
+  user_id: z.string().min(1, "Pilih pelanggan"),
   use_tax: z.boolean().default(true),
   discount_amount: z.coerce.number().default(0),
   perdiem_name: z.string().optional().nullable(),
@@ -142,15 +121,16 @@ const quotationSchema = z.object({
   })).default([]),
 });
 
-const statusOptions = [
-  { value: "all", label: "Semua Status", color: "bg-slate-100 text-slate-700" },
-  { value: "draft", label: "Draft", color: "bg-slate-100 text-slate-700 border-slate-200", icon: FileText },
-  { value: "accepted", label: "Diterima", color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: CheckCircle },
-  { value: "rejected", label: "Ditolak", color: "bg-red-100 text-red-700 border-red-200", icon: XCircle },
-  { value: "paid", label: "Dibayar", color: "bg-purple-100 text-purple-700 border-purple-200", icon: DollarSign }
-];
+const statusConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
+  draft: { label: 'DRAFT', color: 'text-slate-600', bg: 'bg-slate-100', icon: FileText },
+  sent: { label: 'DIKIRIM', color: 'text-blue-600', bg: 'bg-blue-100', icon: Clock },
+  accepted: { label: 'DITERIMA', color: 'text-emerald-600', bg: 'bg-emerald-100', icon: CheckCircle },
+  rejected: { label: 'DITOLAK', color: 'text-rose-600', bg: 'bg-rose-100', icon: XCircle },
+  paid: { label: 'LUNAS', color: 'text-purple-600', bg: 'bg-purple-100', icon: DollarSign }
+};
 
 export default function OperatorQuotationListPage() {
+  const router = useRouter();
   const [data, setData] = useState<any>({ items: [], total: 0, pages: 1 });
   const [clients, setClients] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
@@ -160,24 +140,25 @@ export default function OperatorQuotationListPage() {
   const [limit, setLimit] = useState(10);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPerdiemDialogOpen, setIsPerdiemDialogOpen] = useState(false);
   const [isTransportDialogOpen, setIsTransportDialogOpen] = useState(false);
   const [isEquipmentDialogOpen, setIsEquipmentDialogOpen] = useState(false);
+  const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
+  const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
+  
   const [submitting, setSubmitting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<string>("date");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
-  const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
-  const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
   const [pendingFormData, setPendingFormData] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
 
-  // Form Hooks
-  const { register, control, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
+  const supabase = createClient();
+
+  const { register, control, handleSubmit, setValue, getValues, reset, formState: { errors } } = useForm({
     resolver: zodResolver(quotationSchema),
-    mode: 'onChange',
     defaultValues: {
       quotation_number: "INV-",
       user_id: "",
@@ -195,198 +176,35 @@ export default function OperatorQuotationListPage() {
 
   const { fields, append, remove } = useFieldArray({ control, name: "items" });
 
-  // Watches for Calculations
-  const watchedItems = watch("items") || [];
-  const watchedUseTax = watch("use_tax");
-  const watchedDiscount = Number(watch("discount_amount")) || 0;
-  const watchedPerdiemPrice = Number(watch("perdiem_price")) || 0;
-  const watchedPerdiemQty = watch("perdiem_qty") || 0;
-  const watchedTransportPrice = Number(watch("transport_price")) || 0;
-  const watchedTransportQty = watch("transport_qty") || 0;
-  const watchedPerdiemName = watch("perdiem_name");
-  const watchedTransportName = watch("transport_name");
+  const watchedUserId = useWatch({ control, name: "user_id" });
+  const watchedItems = useWatch({ control, name: "items" }) || [];
+  const watchedUseTax = useWatch({ control, name: "use_tax" });
+  const watchedDiscount = Number(useWatch({ control, name: "discount_amount" }) || 0);
+  const watchedPerdiemPrice = useWatch({ control, name: "perdiem_price" }) || 0;
+  const watchedPerdiemQty = useWatch({ control, name: "perdiem_qty" }) || 0;
+  const watchedTransportPrice = useWatch({ control, name: "transport_price" }) || 0;
+  const watchedTransportQty = useWatch({ control, name: "transport_qty" }) || 0;
 
-  // Logic Calculations
-  const itemsSubtotal = watchedItems.reduce((acc: number, item: any) => acc + (Number(item.qty || 0) * Number(item.price || 0)), 0);
-  const perdiemTotal = Number(watchedPerdiemPrice) * Number(watchedPerdiemQty);
-  const transportTotal = Number(watchedTransportPrice) * Number(watchedTransportQty);
-  const subtotalBeforeDiscount = itemsSubtotal + perdiemTotal + transportTotal;
-  const subtotal = subtotalBeforeDiscount - Number(watchedDiscount);
-  const tax = watchedUseTax ? subtotal * 0.11 : 0;
-  const total = subtotal + tax;
+  const hasClientSelected = !!watchedUserId;
+  const hasValidService = watchedItems.some(item => item?.service_id && Number(item?.price) > 0);
+  const hasFieldCostsFilled = (Number(watchedPerdiemPrice) > 0 && Number(watchedPerdiemQty) > 0) || (Number(watchedTransportPrice) > 0 && Number(watchedTransportQty) > 0);
+  const isFormValid = hasClientSelected && hasValidService && hasFieldCostsFilled;
 
-  // Keyboard Shortcuts Logic
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isDialogOpen) return;
-      
-      if (e.ctrlKey && e.key === 'Enter') {
-        e.preventDefault();
-        handleSubmit(onSubmit)();
-        return;
-      }
+  const totals = useMemo(() => {
+    const itemsSubtotal = watchedItems.reduce((acc: number, item: any) => acc + (Number(item?.qty || 0) * Number(item?.price || 0)), 0);
+    const perdiemTotal = Number(watchedPerdiemPrice) * Number(watchedPerdiemQty);
+    const transportTotal = Number(watchedTransportPrice) * Number(watchedTransportQty);
+    const subtotalBeforeDiscount = itemsSubtotal + perdiemTotal + transportTotal;
+    const subtotal = subtotalBeforeDiscount - Number(watchedDiscount);
+    const taxAmount = watchedUseTax ? subtotal * 0.11 : 0;
+    const grandTotal = subtotal + taxAmount;
 
-      if (e.altKey) {
-        switch (e.key.toLowerCase()) {
-          case 'n': 
-            e.preventDefault();
-            append({ service_id: "", equipment_id: "", qty: 1, price: 0 }); 
-            break;
-          case 'p': 
-            e.preventDefault();
-            setIsPerdiemDialogOpen(true); 
-            break;
-          case 't': 
-            e.preventDefault();
-            setIsTransportDialogOpen(true); 
-            break;
-          case 'e': 
-            e.preventDefault();
-            setIsEquipmentDialogOpen(true); 
-            break;
-          case 'k': 
-            e.preventDefault();
-            setIsCustomerDialogOpen(true); 
-            break;
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDialogOpen, handleSubmit, append]);
+    return { subtotalBeforeDiscount, taxAmount, grandTotal };
+  }, [watchedItems, watchedUseTax, watchedDiscount, watchedPerdiemPrice, watchedPerdiemQty, watchedTransportPrice, watchedTransportQty]);
 
-  const [customerData, setCustomerData] = useState({
-    full_name: "",
-    email: "",
-    company_name: "",
-    address: "",
-    password: "123456"
-  });
-
-  const handleCreateCustomer = async () => {
-    if (!customerData.full_name || !customerData.email) {
-      toast.error("Nama dan Email wajib diisi");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await createOrUpdateUser({ ...customerData, role: 'client' });
-      toast.success("Customer baru berhasil ditambahkan");
-      setIsCustomerDialogOpen(false);
-      const cResult = await getClients();
-      setClients(cResult);
-      setCustomerData({ full_name: "", email: "", company_name: "", address: "", password: "123456" });
-    } catch (error: any) {
-      toast.error("Gagal menambahkan customer", { description: error.message });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const onSubmit = (formData: any) => {
-    if (!formData.user_id || formData.user_id === "") {
-      toast.error("Data Belum Lengkap", { description: "Silakan pilih pelanggan terlebih dahulu." });
-      return;
-    }
-
-    const servicesItems = formData.items.filter((item: any) => item.service_id);
-    const equipmentItems = formData.items.filter((item: any) => item.equipment_id);
-
-    if (servicesItems.length === 0) {
-      toast.error("Layanan Wajib Diisi", { description: "Harap tambahkan minimal 1 layanan laboratorium." });
-      return;
-    }
-
-    const hasIncompleteService = servicesItems.some((item: any) => !item.service_id || Number(item.price) <= 0);
-    if (hasIncompleteService) {
-      toast.error("Layanan Belum Lengkap", { description: "Pastikan semua baris layanan sudah dipilih dan harga sudah terisi." });
-      return;
-    }
-
-    if (equipmentItems.length > 0) {
-      const hasIncompleteEquipment = equipmentItems.some((item: any) => Number(item.price) <= 0);
-      if (hasIncompleteEquipment) {
-        toast.error("Harga Alat Belum Terisi", { description: "Ada sewa alat yang harganya masih 0 atau kosong." });
-        return;
-      }
-    }
-
-    if (!formData.perdiem_name || formData.perdiem_name.trim() === "") {
-      toast.error("Perdiem Wajib Diisi", { description: "Harap pilih atau isi keterangan Perdiem (Bisa via Katalog)." });
-      return;
-    }
-    if (Number(formData.perdiem_price) <= 0 || Number(formData.perdiem_qty) <= 0) {
-      toast.error("Detail Perdiem Tidak Valid", { description: "Harga dan hari perdiem harus lebih dari 0." });
-      return;
-    }
-
-    if (!formData.transport_name || formData.transport_name.trim() === "") {
-      toast.error("Transport Wajib Diisi", { description: "Harap pilih atau isi keterangan Transport (Bisa via Katalog)." });
-      return;
-    }
-    if (Number(formData.transport_price) <= 0 || Number(formData.transport_qty) <= 0) {
-      toast.error("Detail Transport Tidak Valid", { description: "Harga dan qty transport harus lebih dari 0." });
-      return;
-    }
-
-    setPendingFormData(formData);
-    setIsSaveConfirmOpen(true);
-  };
-
-  const handleConfirmSave = async () => {
-    if (!pendingFormData) return;
-    
-    setIsSaveConfirmOpen(false);
-    setSubmitting(true);
-    try {
-      const result = await createQuotation({
-        ...pendingFormData,
-        subtotal: subtotalBeforeDiscount,
-        tax_amount: tax,
-        total_amount: total
-      });
-      
-      if (result.success) {
-        toast.success("Penawaran berhasil disimpan", { description: "Status otomatis menjadi DRAFT" });
-        setIsDialogOpen(false);
-        reset();
-        loadData();
-      }
-    } catch (error: any) {
-      toast.error("Gagal menyimpan penawaran", { description: error?.message || "Silakan coba lagi" });
-    } finally {
-      setSubmitting(false);
-      setPendingFormData(null);
-    }
-  };
-
-  const onInvalid = (errors: any) => {
-    console.error("Hook Form Errors:", errors);
-    toast.error("Form Belum Lengkap", { description: "Mohon periksa kembali inputan Anda, pastikan data wajib sudah terisi." });
-  };
-
-  const handleServiceChange = (index: number, serviceId: string) => {
-    const service = services.find(s => s.id === serviceId);
-    if (service) {
-      setValue(`items.${index}.service_id`, serviceId);
-      setValue(`items.${index}.price`, Number(service.price));
-      
-      if (service.parameters) {
-        try {
-          const params = typeof service.parameters === 'string' ? JSON.parse(service.parameters) : service.parameters;
-          const paramNames = Array.isArray(params) ? params.map((p: any) => p.name) : [];
-          setValue(`items.${index}.parameters`, paramNames);
-        } catch (e) {
-          setValue(`items.${index}.parameters`, []);
-        }
-      } else {
-        setValue(`items.${index}.parameters`, []);
-      }
-    }
-  };
-
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (showRefreshToast = false) => {
+    if (showRefreshToast) setRefreshing(true);
+    else setLoading(true);
     try {
       const [qResult, cResult, sResult, oResult, eResult, prof] = await Promise.all([
         getQuotations(page, limit, search),
@@ -396,23 +214,31 @@ export default function OperatorQuotationListPage() {
         getAllEquipment(),
         getProfile()
       ]);
-      
       setData(qResult);
       setClients(cResult);
       setServices(sResult);
       setOperationalCatalogs(oResult);
       setEquipment(eResult);
       setUserProfile(prof);
+      if (showRefreshToast) toast.success("Data Sinkron");
     } catch (error: any) {
-      toast.error("Gagal memuat data");
+      toast.error("Gagal sinkronisasi");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [page, limit, search]);
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    const channel = supabase
+      .channel('quotation_updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'quotations' }, () => {
+        loadData();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [loadData, supabase]);
 
   useEffect(() => {
     if (isDialogOpen) {
@@ -420,28 +246,51 @@ export default function OperatorQuotationListPage() {
     }
   }, [isDialogOpen, setValue]);
 
-  const handleDelete = (id: string) => setDeleteId(id);
-  const confirmDelete = async () => {
-    if (!deleteId) return;
-    try {
-      const res = await deleteQuotation(deleteId, userProfile?.id, userProfile?.role);
-      if (res.success) {
-        toast.success(res.message || "Penawaran dihapus");
-        loadData();
-      }
-      setDeleteId(null);
-    } catch (error: any) {
-      toast.error("Gagal menghapus");
+  const handleServiceChange = (index: number, serviceId: string) => {
+    const service = services.find(s => s.id === serviceId);
+    if (service) {
+      setValue(`items.${index}.service_id`, serviceId);
+      setValue(`items.${index}.price`, Number(service.price));
+      if (service.parameters) {
+        try {
+          const params = typeof service.parameters === 'string' ? JSON.parse(service.parameters) : service.parameters;
+          const paramNames = Array.isArray(params) ? params.map((p: any) => p.name || p.parameter) : [];
+          setValue(`items.${index}.parameters`, paramNames);
+        } catch (e) { setValue(`items.${index}.parameters`, []); }
+      } else { setValue(`items.${index}.parameters`, []); }
     }
   };
 
-  const handleClone = async (id: string) => {
+  const removeParameter = (itemIndex: number, paramIndex: number) => {
+    const currentParams = getValues(`items.${itemIndex}.parameters`) || [];
+    const updatedParams = currentParams.filter((_: any, i: number) => i !== paramIndex);
+    setValue(`items.${itemIndex}.parameters`, updatedParams);
+  };
+
+  const onSubmit = (formData: any) => {
+    setPendingFormData(formData);
+    setIsSaveConfirmOpen(true);
+  };
+
+  const handleConfirmSave = async () => {
+    if (!pendingFormData) return;
+    setIsSaveConfirmOpen(false);
+    setSubmitting(true);
     try {
-      const result = await cloneQuotation(id);
-      if (result.success) { toast.success("Duplikasi berhasil"); loadData(); }
-    } catch (error: any) {
-      toast.error("Gagal duplikasi");
-    }
+      const result = await createQuotation({
+        ...pendingFormData,
+        subtotal: totals.subtotalBeforeDiscount,
+        tax_amount: totals.taxAmount,
+        total_amount: totals.grandTotal
+      });
+      if (result.success) {
+        toast.success("Penawaran Disimpan (DRAFT)");
+        setIsDialogOpen(false);
+        reset();
+        loadData();
+      }
+    } catch (error: any) { toast.error("Gagal menyimpan penawaran"); }
+    finally { setSubmitting(false); }
   };
 
   const handleStatusUpdate = async (id: string, status: string) => {
@@ -449,391 +298,400 @@ export default function OperatorQuotationListPage() {
       await updateQuotationStatus(id, status);
       toast.success("Status diperbarui");
       loadData();
-    } catch (error: any) {
-      toast.error("Gagal update status");
-    }
+    } catch (error: any) { toast.error("Gagal update status"); }
   };
 
-  const getFilteredAndSortedData = () => {
+  const [customerData, setCustomerData] = useState({ full_name: "", email: "", company_name: "", address: "", password: "123456" });
+  const handleCreateCustomer = async () => {
+    if (!customerData.full_name || !customerData.email) return toast.error("Nama dan Email wajib diisi");
+    setSubmitting(true);
+    try {
+      await createOrUpdateUser({ ...customerData, role: 'client' });
+      toast.success("Customer baru berhasil ditambahkan");
+      setIsCustomerDialogOpen(false);
+      const cResult = await getClients();
+      setClients(cResult);
+      setCustomerData({ full_name: "", email: "", company_name: "", address: "", password: "123456" });
+    } catch (error: any) { toast.error("Gagal menambahkan customer"); }
+    finally { setSubmitting(false); }
+  };
+
+  const filteredItems = useMemo(() => {
     let filtered = [...data.items];
-    if (search) {
-      filtered = filtered.filter(item => 
-        item.quotation_number.toLowerCase().includes(search.toLowerCase()) ||
-        item.profile.full_name.toLowerCase().includes(search.toLowerCase())
-      );
-    }
-    if (filterStatus !== "all") {
-      filtered = filtered.filter(item => item.status === filterStatus);
-    }
-    filtered.sort((a, b) => {
-      let comp = 0;
-      if (sortBy === "date") comp = new Date(a.date).getTime() - new Date(b.date).getTime();
-      else if (sortBy === "total") comp = Number(a.total_amount) - Number(b.total_amount);
-      else if (sortBy === "number") comp = a.quotation_number.localeCompare(b.quotation_number);
-      return sortOrder === "asc" ? comp : -comp;
-    });
+    if (filterStatus !== "all") filtered = filtered.filter(item => item.status === filterStatus);
     return filtered;
-  };
+  }, [data.items, filterStatus]);
 
-  const filteredItems = getFilteredAndSortedData();
+  const stats = useMemo(() => ({
+    total: data.total,
+    draft: data.items.filter((i: any) => i.status === 'draft' || i.status === 'sent').length,
+    accepted: data.items.filter((i: any) => i.status === 'accepted').length,
+    rejected: data.items.filter((i: any) => i.status === 'rejected').length,
+    paid: data.items.filter((i: any) => i.status === 'paid').length,
+  }), [data]);
 
-  const getStatusColor = (status: string) => {
-    const option = statusOptions.find(opt => opt.value === status);
-    return option?.color || "bg-slate-100 text-slate-700 border-slate-200";
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'draft': 
-      case 'sent': return 'DRAFT';
-      case 'accepted': return 'DITERIMA';
-      case 'rejected': return 'DITOLAK';
-      case 'paid': return 'DIBAYAR';
-      default: return status.toUpperCase();
-    }
-  };
+  if (loading) return <div className="flex h-[80vh] items-center justify-center"><ChemicalLoader /></div>;
 
   return (
-    <div className="p-4 md:p-10 pb-24 md:pb-10">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-bold text-emerald-900 tracking-tight">Penawaran Harga</h1>
-          <p className="text-slate-500 text-sm">Kelola penawaran harga laboratorium (Operator).</p>
+    <div className="p-4 md:p-10 pb-24 md:pb-10 max-w-7xl mx-auto space-y-10 bg-slate-50/30">
+      {/* Header Premium */}
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <div>
+          <div className="flex items-center gap-3 mb-1">
+            <div className="h-8 w-1 bg-emerald-600 rounded-full" />
+            <h1 className="text-3xl font-black text-emerald-950 tracking-tighter uppercase font-[family-name:var(--font-montserrat)]">
+              Manajemen Penawaran
+            </h1>
+          </div>
+          <p className="text-slate-500 text-sm font-medium italic pl-4">
+            Kelola <span className="text-emerald-700 font-bold not-italic">Penawaran Harga Digital</span> laboratorium WahfaLab.
+          </p>
         </div>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={() => loadData(true)} disabled={refreshing} className="h-12 px-6 rounded-2xl border-2 border-emerald-100 text-emerald-700 font-black text-xs uppercase hover:bg-emerald-50 transition-all shadow-sm">
+            <RefreshCw className={cn("h-4 w-4 mr-2", refreshing && "animate-spin")} /> Sync
+          </Button>
+          <Button onClick={() => { reset(); setIsDialogOpen(true); }} className="h-12 px-8 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase rounded-2xl shadow-xl shadow-emerald-900/20 flex items-center gap-2 border-b-4 border-emerald-800 transition-all active:scale-95">
+            <Plus className="h-4 w-4" /> Baru
+          </Button>
+        </div>
+      </header>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <StatCard title="Total Order" value={stats.total} icon={Layers} color="emerald" active={filterStatus === "all"} onClick={() => setFilterStatus("all")} />
+        <StatCard title="Draft" value={stats.draft} icon={FileText} color="amber" active={filterStatus === "draft"} onClick={() => setFilterStatus("draft")} />
+        <StatCard title="Diterima" value={stats.accepted} icon={CheckCircle} color="blue" active={filterStatus === "accepted"} onClick={() => setFilterStatus("accepted")} />
+        <StatCard title="Ditolak" value={stats.rejected} icon={XCircle} color="red" active={filterStatus === "rejected"} onClick={() => setFilterStatus("rejected")} />
+        <StatCard title="Lunas" value={stats.paid} icon={DollarSign} color="purple" active={filterStatus === "paid"} onClick={() => setFilterStatus("paid")} />
       </div>
 
-      {/* Stats Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
-        <StatCard title="Total" value={data.total} icon={FileText} color="emerald" />
-        <StatCard title="Draft" value={data.items.filter((i: any) => i.status === 'draft' || i.status === 'sent').length} icon={Clock} color="amber" />
-        <StatCard title="Diterima" value={data.items.filter((i: any) => i.status === 'accepted').length} icon={CheckCircle} color="blue" />
-        <StatCard title="Ditolak" value={data.items.filter((i: any) => i.status === 'rejected').length} icon={XCircle} color="red" />
-        <StatCard title="Lunas" value={data.items.filter((i: any) => i.status === 'paid').length} icon={DollarSign} color="purple" />
-      </div>
-
-      {/* Main Table */}
-      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-        <div className="p-5 border-b bg-emerald-50/5 flex flex-col md:flex-row gap-4 items-center">
-          <div className="relative flex-1 w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
-            <Input
-              placeholder="Cari nomor penawaran atau klien..."
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="pl-10 h-11 focus-visible:ring-emerald-500 rounded-lg"
-            />
+      {/* Main Table Container */}
+      <Card className="border-none shadow-2xl shadow-emerald-900/5 rounded-[1.5rem] md:rounded-[2.5rem] overflow-hidden bg-white">
+        <CardContent className="p-0">
+          <div className="p-4 md:p-8 border-b bg-slate-50/30 flex flex-col md:flex-row gap-4 md:gap-6 items-center">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-600" />
+              <input placeholder="Cari nomor penawaran..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full h-12 md:h-14 pl-12 pr-4 bg-white border-2 border-slate-100 rounded-xl md:rounded-2xl shadow-sm focus:border-emerald-500 outline-none font-medium text-sm transition-all" />
+            </div>
+            <div className="flex gap-3 w-full md:w-auto">
+               <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="h-12 md:h-14 w-full md:w-48 rounded-xl md:rounded-2xl border-2 border-slate-100 bg-white font-bold text-xs uppercase transition-all">
+                    <Filter className="h-4 w-4 mr-2 text-emerald-600" />
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl border-2 border-slate-100 shadow-2xl">
+                    <SelectItem value="all" className="font-bold text-xs">Semua Status</SelectItem>
+                    {Object.keys(statusConfig).map(key => (
+                      <SelectItem key={key} value={key} className="font-bold text-xs uppercase">{statusConfig[key].label}</SelectItem>
+                    ))}
+                  </SelectContent>
+               </Select>
+            </div>
           </div>
-          <div className="flex gap-2 w-full md:w-auto justify-end">
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-full md:w-40 h-11 rounded-lg border-slate-200 bg-white">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                {statusOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
 
-            <Button 
-              onClick={() => { reset(); setIsDialogOpen(true); }} 
-              size="icon"
-              className="bg-emerald-600 hover:bg-emerald-700 shadow-lg cursor-pointer h-11 w-11 shrink-0"
-              title="Buat Penawaran Baru"
-            >
-              <Plus className="h-5 w-5" />
-            </Button>
+          <div className="overflow-x-auto w-full">
+            <table className="min-w-full">
+              <thead className="bg-slate-50/50 border-b border-slate-100 text-left">
+                <tr>
+                  <th className="px-4 md:px-8 py-5 font-black text-emerald-900/40 uppercase text-[10px] tracking-[2px]">Dokumen</th>
+                  <th className="px-4 md:px-6 py-5 font-black text-emerald-900/40 uppercase text-[10px] tracking-[2px] hidden sm:table-cell">Klien</th>
+                  <th className="px-4 md:px-6 py-5 text-right font-black text-emerald-900/40 uppercase text-[10px] tracking-[2px]">Tagihan</th>
+                  <th className="px-4 md:px-6 py-5 text-center font-black text-emerald-900/40 uppercase text-[10px] tracking-[2px] hidden xs:table-cell">Status</th>
+                  <th className="px-4 md:px-8 py-5 text-center font-black text-emerald-900/40 uppercase text-[10px] tracking-[2px]">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {filteredItems.length === 0 ? (
+                  <tr><td colSpan={5} className="py-24 text-center text-slate-400 font-black uppercase text-xs tracking-widest">Data Tidak Ditemukan</td></tr>
+                ) : (
+                  filteredItems.map((item) => {
+                    const cfg = statusConfig[item.status] || statusConfig.draft;
+                    const Icon = cfg.icon;
+                    return (
+                      <tr key={item.id} className="group hover:bg-emerald-50/30 transition-all cursor-default">
+                        <td className="px-4 md:px-8 py-4 md:py-6">
+                          <div className="flex flex-col">
+                            <span className="font-mono text-xs md:text-sm font-black text-emerald-700 bg-emerald-100/50 px-2 md:px-3 py-1 rounded-lg w-fit mb-1 md:mb-2">{item.quotation_number}</span>
+                            <div className="hidden sm:flex items-center gap-2 text-[10px] text-slate-400 font-bold uppercase"><Calendar className="h-3 w-3" />{new Date(item.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+                          </div>
+                        </td>
+                        <td className="px-4 md:px-6 py-4 md:py-6 hidden sm:table-cell">
+                          <div className="flex flex-col">
+                            <span className="font-black text-slate-800 text-sm truncate max-w-[150px]">{item.profile?.full_name}</span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight flex items-center gap-1.5 mt-1 truncate max-w-[150px]"><Layers className="h-3 w-3 text-emerald-600" />{item.profile?.company_name || 'Personal'}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 md:px-6 py-4 md:py-6 text-right font-black text-emerald-950 text-sm md:text-base whitespace-nowrap">
+                           Rp {Number(item.total_amount).toLocaleString("id-ID")}
+                        </td>
+                        <td className="px-4 md:px-6 py-4 md:py-6 text-center hidden xs:table-cell">
+                           <Badge className={cn("font-black text-[8px] md:text-[9px] px-2 md:px-3 py-1 rounded-full border-none shadow-sm", cfg.bg, cfg.color)}>
+                              {cfg.label}
+                           </Badge>
+                        </td>
+                        <td className="px-4 md:px-8 py-4 md:py-6">
+                          <div className="flex items-center justify-center gap-1 md:gap-2">
+                            {item.status === 'draft' && (
+                              <Button 
+                                onClick={() => handleStatusUpdate(item.id, 'sent')}
+                                size="sm" 
+                                className="bg-blue-600 hover:bg-blue-700 text-white font-black text-[9px] uppercase h-9 px-4 rounded-xl shadow-lg shadow-blue-900/20 mr-2 transition-all active:scale-95"
+                              >
+                                <Send className="h-3 w-3 mr-1.5" /> Kirim
+                              </Button>
+                            )}
+                            <Link href={`/operator/quotations/${item.id}`}><Button variant="ghost" size="icon" className="h-8 md:h-10 w-8 md:w-10 rounded-lg md:rounded-xl hover:bg-emerald-100 text-emerald-600 transition-all"><Eye className="h-4 w-4" /></Button></Link>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 md:h-10 w-8 md:w-10 rounded-lg md:rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-56 rounded-2xl border-2 border-slate-100 p-2 shadow-2xl">
+                                <DropdownMenuItem className="rounded-xl font-bold text-xs cursor-pointer px-4 py-3"><Printer className="mr-2 h-4 w-4" /> Cetak Penawaran</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => cloneQuotation(item.id).then(() => loadData())} className="rounded-xl font-bold text-xs cursor-pointer px-4 py-3"><Copy className="mr-2 h-4 w-4" /> Duplikasi</DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => handleStatusUpdate(item.id, 'accepted')} className="rounded-xl font-bold text-xs cursor-pointer px-4 py-3 text-emerald-600"><CheckCircle className="mr-2 h-4 w-4" /> Tandai Diterima</DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => setDeleteId(item.id)} className="rounded-xl font-bold text-xs cursor-pointer px-4 py-3 text-red-600"><Trash2 className="mr-2 h-4 w-4" /> Hapus</DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
-        </div>
+        </CardContent>
+      </Card>
 
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-slate-50/80 font-bold">
-              <TableHead className="w-12 px-6">No</TableHead>
-              <TableHead className="px-4">No. Penawaran</TableHead>
-              <TableHead className="px-4">Klien</TableHead>
-              <TableHead className="px-4 text-right">Total Tagihan</TableHead>
-              <TableHead className="px-4 text-center">Status</TableHead>
-              <TableHead className="px-6 text-center">Aksi</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-20">
-                  <div className="flex flex-col items-center justify-center">
-                    <ChemicalLoader />
-                    <p className="mt-4 text-emerald-800 font-bold uppercase tracking-widest text-[10px] animate-pulse">Memuat Daftar Penawaran...</p>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : filteredItems.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-20 text-slate-400">Data tidak ditemukan.</TableCell></TableRow>
-            ) : (
-              filteredItems.map((item: any, idx: number) => (
-                <TableRow key={item.id} className="hover:bg-emerald-50/5">
-                  <TableCell className="px-6 text-slate-400 text-xs font-bold">{idx + 1 + (page - 1) * limit}</TableCell>
-                  <TableCell className="font-bold text-emerald-900 px-4">{item.quotation_number}</TableCell>
-                  <TableCell className="px-4">
-                    <div className="flex flex-col">
-                      <span className="font-medium text-slate-800">{item.profile.full_name}</span>
-                      <span className="text-[10px] text-slate-400 uppercase">{item.profile.company_name || "Personal"}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right font-bold text-emerald-700 px-4">Rp {Number(item.total_amount).toLocaleString("id-ID")}</TableCell>
-                  <TableCell className="px-4 text-center">
-                    <Badge variant="outline" className={cn("capitalize text-[10px]", getStatusColor(item.status))}>
-                      {getStatusLabel(item.status)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-center px-6">
-                    <div className="flex justify-center gap-2">
-                      <Link href={`/operator/quotations/${item.id}`}>
-                        <Button variant="ghost" size="icon" className="text-emerald-600 hover:bg-emerald-50 h-9 w-9 rounded-xl transition-all active:scale-90" title="Lihat Detail">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </Link>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all active:scale-90">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem onClick={() => handleClone(item.id)}><Copy className="mr-2 h-4 w-4" /> Duplikasi</DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleStatusUpdate(item.id, 'accepted')}>Tandai Diterima</DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleDelete(item.id)} className="text-red-600">
-                            <Trash2 className="mr-2 h-4 w-4" /> Hapus
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-
-        <div className="p-4 border-t flex flex-col md:flex-row items-center justify-between bg-slate-50/50 gap-4">
-          <div className="flex items-center gap-4">
-            <p className="text-xs text-slate-500 font-medium">Total {data.total} penawaran</p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="h-9 w-9 rounded-xl border-slate-200 hover:bg-emerald-50 text-emerald-600" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
-            <div className="flex items-center px-4 text-xs font-bold bg-white border border-slate-200 rounded-xl shadow-sm text-slate-600">{page} / {data.pages}</div>
-            <Button variant="outline" size="sm" className="h-9 w-9 rounded-xl border-slate-200 hover:bg-emerald-50 text-emerald-600" disabled={page === data.pages} onClick={() => setPage(p => p + 1)}><ChevronRight className="h-4 w-4" /></Button>
-          </div>
-        </div>
+      {/* Pagination */}
+      <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-4 md:p-6 rounded-2xl md:rounded-[2rem] shadow-xl shadow-emerald-900/5 border border-slate-100 gap-4">
+         <p className="text-[10px] font-black text-slate-400 uppercase tracking-[2px]">Total {data.total} Dokumen</p>
+         <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="h-10 w-10 rounded-xl border-slate-200 transition-all active:scale-90" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+            <div className="h-10 px-5 flex items-center justify-center bg-emerald-50 rounded-xl text-xs font-black text-emerald-900 border border-emerald-100">{page} / {data.pages}</div>
+            <Button variant="outline" size="sm" className="h-10 w-10 rounded-xl border-slate-200 transition-all active:scale-90" disabled={page === data.pages} onClick={() => setPage(p => p + 1)}><ChevronRight className="h-4 w-4" /></Button>
+         </div>
       </div>
 
       {/* CREATE QUOTATION DIALOG */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto p-0 border-none shadow-2xl rounded-2xl">
-          <div className="bg-emerald-700/80 backdrop-blur-md p-4 text-white sticky top-0 z-20 border-b border-emerald-600/50 shadow-lg">
+        <DialogContent className="sm:max-w-4xl max-h-screen sm:max-h-[95vh] overflow-y-auto p-0 border-none shadow-2xl sm:rounded-3xl">
+          <div className="bg-emerald-700 p-4 md:p-6 text-white sticky top-0 z-20 border-b border-emerald-600 shadow-xl">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-white border border-white/20 shadow-inner">
-                  <FileText className="h-4 w-4" />
-                </div>
-                <DialogTitle className="text-base font-black uppercase tracking-widest">Buat Penawaran Baru</DialogTitle>
+              <div className="flex items-center gap-3 md:gap-4">
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-white/20 flex items-center justify-center text-white border border-white/20"><FileText className="h-5 w-5 md:h-6 md:w-6" /></div>
+                <div><DialogTitle className="text-lg md:text-xl font-black uppercase tracking-tight leading-none">Buat Penawaran</DialogTitle><p className="text-emerald-200 text-[8px] md:text-[10px] font-bold uppercase tracking-widest mt-1">Digital Quotation WahfaLab</p></div>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => setIsDialogOpen(false)} className="text-white/60 hover:text-white hover:bg-white/10 rounded-xl h-8 w-8 transition-all"><X className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="icon" onClick={() => setIsDialogOpen(false)} className="text-white/60 hover:text-white h-10 w-10 rounded-2xl"><X className="h-6 w-6" /></Button>
             </div>
           </div>
 
-          <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="p-6 space-y-6">
-            <div className="space-y-3">
-              <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-[2px] flex items-center gap-2">
-                <span className="w-5 h-5 rounded bg-emerald-600 text-white flex items-center justify-center text-[9px]">01</span>
-                Informasi Pelanggan
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Nomor Penawaran</label>
-                  <Input {...register("quotation_number")} readOnly className="bg-slate-100 font-mono font-bold text-emerald-700 h-9 text-xs" />
-                </div>
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Nama Pelanggan</label>
-                    <Button type="button" variant="link" size="sm" className="h-auto p-0 text-emerald-600 font-bold text-[10px]" onClick={() => setIsCustomerDialogOpen(true)}>+ BARU (Alt+K)</Button>
-                  </div>
-                  <Controller
-                    control={control}
-                    name="user_id"
-                    render={({ field }) => (
-                      <Select value={field.value || ""} onValueChange={field.onChange}>
-                        <SelectTrigger className="h-9 border-slate-300 bg-white text-xs"><SelectValue placeholder="Pilih klien..." /></SelectTrigger>
-                        <SelectContent>{clients.map(c => <SelectItem key={c.id} value={c.id} className="text-xs">{c.full_name} - {c.company_name || "Personal"}</SelectItem>)}</SelectContent>
-                      </Select>
-                    )}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-[2px] flex items-center gap-2">
-                  <span className="w-5 h-5 rounded bg-emerald-600 text-white flex items-center justify-center text-[9px]">02</span>
-                  Layanan & Parameter
-                </h4>
-                <Button type="button" variant="outline" size="sm" onClick={() => append({ service_id: "", equipment_id: "", qty: 1, price: 0 })} className="border-emerald-600 text-emerald-700 font-bold h-7 text-[10px]">Tambah Item (Alt+N)</Button>
-              </div>
-              <div className="space-y-2">
-                {fields.map((field, index) => {
-                  if (watchedItems[index]?.equipment_id) return null;
-                  const itemParams = watchedItems[index]?.parameters || [];
-                  return (
-                    <div key={field.id} className="bg-white border border-slate-100 p-4 rounded-2xl relative shadow-sm hover:border-emerald-200 transition-all space-y-3">
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                        <div className="md:col-span-6 space-y-1">
-                          <label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Layanan Lab</label>
-                          <Controller
-                            control={control}
-                            name={`items.${index}.service_id`}
-                            render={({ field }) => (
-                              <Select value={field.value || ""} onValueChange={(val) => { field.onChange(val); handleServiceChange(index, val); }}>
-                                <SelectTrigger className="h-9 border-slate-200 text-xs"><SelectValue placeholder="Pilih layanan..." /></SelectTrigger>
-                                <SelectContent>{services.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}</SelectContent>
-                              </Select>
-                            )}
-                          />
-                        </div>
-                        <div className="md:col-span-2 space-y-1 text-center"><label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Qty</label><Input type="number" {...register(`items.${index}.qty`)} className="h-9 text-center font-bold text-xs" /></div>
-                        <div className="md:col-span-3 space-y-1"><label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Harga (Rp)</label><Input type="number" {...register(`items.${index}.price`)} className="h-9 font-bold text-emerald-700 text-xs" /></div>
-                        <div className="md:col-span-1"><Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="w-full h-9 text-slate-300 hover:text-red-500"><Trash2 className="h-4 w-4" /></Button></div>
-                      </div>
-                      
-                      {watchedItems[index]?.service_id && (
-                        <div className="flex flex-col gap-2">
-                          {(() => {
-                            const selectedService = services.find(s => s.id === watchedItems[index].service_id);
-                            const regulation = selectedService?.regulation || selectedService?.regulation_ref?.name;
-                            if (!regulation) return null;
-                            return (
-                              <div className="text-[9px] bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200 w-fit">
-                                <span className="font-bold">Regulasi:</span> {regulation}
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      )}
-
-                      {itemParams.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {itemParams.map((param: string, pIdx: number) => (
-                            <Badge key={`${index}-${pIdx}`} variant="secondary" className="text-[8px] font-bold bg-blue-50 text-blue-600 border border-blue-100 pl-2 pr-1 py-0.5 rounded-md flex items-center gap-1 group/tag">
-                              {param}
-                              <button type="button" onClick={() => { const newList = [...itemParams]; newList.splice(pIdx, 1); setValue(`items.${index}.parameters`, newList); }} className="hover:bg-blue-200 rounded-sm p-0.5 transition-colors"><X className="h-2 w-2" /></button>
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-[2px] flex items-center gap-2">
-                <span className="w-5 h-5 rounded bg-emerald-600 text-white flex items-center justify-center text-[9px]">03</span>
-                Biaya Tambahan
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 shadow-sm relative">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-slate-700"><MapPin className="h-3 w-3 text-emerald-500" /><span className="text-[11px] font-bold uppercase tracking-tight">Perdiem</span></div>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setIsPerdiemDialogOpen(true)} className="h-6 text-[8px] font-black border-emerald-300 text-emerald-700 bg-white">KATALOG (Alt+P)</Button>
-                  </div>
-                  {watchedPerdiemName && <p className="text-[9px] text-emerald-600 font-bold bg-emerald-100/50 px-2 py-0.5 rounded w-fit italic">{watchedPerdiemName}</p>}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1"><span className="text-[8px] font-bold text-slate-400">HARGA</span><Input type="number" {...register("perdiem_price")} className="h-8 bg-white font-bold text-xs" /></div>
-                    <div className="space-y-1"><span className="text-[8px] font-bold text-slate-400">HARI</span><Input type="number" {...register("perdiem_qty")} className="h-8 bg-white text-center font-bold text-xs" /></div>
-                  </div>
-                </div>
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 shadow-sm relative">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-slate-700"><Car className="h-3 w-3 text-blue-500" /><span className="text-[11px] font-bold uppercase tracking-tight">Transport</span></div>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setIsTransportDialogOpen(true)} className="h-6 text-[8px] font-black border-blue-300 text-blue-700 bg-white">KATALOG (Alt+T)</Button>
-                  </div>
-                  {watchedTransportName && <p className="text-[9px] text-blue-600 font-bold bg-blue-100/50 px-2 py-0.5 rounded w-fit italic">{watchedTransportName}</p>}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1"><span className="text-[8px] font-bold text-slate-400">HARGA</span><Input type="number" {...register("transport_price")} className="h-8 bg-white font-bold text-xs" /></div>
-                    <div className="space-y-1"><span className="text-[8px] font-bold text-slate-400">QTY</span><Input type="number" {...register("transport_qty")} className="h-8 bg-white text-center font-bold text-xs" /></div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 shadow-sm">
-                <div className="flex items-center justify-between border-b pb-2">
-                  <div className="flex items-center gap-2 text-slate-700 font-bold text-[11px] uppercase tracking-tight"><Wrench className="h-3 w-3 text-amber-500" /> Sewa Alat Tambahan</div>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setIsEquipmentDialogOpen(true)} className="h-6 text-[8px] font-black border-amber-300 text-amber-700 bg-white uppercase">Katalog Alat (Alt+E)</Button>
-                </div>
+          <form onSubmit={handleSubmit(onSubmit)} className="p-4 md:p-8 space-y-10 pb-32 sm:pb-8 bg-slate-50/20">
+            {/* Step 01: Customer */}
+            <section className="space-y-4">
+              <h4 className="text-[10px] md:text-[11px] font-black text-emerald-600 uppercase tracking-[2px] md:tracking-[3px] flex items-center gap-3"><span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs">01</span> Informasi Pelanggan</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 bg-white p-4 md:p-6 rounded-2xl md:rounded-[2rem] border-2 border-slate-100 shadow-sm transition-all hover:border-emerald-500">
+                <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">No. Dokumen</label><Input {...register("quotation_number")} readOnly className="h-12 md:h-14 bg-slate-50 border-2 border-slate-100 rounded-xl md:rounded-2xl font-mono font-black text-emerald-700 text-sm md:text-base" /></div>
                 <div className="space-y-2">
-                  {fields.filter((item: any) => item.equipment_id).length === 0 ? (
-                    <div className="text-center py-2 bg-white/50 rounded-lg border border-dashed border-slate-300"><span className="text-[10px] text-slate-400 italic">Belum ada alat dipilih...</span></div>
-                  ) : (
-                    fields.map((field, index) => {
-                      if (!watchedItems[index]?.equipment_id) return null;
-                      return (
-                        <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end bg-white border border-slate-200 p-2 rounded-lg shadow-sm">
-                          <div className="md:col-span-5 flex items-center gap-2">
-                            <div className="w-6 h-6 rounded bg-amber-100 flex items-center justify-center text-amber-600 shrink-0"><Wrench className="h-3 w-3" /></div>
-                            <span className="text-[10px] font-bold text-slate-700 truncate">{watchedItems[index]?.name}</span>
-                          </div>
-                          <div className="md:col-span-3"><Input type="number" {...register(`items.${index}.price`)} className="h-7 text-[10px] font-bold bg-slate-50 border-none" /></div>
-                          <div className="md:col-span-2"><Input type="number" {...register(`items.${index}.qty`)} className="h-7 text-[10px] font-bold text-center bg-slate-50 border-none" /></div>
-                          <div className="md:col-span-2 flex justify-end"><Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="h-6 w-6 text-slate-300 hover:text-red-500"><XCircle className="h-3 w-3" /></Button></div>
-                        </div>
-                      );
-                    })
-                  )}
+                  <div className="flex items-center justify-between mb-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nama Klien</label><Button type="button" variant="link" size="sm" className="h-auto p-0 text-emerald-600 font-black text-[10px]" onClick={() => setIsCustomerDialogOpen(true)}>+ BARU (Alt+K)</Button></div>
+                  <Controller control={control} name="user_id" render={({ field }) => (
+                    <Select value={field.value || ""} onValueChange={field.onChange}><SelectTrigger className="h-12 md:h-14 border-2 border-slate-100 rounded-xl md:rounded-2xl bg-slate-50/50 font-bold text-xs md:text-sm"><SelectValue placeholder="Pilih Klien..." /></SelectTrigger><SelectContent className="rounded-2xl shadow-2xl">{clients.map(c => <SelectItem key={c.id} value={c.id} className="font-bold text-sm">{c.full_name} - {c.company_name || "Personal"}</SelectItem>)}</SelectContent></Select>
+                  )} />
                 </div>
               </div>
-            </div>
+            </section>
 
-            <div className="space-y-3">
-              <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-[2px] flex items-center gap-2">
-                <span className="w-5 h-5 rounded bg-emerald-600 text-white flex items-center justify-center text-[9px]">04</span>
-                Pajak & Total
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-inner">
-                  <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Diskon (Rp)</label><Input type="number" {...register("discount_amount")} className="h-9 font-bold text-sm rounded-lg" /></div>
-                  <div className="flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-100">
-                    <Checkbox id="use_tax" checked={watchedUseTax} onCheckedChange={(val) => setValue("use_tax", val === true)} className="h-4 w-4" />
-                    <label htmlFor="use_tax" className="text-xs font-bold text-slate-700 cursor-pointer">Gunakan Pajak PPN (11%)</label>
-                  </div>
+            {/* Sequential Flow Logic */}
+            <div className={cn("space-y-10 transition-all duration-500", !hasClientSelected && "opacity-40 pointer-events-none grayscale blur-[1px]")}>
+              
+              {/* Step 02: Services */}
+              <section className="space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h4 className="text-[10px] md:text-[11px] font-black text-emerald-600 uppercase tracking-[2px] md:tracking-[3px] flex items-center gap-3"><span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs">02</span> Layanan Lab</h4>
+                  <Button type="button" variant="outline" size="sm" onClick={() => append({ service_id: "", equipment_id: "", qty: 1, price: 0 })} className="h-9 md:h-10 rounded-lg md:rounded-xl border-2 border-emerald-100 text-emerald-700 font-black text-[9px] md:text-[10px] uppercase bg-white shadow-sm transition-all hover:scale-105 active:scale-95">+ ITEM (Alt+N)</Button>
                 </div>
-                <div className="bg-emerald-950 p-6 rounded-[1.5rem] text-white shadow-2xl relative overflow-hidden flex flex-col justify-center border-2 border-emerald-900">
-                  <div className="relative space-y-2">
-                    <div className="flex justify-between text-[10px] font-black opacity-50 uppercase tracking-[2px]"><span>Subtotal</span><span>Rp {subtotalBeforeDiscount.toLocaleString("id-ID")}</span></div>
-                    <div className="flex justify-between text-[10px] font-black text-red-400 uppercase tracking-[2px]"><span>Diskon</span><span>- Rp {watchedDiscount.toLocaleString("id-ID")}</span></div>
-                    {watchedUseTax && <div className="flex justify-between text-[10px] font-black text-emerald-400 uppercase tracking-[2px]"><span>Pajak 11%</span><span>Rp {tax.toLocaleString("id-ID")}</span></div>}
-                    <div className="border-t border-white/10 pt-3 mt-2 flex justify-between items-end">
-                      <span className="text-[10px] font-black text-emerald-300 uppercase tracking-[3px]">TOTAL</span>
-                      <span className="text-2xl font-black font-mono tracking-tighter">Rp {total.toLocaleString("id-ID")}</span>
+                <div className="space-y-3">
+                  {fields.map((field, index) => {
+                    if (watchedItems[index]?.equipment_id) return null;
+                    const selectedServiceId = watchedItems[index]?.service_id;
+                    const selectedService = services.find(s => s.id === selectedServiceId);
+                    
+                    return (
+                      <div key={field.id} className="bg-white border-2 border-slate-100 p-4 md:p-6 rounded-2xl md:rounded-[2rem] shadow-sm hover:shadow-xl hover:shadow-emerald-900/5 transition-all space-y-4 group hover:scale-[1.01] hover:border-emerald-200">
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                          <div className="md:col-span-6 space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Pilih Layanan</label>
+                            <Controller control={control} name={`items.${index}.service_id`} render={({ field }) => (
+                              <Select value={field.value || ""} onValueChange={(val) => { field.onChange(val); handleServiceChange(index, val); }}>
+                                <SelectTrigger className="h-12 border-2 border-slate-100 rounded-xl bg-slate-50/50 font-bold text-xs"><SelectValue placeholder="Cari Layanan..." /></SelectTrigger>
+                                <SelectContent className="rounded-xl shadow-2xl">{services.map(s => (
+                                  <SelectItem key={s.id} value={s.id} className="text-xs font-bold">{s.name}</SelectItem>
+                                ))}</SelectContent></Select>
+                            )} />
+                            {selectedService && (
+                              <div className="flex items-center gap-2 mt-1 ml-1"><div className="h-1 w-1 rounded-full bg-emerald-500" /><p className="text-[9px] font-black text-emerald-700 uppercase italic">{(selectedService.regulation || selectedService.regulation_ref?.name) || '-'}</p></div>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-2 md:col-span-5 gap-3">
+                             <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Qty</label><Input type="number" {...register(`items.${index}.qty`)} className="h-12 text-center font-black text-base border-2 border-slate-100 rounded-xl bg-slate-50/30" /></div>
+                             <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase">Harga</label><Input type="number" {...register(`items.${index}.price`)} className="h-12 font-black text-emerald-700 text-sm border-2 border-slate-100 rounded-xl bg-slate-50/30" /></div>
+                          </div>
+                          <div className="md:col-span-1"><Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="w-full h-12 text-slate-200 hover:text-red-500 transition-colors"><Trash2 className="h-5 w-5" /></Button></div>
+                        </div>
+
+                        {/* Parameter Tags with Dynamic Removal */}
+                        {(watchedItems?.[index]?.parameters?.length ?? 0) > 0 && (
+                          <div className="flex flex-wrap gap-2 pt-3 border-t border-slate-50 mt-2">
+                            {watchedItems?.[index]?.parameters?.map((p: any, pIdx: number) => (
+                              <Badge key={pIdx} variant="secondary" className="bg-blue-50 text-blue-600 font-bold text-[9px] uppercase border-blue-100 h-7 pl-3 pr-1 rounded-lg shadow-sm hover:bg-blue-100 transition-all group/tag flex items-center gap-1.5">
+                                {p}
+                                <button 
+                                  type="button" 
+                                  onClick={() => removeParameter(index, pIdx)}
+                                  className="h-5 w-5 rounded-md flex items-center justify-center text-blue-300 hover:bg-blue-200 hover:text-blue-700 transition-colors ml-1"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {/* Step 03: Field & Equipment */}
+              <section className="space-y-4">
+                <h4 className="text-[10px] md:text-[11px] font-black text-emerald-600 uppercase tracking-[2px] md:tracking-[3px] flex items-center gap-3"><span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs">03</span> Biaya Lapangan & Sewa Alat</h4>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+                  <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-[2rem] border-2 border-slate-100 space-y-4 shadow-sm hover:shadow-xl hover:shadow-emerald-900/5 transition-all hover:scale-[1.02] hover:border-emerald-200">
+                    <div className="flex items-center justify-between"><div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-emerald-600" /><span className="text-xs font-black text-slate-800 uppercase">Perdiem</span></div><Button type="button" variant="outline" size="sm" onClick={() => setIsPerdiemDialogOpen(true)} className="h-7 rounded-lg border-2 border-emerald-100 text-emerald-700 font-black text-[8px] uppercase bg-white shadow-sm transition-all hover:bg-emerald-50">KATALOG (Alt+P)</Button></div>
+                    <Input {...register("perdiem_name")} placeholder="Nama perdiem..." className="h-10 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-[10px]" />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1"><span className="text-[8px] font-black text-slate-400 uppercase ml-1">Harga</span><Input type="number" {...register("perdiem_price")} className="h-12 bg-slate-50 font-black text-sm border-2 border-slate-100 rounded-xl" /></div>
+                      <div className="space-y-1"><span className="text-[8px] font-black text-slate-400 uppercase ml-1 text-center block">Hari</span><Input type="number" {...register("perdiem_qty")} className="h-12 bg-slate-50 text-center font-black text-base border-2 border-slate-100 rounded-xl" /></div>
+                    </div>
+                  </div>
+                  <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-[2rem] border-2 border-slate-100 space-y-4 shadow-sm hover:shadow-xl hover:shadow-blue-900/5 transition-all hover:scale-[1.02] hover:border-blue-200">
+                    <div className="flex items-center justify-between"><div className="flex items-center gap-2"><Car className="h-4 w-4 text-blue-600" /><span className="text-xs font-black text-slate-800 uppercase">Transport</span></div><Button type="button" variant="outline" size="sm" onClick={() => setIsTransportDialogOpen(true)} className="h-7 rounded-lg border-2 border-blue-100 text-blue-700 font-black text-[8px] uppercase bg-white shadow-sm transition-all hover:bg-blue-50">KATALOG (Alt+T)</Button></div>
+                    <Input {...register("transport_name")} placeholder="Tujuan transport..." className="h-10 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-[10px]" />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1"><span className="text-[8px] font-black text-slate-400 uppercase ml-1">Harga</span><Input type="number" {...register("transport_price")} className="h-12 bg-slate-50 font-black text-sm border-2 border-slate-100 rounded-xl" /></div>
+                      <div className="space-y-1"><span className="text-[8px] font-black text-slate-400 uppercase ml-1 text-center block">Qty</span><Input type="number" {...register("transport_qty")} className="h-12 bg-slate-50 text-center font-black text-base border-2 border-slate-100 rounded-xl" /></div>
                     </div>
                   </div>
                 </div>
-              </div>
+
+                <div className="bg-amber-50/50 p-4 md:p-6 rounded-2xl md:rounded-[2.5rem] border-2 border-dashed border-amber-200 space-y-4 shadow-sm hover:shadow-xl transition-all">
+                  <div className="flex items-center justify-between flex-wrap gap-2 border-b border-amber-100 pb-4">
+                    <div className="flex items-center gap-2 md:gap-3 text-amber-900 font-black text-xs md:text-sm uppercase"><Wrench className="h-4 w-4 md:h-5 md:w-5 text-amber-600" /> Sewa Alat Tambahan</div>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setIsEquipmentDialogOpen(true)} className="h-8 md:h-10 rounded-lg md:rounded-xl border-2 border-amber-200 text-amber-700 font-black text-[8px] md:text-[10px] uppercase bg-white shadow-sm transition-all hover:bg-amber-100 active:scale-95">KATALOG ALAT (Alt+E)</Button>
+                  </div>
+                  <div className="space-y-3">
+                    {watchedItems.filter((item: any) => item?.equipment_id).length === 0 ? (
+                      <div className="text-center py-4 md:py-6"><span className="text-[9px] md:text-[10px] text-amber-600 font-bold uppercase tracking-widest opacity-50 italic">Belum ada sewa alat</span></div>
+                    ) : (
+                      fields.map((field, index) => {
+                        if (!watchedItems[index]?.equipment_id) return null;
+                        return (
+                          <div key={field.id} className="bg-white border-2 border-amber-100 p-4 rounded-xl md:rounded-2xl shadow-sm space-y-3 hover:shadow-xl transition-all hover:scale-[1.01] hover:border-amber-300">
+                            <div className="flex justify-between items-center"><span className="text-[10px] font-black text-amber-900 truncate uppercase">{watchedItems[index]?.name}</span><Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="h-8 w-8 text-amber-200 hover:text-red-500"><XCircle className="h-4 w-4" /></Button></div>
+                            <div className="grid grid-cols-2 gap-3">
+                               <div className="space-y-1"><span className="text-[8px] font-black text-amber-400 uppercase tracking-widest ml-1">Harga</span><Input type="number" {...register(`items.${index}.price`)} className="h-10 text-xs font-black bg-amber-50/30 border-none rounded-lg" /></div>
+                               <div className="space-y-1"><span className="text-[8px] font-black text-amber-400 uppercase tracking-widest text-center block">Qty</span><Input type="number" {...register(`items.${index}.qty`)} className="h-10 text-center font-black bg-amber-50/30 border-none rounded-lg" /></div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              {/* Step 04: Finalization */}
+              <section className={cn("space-y-4 transition-all duration-500", !hasValidService && "opacity-40 pointer-events-none grayscale")}>
+                <h4 className="text-[10px] md:text-[11px] font-black text-emerald-600 uppercase tracking-[3px] flex items-center gap-3"><span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs">04</span> Finalisasi Biaya</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 items-start">
+                  <div className="space-y-4 md:space-y-6 bg-white p-4 md:p-8 rounded-2xl md:rounded-[2.5rem] border-2 border-slate-100 shadow-sm hover:shadow-xl transition-all hover:border-emerald-200">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Potongan Diskon (Rp)</label>
+                      <Input type="number" {...register("discount_amount")} className="h-12 md:h-14 font-black text-rose-600 text-base md:text-lg rounded-xl md:rounded-2xl border-2 border-slate-200 bg-slate-50/50 transition-all focus:bg-white" placeholder="0" />
+                    </div>
+                    <Controller
+                      control={control}
+                      name="use_tax"
+                      render={({ field }) => (
+                        <div 
+                          className={cn(
+                            "p-4 md:p-6 rounded-2xl md:rounded-3xl border-2 transition-all cursor-pointer group flex items-center justify-between",
+                            field.value 
+                              ? "border-emerald-500 bg-emerald-50/10 shadow-lg shadow-emerald-900/5" 
+                              : "border-slate-100 bg-white hover:border-slate-200"
+                          )} 
+                          onClick={() => setValue("use_tax", !field.value, { shouldDirty: true, shouldValidate: true })}
+                        >
+                          <div className="flex items-center gap-3 md:gap-4">
+                            <div className={cn(
+                              "h-8 w-8 md:h-10 md:w-10 rounded-xl flex items-center justify-center transition-all",
+                              field.value ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/20" : "bg-slate-100 text-slate-300"
+                            )}>
+                              <CheckCircle className="h-5 w-5 md:h-6 md:w-6" />
+                            </div>
+                            <div>
+                              <p className="text-xs md:text-sm font-black text-slate-800 leading-none">Gunakan PPN 11%</p>
+                              <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase">Pajak Pertambahan Nilai</p>
+                            </div>
+                          </div>
+                          {/* Checkbox made purely visual to prevent event bubbling conflicts */}
+                          <div className={cn(
+                            "h-6 w-6 border-2 rounded-lg flex items-center justify-center transition-all",
+                            field.value ? "bg-emerald-600 border-emerald-600 text-white" : "border-slate-200 bg-white"
+                          )}>
+                            {field.value && <Check className="h-4 w-4" />}
+                          </div>
+                        </div>
+                      )}
+                    />
+
+                  </div>
+
+                <div className="bg-emerald-950 p-6 md:p-8 rounded-2xl md:rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden border-4 border-emerald-900 group hover:shadow-emerald-900/40 transition-all flex flex-col justify-center min-h-[200px]">
+                  <div className="absolute -top-20 -right-20 h-64 w-64 bg-emerald-600 rounded-full opacity-20 blur-3xl group-hover:scale-110 transition-transform duration-1000" />
+                  <div className="relative space-y-5">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-[9px] md:text-[10px] font-black opacity-40 uppercase tracking-[2px]"><span>Subtotal</span><span className="text-emerald-100 font-mono">Rp {totals.subtotalBeforeDiscount.toLocaleString("id-ID")}</span></div>
+                      {watchedDiscount > 0 && <div className="flex justify-between items-center text-[9px] md:text-[10px] font-black text-rose-400/80 uppercase tracking-[2px]"><span>Potongan</span><span className="text-rose-400 font-mono">- Rp {watchedDiscount.toLocaleString("id-ID")}</span></div>}
+                      {watchedUseTax && <div className="flex justify-between items-center text-[9px] md:text-[10px] font-black text-emerald-400/80 uppercase tracking-[2px]"><span>PPN 11%</span><span className="text-emerald-400 font-mono">+ Rp {totals.taxAmount.toLocaleString("id-ID")}</span></div>}
+                    </div>
+                    <div className="border-t border-white/10 pt-5">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] md:text-[11px] font-black text-emerald-300 uppercase tracking-[3px] leading-none">Grand Total</span>
+                        <span className="text-[7px] md:text-[8px] text-emerald-500/60 font-bold uppercase tracking-widest italic mb-3">Final Laboratory Quote</span>
+                        <span className="text-2xl xs:text-3xl md:text-4xl font-black font-mono tracking-tighter text-white drop-shadow-2xl break-all leading-none">
+                          Rp {totals.grandTotal.toLocaleString("id-ID")}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                </div>
+              </section>
             </div>
 
-            <div className="sticky bottom-0 bg-white/80 backdrop-blur-md border-t -mx-6 px-8 py-4 mt-6 flex items-center justify-between z-30">
+            {/* Bottom Bar */}
+            <div className="fixed sm:sticky bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t-2 border-slate-100 px-4 md:px-10 py-4 md:py-6 flex items-center justify-between z-30 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] rounded-t-3xl sm:rounded-none sm:rounded-b-3xl">
               <div className="flex flex-col">
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Estimasi</span>
-                <span className="text-xl font-black text-emerald-800 font-mono tracking-tight leading-none">Rp {total.toLocaleString("id-ID")}</span>
+                <span className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-[2px] leading-none mb-1">Estimasi Akhir</span>
+                <span className="text-lg md:text-2xl font-black text-emerald-800 font-mono tracking-tighter leading-none">Rp {totals.grandTotal.toLocaleString("id-ID")}</span>
               </div>
-              <div className="flex gap-3">
-                <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)} className="font-bold text-slate-400 text-xs uppercase px-6 h-10 rounded-xl">Batal</Button>
-                <LoadingButton type="submit" loading={submitting} loadingText="MEMPROSES..." className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-8 h-12 rounded-xl shadow-lg shadow-emerald-900/20 text-xs tracking-wide uppercase transition-all active:scale-95 group">
-                  <div className="flex flex-col items-center leading-none gap-1">
-                    <span className="flex items-center gap-2">SIMPAN DRAFT <FileText className="h-4 w-4" /></span>
-                    <span className="text-[7px] opacity-60 font-bold tracking-[0.1em] hidden md:block lowercase">[ ctrl + enter ]</span>
-                  </div>
+              <div className="flex gap-2 md:gap-4">
+                <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)} className="font-black text-slate-400 text-[10px] md:text-xs uppercase px-4 md:px-8 h-10 md:h-14 rounded-xl md:rounded-2xl border-2 border-transparent hover:border-slate-100">Batal</Button>
+                <LoadingButton type="submit" loading={submitting} disabled={!isFormValid} className={cn("bg-emerald-600 hover:bg-emerald-700 text-white font-black px-6 md:px-12 h-10 md:h-14 rounded-xl md:rounded-2xl shadow-xl shadow-emerald-900/30 text-[10px] md:text-xs tracking-[1px] md:tracking-[2px] uppercase transition-all active:scale-95 flex items-center gap-2 md:gap-3", !isFormValid && "bg-slate-200 text-slate-400 shadow-none cursor-not-allowed")}>
+                   {isFormValid ? <><Check className="h-4 w-4" /> SIMPAN DRAFT</> : <><Lock className="h-4 w-4" /> DATA BELUM LENGKAP</>}
                 </LoadingButton>
               </div>
             </div>
@@ -841,107 +699,90 @@ export default function OperatorQuotationListPage() {
         </DialogContent>
       </Dialog>
 
-      {/* DELETE CONFIRMATION DIALOG */}
-      <AlertDialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
-        <AlertDialogContent className="sm:max-w-[425px] rounded-3xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-red-600"><Trash2 className="h-5 w-5" /> Konfirmasi Hapus</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="pt-4 text-sm text-muted-foreground">
-                <p>Apakah Anda yakin ingin menghapus penawaran ini?</p>
-                <p className="mt-2 text-sm text-amber-600 font-medium italic flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Catatan: Penghapusan oleh Operator memerlukan persetujuan Admin.</p>
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2">
-            <AlertDialogCancel className="rounded-xl cursor-pointer">Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700 rounded-xl cursor-pointer"><Trash2 className="mr-2 h-4 w-4" /> Ya, Ajukan Hapus</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Catalog Dialogs */}
+      {/* MODALS */}
       <Dialog open={isPerdiemDialogOpen} onOpenChange={setIsPerdiemDialogOpen}>
-        <DialogContent className="sm:max-w-[500px] rounded-2xl"><DialogHeader><DialogTitle>Katalog Perdiem</DialogTitle></DialogHeader>
-          <div className="max-h-[400px] overflow-y-auto space-y-2 py-4">
-            {operationalCatalogs.filter(c => c.category === 'perdiem').map(c => (
-              <div key={c.id} className="p-4 border rounded-2xl hover:bg-emerald-50 cursor-pointer flex justify-between items-center group"
-                onClick={() => { setValue("perdiem_name", c.name); setValue("perdiem_price", Number(c.price)); setValue("perdiem_qty", 1); setIsPerdiemDialogOpen(false); }}>
-                <div><p className="font-bold text-slate-800">{c.name}</p><p className="text-xs text-slate-500">{c.location}</p></div>
-                <span className="font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-lg group-hover:bg-emerald-600 group-hover:text-white transition-all">Rp {Number(c.price).toLocaleString("id-ID")}</span>
-              </div>
-            ))}
+        <DialogContent className="sm:max-w-md rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl"><DialogHeader className="bg-emerald-700 p-6 text-white"><DialogTitle className="text-lg font-black uppercase tracking-widest">Katalog Perdiem</DialogTitle></DialogHeader>
+          <div className="max-h-[400px] overflow-y-auto space-y-3 p-6 bg-slate-50">{operationalCatalogs.filter(c => c.category === 'perdiem').map(c => (
+            <div key={c.id} className="p-5 bg-white border-2 border-slate-100 rounded-2xl hover:bg-emerald-50 hover:border-emerald-200 cursor-pointer flex justify-between items-center group transition-all" onClick={() => { setValue("perdiem_name", c.name); setValue("perdiem_price", Number(c.price)); setValue("perdiem_qty", 1, { shouldValidate: true }); setIsPerdiemDialogOpen(false); }}>
+              <div><p className="font-black text-slate-800 uppercase text-xs">{c.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase mt-1 italic">{c.location}</p></div>
+              <span className="font-black text-emerald-700 bg-emerald-100 px-4 py-2 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition-all text-xs">Rp {Number(c.price).toLocaleString("id-ID")}</span>
+            </div>))}
           </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={isTransportDialogOpen} onOpenChange={setIsTransportDialogOpen}>
-        <DialogContent className="sm:max-w-[500px] rounded-2xl"><DialogHeader><DialogTitle>Katalog Transport</DialogTitle></DialogHeader>
-          <div className="max-h-[400px] overflow-y-auto space-y-2 py-4">
-            {operationalCatalogs.filter(c => c.category === 'transport').map(c => (
-              <div key={c.id} className="p-4 border rounded-2xl hover:bg-blue-50 cursor-pointer flex justify-between items-center group"
-                onClick={() => { setValue("transport_name", c.name); setValue("transport_price", Number(c.price)); setValue("transport_qty", 1); setIsTransportDialogOpen(false); }}>
-                <div><p className="font-bold text-slate-800">{c.name}</p><p className="text-xs text-slate-500">{c.unit}</p></div>
-                <span className="font-bold text-blue-700 bg-blue-100 px-3 py-1 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-all">Rp {Number(c.price).toLocaleString("id-ID")}</span>
-              </div>
-            ))}
+        <DialogContent className="sm:max-w-md rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl"><DialogHeader className="bg-blue-700 p-6 text-white"><DialogTitle className="text-lg font-black uppercase tracking-widest">Katalog Transport</DialogTitle></DialogHeader>
+          <div className="max-h-[400px] overflow-y-auto space-y-3 p-6 bg-slate-50">{operationalCatalogs.filter(c => c.category === 'transport').map(c => (
+            <div key={c.id} className="p-5 bg-white border-2 border-slate-100 rounded-2xl hover:bg-blue-50 hover:border-blue-200 cursor-pointer flex justify-between items-center group transition-all" onClick={() => { setValue("transport_name", c.name); setValue("transport_price", Number(c.price)); setValue("transport_qty", 1, { shouldValidate: true }); setIsTransportDialogOpen(false); }}>
+              <div><p className="font-black text-slate-800 uppercase text-xs">{c.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase mt-1 italic">{c.unit}</p></div>
+              <span className="font-black text-blue-700 bg-blue-100 px-4 py-2 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-all text-xs">Rp {Number(c.price).toLocaleString("id-ID")}</span>
+            </div>))}
           </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={isEquipmentDialogOpen} onOpenChange={setIsEquipmentDialogOpen}>
-        <DialogContent className="sm:max-w-[600px] rounded-2xl"><DialogHeader><DialogTitle>Katalog Alat Laboratorium</DialogTitle></DialogHeader>
-          <div className="max-h-[400px] overflow-y-auto space-y-2 py-4 px-1">
-            {equipment.map((eq) => {
-              const isSelected = watchedItems.some((item: any) => item.equipment_id === eq.id);
-              return (
-                <div key={eq.id} className={cn("flex items-center justify-between p-4 border rounded-2xl hover:bg-amber-50 cursor-pointer transition-all", isSelected ? "bg-amber-50 border-amber-300 ring-1 ring-amber-300" : "bg-white border-slate-200")}
-                  onClick={() => {
-                    if (isSelected) {
-                      const itemIndex = watchedItems.findIndex((item: any) => item.equipment_id === eq.id);
-                      if (itemIndex > -1) remove(itemIndex);
-                    } else {
-                      append({ service_id: "", equipment_id: eq.id, qty: 1, price: Number(eq.price), name: eq.name });
-                    }
-                    setIsEquipmentDialogOpen(false);
-                  }}>
-                  <div className="flex items-center gap-4"><div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", isSelected ? "bg-amber-200 text-amber-700" : "bg-slate-100 text-slate-400")}><Wrench className="h-6 w-6" /></div>
-                    <div><p className="font-bold text-slate-800">{eq.name}</p><p className="text-xs text-slate-500 font-medium">{eq.specification}</p></div></div>
-                  <div className="text-right"><p className="font-black text-amber-700">Rp {Number(eq.price).toLocaleString("id-ID")}</p><p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">per {eq.unit}</p></div>
-                </div>
-              );
-            })}
+        <DialogContent className="sm:max-w-lg rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl"><DialogHeader className="bg-amber-600 p-6 text-white"><DialogTitle className="text-lg font-black uppercase tracking-widest">Katalog Alat</DialogTitle></DialogHeader>
+          <div className="max-h-[450px] overflow-y-auto space-y-3 p-6 bg-slate-50">{equipment.map((eq) => {
+            const isSelected = watchedItems.some((item: any) => item?.equipment_id === eq.id);
+            return (
+              <div key={eq.id} className={cn("flex items-center justify-between p-5 bg-white border-2 rounded-[1.5rem] hover:bg-amber-50 cursor-pointer transition-all", isSelected ? "border-amber-500 shadow-lg scale-[1.02]" : "border-slate-100")}
+                onClick={() => {
+                  if (isSelected) { const itemIndex = watchedItems.findIndex((item: any) => item?.equipment_id === eq.id); if (itemIndex > -1) remove(itemIndex); } 
+                  else { append({ service_id: "", equipment_id: eq.id, qty: 1, price: Number(eq.price), name: eq.name }); }
+                  setIsEquipmentDialogOpen(false);
+                }}>
+                <div className="flex items-center gap-4"><div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner", isSelected ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-400")}><Wrench className="h-6 w-6" /></div><div><p className="font-black text-slate-800 text-xs uppercase">{eq.name}</p></div></div>
+                <div className="text-right"><p className="font-black text-amber-700 text-sm">Rp {Number(eq.price).toLocaleString("id-ID")}</p><p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">per {eq.unit}</p></div>
+              </div>);})}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isCustomerDialogOpen} onOpenChange={setIsCustomerDialogOpen}>
+        <DialogContent className="sm:max-w-md rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl">
+          <DialogHeader className="bg-emerald-700 p-8 text-white"><DialogTitle className="text-xl font-black uppercase tracking-tight leading-none">Klien Baru</DialogTitle></DialogHeader>
+          <div className="p-8 space-y-5 bg-white">
+            <div className="space-y-1.5"><label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">Nama Lengkap</label><Input placeholder="John Doe" value={customerData.full_name} onChange={(e) => setCustomerData({...customerData, full_name: e.target.value})} className="h-12 rounded-xl border-2 border-slate-100" /></div>
+            <div className="space-y-1.5"><label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">Email Aktif</label><Input type="email" placeholder="john@example.com" value={customerData.email} onChange={(e) => setCustomerData({...customerData, email: e.target.value})} className="h-12 rounded-xl border-2 border-slate-100" /></div>
+            <div className="space-y-1.5"><label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">Nama Instansi</label><Input placeholder="PT. Wahfa Jaya" value={customerData.company_name} onChange={(e) => setCustomerData({...customerData, company_name: e.target.value})} className="h-12 rounded-xl border-2 border-slate-100" /></div>
+            <Button onClick={handleCreateCustomer} className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl mt-4">Simpan Pelanggan</Button>
           </div>
         </DialogContent>
       </Dialog>
 
       <AlertDialog open={isSaveConfirmOpen} onOpenChange={setIsSaveConfirmOpen}>
-        <AlertDialogContent className="sm:max-w-[425px] rounded-2xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-emerald-600"><Check className="h-5 w-5" /> Konfirmasi Simpan</AlertDialogTitle>
-            <AlertDialogDescription className="pt-4">Apakah Anda yakin ingin menyimpan penawaran ini? Pastikan semua rincian sudah benar.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2">
-            <AlertDialogCancel className="rounded-xl cursor-pointer">Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmSave} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl cursor-pointer">Ya, Simpan</AlertDialogAction>
-          </AlertDialogFooter>
+        <AlertDialogContent className="rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl">
+          <div className="bg-emerald-600 p-8 text-white text-center"><CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-50" /><AlertDialogTitle className="text-2xl font-black uppercase tracking-tight">Simpan?</AlertDialogTitle></div>
+          <div className="p-8 bg-white flex flex-col gap-6">
+             <p className="text-slate-500 text-sm text-center font-medium">Simpan penawaran ini sebagai **DRAFT**?</p>
+             <div className="flex gap-3"><AlertDialogCancel className="flex-1 h-12 rounded-xl font-black text-[10px] uppercase border-2 border-slate-100">Batal</AlertDialogCancel><AlertDialogAction onClick={handleConfirmSave} className="flex-1 h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-black text-[10px] uppercase">Ya, Simpan</AlertDialogAction></div>
+          </div>
         </AlertDialogContent>
       </AlertDialog>
 
-      <LoadingOverlay isOpen={submitting} title="Menyimpan Penawaran..." description="Mohon tunggu sebentar, penawaran sedang diproses" />
-
-      <Dialog open={isCustomerDialogOpen} onOpenChange={setIsCustomerDialogOpen}>
-        <DialogContent className="sm:max-w-[425px] rounded-2xl">
-          <DialogHeader><DialogTitle>Tambah Customer Baru</DialogTitle><DialogDescription>Masukkan data lengkap pelanggan baru.<span className="block mt-2 text-xs font-bold text-amber-600 bg-amber-50 p-2 rounded border border-amber-100">Password default: 123456</span></DialogDescription></DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2"><label className="text-sm font-medium">Nama Lengkap *</label><Input placeholder="John Doe" value={customerData.full_name} onChange={(e) => setCustomerData({...customerData, full_name: e.target.value})} className="rounded-xl" /></div>
-            <div className="space-y-2"><label className="text-sm font-medium">Email *</label><Input type="email" placeholder="john@example.com" value={customerData.email} onChange={(e) => setCustomerData({...customerData, email: e.target.value})} className="rounded-xl" /></div>
-            <div className="space-y-2"><label className="text-sm font-medium">Nama Perusahaan</label><Input placeholder="PT. XYZ" value={customerData.company_name} onChange={(e) => setCustomerData({...customerData, company_name: e.target.value})} className="rounded-xl" /></div>
-            <div className="space-y-2"><label className="text-sm font-medium">Alamat</label><Input placeholder="Jl. XYZ No. 123..." value={customerData.address} onChange={(e) => setCustomerData({...customerData, address: e.target.value})} className="rounded-xl" /></div>
+      <AlertDialog open={deleteId !== null} onOpenChange={() => setDeleteId(null)}>
+        <AlertDialogContent className="rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl">
+          <div className="bg-rose-600 p-8 text-white text-center"><Trash2 className="h-12 w-12 mx-auto mb-4 opacity-50" /><AlertDialogTitle className="text-2xl font-black uppercase tracking-tight">Hapus?</AlertDialogTitle></div>
+          <div className="p-8 bg-white flex flex-col gap-6">
+             <p className="text-slate-500 text-sm text-center font-medium">Tindakan ini tidak dapat dibatalkan.</p>
+             <div className="flex gap-3"><AlertDialogCancel className="flex-1 h-12 rounded-xl font-black text-[10px] uppercase border-2 border-slate-100">Batal</AlertDialogCancel><AlertDialogAction onClick={async () => { if (deleteId) { await deleteQuotation(deleteId, userProfile?.id, userProfile?.role); loadData(); setDeleteId(null); } }} className="flex-1 h-12 rounded-xl bg-rose-600 hover:bg-rose-700 font-black text-[10px] uppercase">Ya, Hapus</AlertDialogAction></div>
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setIsCustomerDialogOpen(false)} className="rounded-xl">Batal</Button><LoadingButton onClick={handleCreateCustomer} loading={submitting} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl px-8">Simpan Customer</LoadingButton></DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <LoadingOverlay isOpen={submitting} title="Memproses..." description="Mohon tunggu sebentar." />
+    </div>
+  );
+}
+
+function StatCard({ title, value, icon: Icon, color, active, onClick }: any) {
+  const styles: any = { emerald: "bg-emerald-50 text-emerald-600 border-emerald-100", amber: "bg-amber-50 text-amber-600 border-amber-100", blue: "bg-blue-50 text-blue-600 border-blue-100", red: "bg-rose-50 text-rose-600 border-rose-100", purple: "bg-purple-50 text-purple-600 border-purple-100" };
+  return (
+    <div onClick={onClick} className={cn("cursor-pointer border-2 transition-all duration-300 rounded-[1.5rem] overflow-hidden group p-5 flex flex-col gap-3 bg-white hover:shadow-xl hover:shadow-emerald-900/5 hover:scale-[1.02] hover:border-emerald-200", active ? "border-emerald-600 shadow-xl scale-105" : "border-slate-50 hover:border-emerald-200 shadow-sm")}>
+      <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm transition-transform group-hover:scale-110", styles[color])}><Icon className="h-5 w-5" /></div>
+      <div><p className="text-2xl font-black text-slate-800 leading-none mb-1">{value}</p><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{title}</p></div>
     </div>
   );
 }

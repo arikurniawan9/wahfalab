@@ -262,10 +262,10 @@ export default function AssistantManagementPage() {
             <TableHeader className="bg-slate-50/30">
               <TableRow className="border-b border-slate-100">
                 <TableHead className="w-[50px] px-6 py-4 text-center"><Checkbox checked={selectedIds.length === paginatedItems.length && paginatedItems.length > 0} onCheckedChange={toggleSelectAll} /></TableHead>
-                <TableHead className="px-6 py-4 font-black uppercase tracking-widest text-[8px] text-slate-400">Assistant Info</TableHead>
-                <TableHead className="px-6 py-4 font-black uppercase tracking-widest text-[8px] text-slate-400">Contact</TableHead>
-                <TableHead className="px-6 py-4 font-black uppercase tracking-widest text-[8px] text-slate-400">Location</TableHead>
-                <TableHead className="px-6 py-4 text-right font-black uppercase tracking-widest text-[8px] text-slate-400">Manage</TableHead>
+                <TableHead className="px-6 py-4 font-bold text-slate-700 text-sm">Assistant Info</TableHead>
+                <TableHead className="px-6 py-4 font-bold text-slate-700 text-sm">Contact</TableHead>
+                <TableHead className="px-6 py-4 font-bold text-slate-700 text-sm">Location</TableHead>
+                <TableHead className="px-6 py-4 text-right font-bold text-slate-700 text-sm">Manage</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -280,12 +280,12 @@ export default function AssistantManagementPage() {
                     <TableCell className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="h-9 w-9 rounded-xl bg-amber-50 flex items-center justify-center border border-amber-100 shrink-0 text-amber-600 font-black text-xs">{(assistant.full_name || 'A').charAt(0)}</div>
-                        <div className="flex flex-col min-w-0"><span className="text-[12px] font-black text-slate-900 truncate">{assistant.full_name}</span><span className="text-[9px] font-bold text-slate-400 uppercase truncate">{assistant.email || "No Email"}</span></div>
+                        <div className="flex flex-col min-w-0"><span className="text-sm font-bold text-slate-900 truncate">{assistant.full_name}</span><span className="text-xs text-slate-500 truncate">{assistant.email || "No Email"}</span></div>
                       </div>
                     </TableCell>
-                    <TableCell className="px-6 py-4"><div className="flex items-center gap-2 text-emerald-600"><Phone className="h-3 w-3" /><span className="text-[10px] font-black">{assistant.phone || "-"}</span></div></TableCell>
-                    <TableCell className="px-6 py-4"><div className="flex items-center gap-2"><MapPin className="h-3 w-3 text-slate-400" /><span className="text-[10px] font-bold text-slate-600 uppercase truncate max-w-[150px]">{assistant.address || "N/A"}</span></div></TableCell>
-                    <TableCell className="px-6 py-4 text-right"><Button variant="ghost" size="sm" onClick={() => openDetail(assistant)} className="h-8 px-3 rounded-lg font-black text-[8px] uppercase tracking-widest text-slate-400 hover:text-amber-600 transition-all gap-1.5"><Settings2 className="h-3 w-3" /> Manage</Button></TableCell>
+                    <TableCell className="px-6 py-4"><div className="flex items-center gap-2 text-emerald-600"><Phone className="h-3 w-3" /><span className="text-sm font-bold">{assistant.phone || "-"}</span></div></TableCell>
+                    <TableCell className="px-6 py-4"><div className="flex items-center gap-2"><MapPin className="h-3 w-3 text-slate-400" /><span className="text-sm font-semibold text-slate-600 truncate max-w-[150px]">{assistant.address || "N/A"}</span></div></TableCell>
+                    <TableCell className="px-6 py-4 text-right"><Button variant="ghost" size="sm" onClick={() => openDetail(assistant)} className="h-8 px-3 rounded-lg font-medium text-slate-600 hover:text-amber-600 transition-all gap-1.5"><Settings2 className="h-3 w-3" /> Manage</Button></TableCell>
                   </TableRow>
                 ))
               )}
@@ -294,10 +294,10 @@ export default function AssistantManagementPage() {
         </div>
 
         <div className="p-4 bg-slate-50/50 flex items-center justify-between border-t border-slate-100">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total {filteredItems.length} Personnel</p>
+          <p className="text-sm font-semibold text-slate-600">Total {filteredItems.length} Personnel</p>
           <div className="flex gap-1.5">
             <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg bg-white border-slate-200" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft className="h-3.5 w-3.5" /></Button>
-            <div className="flex items-center px-3 text-[9px] font-black bg-white border border-slate-200 rounded-lg text-slate-700">{page} / {totalPages || 1}</div>
+            <div className="flex items-center px-3 text-sm font-semibold bg-white border border-slate-200 rounded-lg text-slate-700">{page} / {totalPages || 1}</div>
             <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg bg-white border-slate-200" disabled={page === totalPages || totalPages === 0} onClick={() => setPage(p => p + 1)}><ChevronRight className="h-3.5 w-3.5" /></Button>
           </div>
         </div>

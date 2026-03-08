@@ -1,190 +1,132 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { ArrowLeft, Download } from "lucide-react";
+import { ArrowLeft, Download, FileText, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { getTravelOrderById } from "@/lib/actions/travel-order";
+import { getCompanyProfile } from "@/lib/actions/company";
 import { pdf, PDFViewer } from "@react-pdf/renderer";
 import { TravelOrderPDF } from "@/components/pdf/TravelOrderPDF";
-import { TravelOrderAttachment } from "@/components/pdf/TravelOrderAttachment";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function FieldTravelOrderPreviewPage() {
   const params = useParams();
   const [loading, setLoading] = useState(true);
-  const [travelOrder, setTravelOrder] = useState<any>(null);
-  const [companyProfile, setCompanyProfile] = useState<any>(null);
+  const [data, setData] = useState<{ travelOrder: any; companyProfile: any }>({
+    travelOrder: null,
+    companyProfile: null
+  });
   const [generatingPdf, setGeneratingPdf] = useState(false);
 
   useEffect(() => {
-    loadData();
-  }, []);
-
-  async function loadData() {
-    try {
-      const data = await getTravelOrderById(params.id as string);
-      setTravelOrder(data);
-
-      // Load company profile - use logo from public folder
-      const defaultCompany = {
-        company_name: 'WahfaLab',
-        address: null,
-        phone: null,
-        email: null,
-        logo_url: '/logo-wahfalab.png',
-        tagline: null,
-        npwp: null
-      };
-
+    async function loadAllData() {
+      setLoading(true);
       try {
-        const companyResponse = await fetch('/api/company-profile');
-        if (companyResponse.ok) {
-          const companyData = await companyResponse.json();
-          
-          let logoUrl = '/logo-wahfalab.png';
-          if (companyData.logo_url && companyData.logo_url.startsWith('http')) {
-            logoUrl = companyData.logo_url;
-          }
-          
-          setCompanyProfile({
-            company_name: companyData.company_name || 'WahfaLab',
-            address: companyData.address || null,
-            phone: companyData.phone || null,
-            email: companyData.email || null,
-            logo_url: logoUrl,
-            tagline: companyData.tagline || null,
-            npwp: companyData.npwp || null
-          });
-        } else {
-          setCompanyProfile(defaultCompany);
+        // OPTIMASI 1: Ambil data secara PARALEL untuk kecepatan maksimal
+        const [orderData, companyData] = await Promise.all([
+          getTravelOrderById(params.id as string),
+          getCompanyProfile()
+        ]);
+
+        if (!orderData) {
+          toast.error("Data surat tugas tidak ditemukan");
         }
+
+        // OPTIMASI 2: Proses URL logo/ttd/stempel secara terpusat
+        const origin = typeof window !== 'undefined' ? window.location.origin : '';
+        const processUrl = (url: string | null) => {
+          if (!url) return null;
+          return url.startsWith('http') ? url : `${origin}${url}`;
+        };
+
+        const company = companyData ? {
+          ...companyData,
+          logo_url: processUrl(companyData.logo_url) || '/logo-wahfalab.png',
+          signature_url: processUrl(companyData.signature_url),
+          stamp_url: processUrl(companyData.stamp_url),
+        } : null;
+
+        setData({ travelOrder: orderData, companyProfile: company });
       } catch (error) {
-        console.error('Failed to load company profile:', error);
-        setCompanyProfile(defaultCompany);
+        console.error('Failed to load data:', error);
+        toast.error("Gagal memuat data");
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Failed to load travel order:', error);
-      toast.error("Gagal memuat data surat tugas");
-    } finally {
-      setLoading(false);
     }
-  }
+
+    loadAllData();
+  }, [params.id]);
+
+  // OPTIMASI 3: Memoize dokumen PDF agar tidak render ulang saat state lain berubah
+  const pdfDocument = useMemo(() => {
+    if (!data.travelOrder || !data.companyProfile) return null;
+
+    const { travelOrder, companyProfile } = data;
+    const fieldOfficer = travelOrder.assignment?.field_officer || {};
+    const jobOrder = travelOrder.assignment?.job_order || {};
+    const quotation = jobOrder.quotation || {};
+    const profile = quotation.profile || {};
+    const items = quotation.items || [];
+    const assistants = travelOrder.assignment?.assistants || [];
+
+    return (
+      <TravelOrderPDF
+        data={{
+          document_number: travelOrder.document_number,
+          departure_date: travelOrder.departure_date,
+          return_date: travelOrder.return_date,
+          destination: travelOrder.destination,
+          purpose: travelOrder.purpose,
+          transportation_type: travelOrder.transportation_type,
+          accommodation_type: travelOrder.accommodation_type,
+          daily_allowance: travelOrder.daily_allowance,
+          total_budget: travelOrder.total_budget,
+          notes: travelOrder.notes,
+          assignment: {
+            field_officer: {
+              full_name: fieldOfficer.full_name,
+              email: fieldOfficer.email
+            },
+            assistants: assistants,
+            job_order: {
+              tracking_code: jobOrder.tracking_code,
+              quotation: {
+                quotation_number: quotation.quotation_number,
+                total_amount: quotation.total_amount,
+                profile: {
+                  full_name: profile.full_name,
+                  company_name: profile.company_name
+                },
+                items: items
+              }
+            }
+          },
+          created_at: travelOrder.created_at,
+        }}
+        company={companyProfile}
+      />
+    );
+  }, [data.travelOrder, data.companyProfile]);
 
   const handleDownloadPdf = async () => {
-    if (!travelOrder) return;
+    if (!pdfDocument || !data.travelOrder) return;
 
     setGeneratingPdf(true);
     try {
-      // Prepare data with null checks
-      const fieldOfficer = travelOrder.assignment?.field_officer || {};
-      const jobOrder = travelOrder.assignment?.job_order || {};
-      const quotation = jobOrder.quotation || {};
-      const profile = quotation.profile || {};
-      const items = quotation.items || [];
-
-      // Create main PDF document
-      const mainPdfDoc = (
-        <TravelOrderPDF
-          data={{
-            document_number: travelOrder.document_number,
-            departure_date: travelOrder.departure_date,
-            return_date: travelOrder.return_date,
-            destination: travelOrder.destination,
-            purpose: travelOrder.purpose,
-            transportation_type: travelOrder.transportation_type,
-            accommodation_type: travelOrder.accommodation_type,
-            daily_allowance: travelOrder.daily_allowance,
-            total_budget: travelOrder.total_budget,
-            notes: travelOrder.notes,
-            assignment: {
-              field_officer: {
-                full_name: fieldOfficer.full_name,
-                email: fieldOfficer.email
-              },
-              job_order: {
-                tracking_code: jobOrder.tracking_code,
-                quotation: {
-                  quotation_number: quotation.quotation_number,
-                  total_amount: quotation.total_amount,
-                  profile: {
-                    full_name: profile.full_name,
-                    company_name: profile.company_name
-                  }
-                }
-              }
-            },
-            created_at: travelOrder.created_at,
-          }}
-          company={companyProfile}
-        />
-      );
-
-      // Create attachment PDF document
-      const attachmentPdfDoc = (
-        <TravelOrderAttachment
-          data={{
-            document_number: travelOrder.document_number,
-            departure_date: travelOrder.departure_date,
-            return_date: travelOrder.return_date,
-            destination: travelOrder.destination,
-            purpose: travelOrder.purpose,
-            transportation_type: travelOrder.transportation_type,
-            accommodation_type: travelOrder.accommodation_type,
-            daily_allowance: travelOrder.daily_allowance,
-            total_budget: travelOrder.total_budget,
-            notes: travelOrder.notes,
-            assignment: {
-              field_officer: {
-                full_name: fieldOfficer.full_name,
-                email: fieldOfficer.email
-              },
-              job_order: {
-                tracking_code: jobOrder.tracking_code,
-                quotation: {
-                  quotation_number: quotation.quotation_number,
-                  total_amount: quotation.total_amount,
-                  profile: {
-                    full_name: profile.full_name,
-                    company_name: profile.company_name
-                  },
-                  items: items
-                }
-              }
-            },
-            created_at: travelOrder.created_at,
-          }}
-          company={companyProfile}
-        />
-      );
-
-      // Download both PDFs
-      const mainBlob = await pdf(mainPdfDoc).toBlob();
-      const attachmentBlob = await pdf(attachmentPdfDoc).toBlob();
-
-      // Download main PDF
-      const url = URL.createObjectURL(mainBlob);
+      const blob = await pdf(pdfDocument).toBlob();
+      const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `Surat_Tugas-${travelOrder.document_number}.pdf`;
+      link.download = `Surat_Tugas-${data.travelOrder.document_number}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-
-      // Download attachment
-      const attachmentUrl = URL.createObjectURL(attachmentBlob);
-      const attachmentLink = document.createElement('a');
-      attachmentLink.href = attachmentUrl;
-      attachmentLink.download = `Lampiran-${travelOrder.document_number}.pdf`;
-      document.body.appendChild(attachmentLink);
-      attachmentLink.click();
-      document.body.removeChild(attachmentLink);
-      URL.revokeObjectURL(attachmentUrl);
-
-      toast.success("✅ Surat tugas & lampiran berhasil diunduh");
+      toast.success("✅ Surat tugas berhasil diunduh");
     } catch (error) {
       console.error('PDF generation error:', error);
       toast.error("Gagal membuat PDF");
@@ -195,17 +137,14 @@ export default function FieldTravelOrderPreviewPage() {
 
   if (loading) {
     return (
-      <div className="p-4 md:p-10 max-w-7xl mx-auto">
-        <div className="mb-6 space-y-2">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-8 w-64" />
-        </div>
-        <Skeleton className="h-[600px] rounded-lg" />
+      <div className="p-4 md:p-10 max-w-7xl mx-auto flex flex-col items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-12 w-12 text-emerald-500 animate-spin mb-4" />
+        <p className="text-slate-500 font-bold animate-pulse">Menyiapkan Dokumen Digital...</p>
       </div>
     );
   }
 
-  if (!travelOrder) {
+  if (!data.travelOrder) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -219,117 +158,61 @@ export default function FieldTravelOrderPreviewPage() {
   }
 
   return (
-    <div className="p-4 md:p-10 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <Link href="/field/assignments">
-          <Button variant="outline" size="icon">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={handleDownloadPdf}
-            disabled={generatingPdf}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            {generatingPdf ? "Mengunduh..." : "Unduh PDF"}
-          </Button>
-        </div>
-      </div>
-
-      {/* PDF Preview - Main Document */}
-      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden mb-6">
-        <div className="p-4 border-b bg-emerald-50/5">
-          <h1 className="text-xl font-bold text-emerald-900">Surat Tugas Perjalanan Dinas</h1>
-          <p className="text-sm text-slate-500 mt-1">{travelOrder.document_number}</p>
-        </div>
-        <div className="p-6">
-          <div className="aspect-[1/1.414] w-full max-w-4xl mx-auto">
-            <PDFViewer className="w-full h-full rounded-lg border border-slate-200">
-              <TravelOrderPDF
-                data={{
-                  document_number: travelOrder.document_number,
-                  departure_date: travelOrder.departure_date,
-                  return_date: travelOrder.return_date,
-                  destination: travelOrder.destination,
-                  purpose: travelOrder.purpose,
-                  transportation_type: travelOrder.transportation_type,
-                  accommodation_type: travelOrder.accommodation_type,
-                  daily_allowance: travelOrder.daily_allowance,
-                  total_budget: travelOrder.total_budget,
-                  notes: travelOrder.notes,
-                  assignment: {
-                    field_officer: {
-                      full_name: travelOrder.assignment?.field_officer?.full_name,
-                      email: travelOrder.assignment?.field_officer?.email
-                    },
-                    job_order: {
-                      tracking_code: travelOrder.assignment?.job_order?.tracking_code,
-                      quotation: {
-                        quotation_number: travelOrder.assignment?.job_order?.quotation?.quotation_number,
-                        total_amount: travelOrder.assignment?.job_order?.quotation?.total_amount,
-                        profile: {
-                          full_name: travelOrder.assignment?.job_order?.quotation?.profile?.full_name,
-                          company_name: travelOrder.assignment?.job_order?.quotation?.profile?.company_name
-                        }
-                      }
-                    }
-                  },
-                  created_at: travelOrder.created_at,
-                }}
-                company={companyProfile}
-              />
-            </PDFViewer>
+    <div className="p-4 md:p-10 max-w-7xl mx-auto animate-in fade-in duration-500">
+      {/* Header Toolbar */}
+      <div className="flex items-center justify-between mb-8 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+        <div className="flex items-center gap-4">
+          <Link href="/field/assignments">
+            <Button variant="ghost" size="icon" className="rounded-full hover:bg-slate-100">
+              <ArrowLeft className="h-5 w-5 text-slate-600" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-sm font-black text-slate-900 uppercase tracking-tight leading-none">Preview Surat Tugas</h1>
+            <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">{data.travelOrder.document_number}</p>
           </div>
         </div>
+        
+        <Button
+          onClick={handleDownloadPdf}
+          disabled={generatingPdf || !pdfDocument}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 px-6 font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-900/20"
+        >
+          {generatingPdf ? (
+            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Download className="mr-2 h-3.5 w-3.5" />
+          )}
+          {generatingPdf ? "Processing..." : "Unduh PDF"}
+        </Button>
       </div>
 
-      {/* PDF Preview - Attachment */}
-      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-        <div className="p-4 border-b bg-amber-50/5">
-          <h1 className="text-xl font-bold text-amber-900">Lampiran - Daftar Pengujian</h1>
-          <p className="text-sm text-slate-500 mt-1">Detail job order dan daftar pengujian</p>
+      {/* Main Preview Area */}
+      <div className="grid grid-cols-1 gap-8">
+        <div className="bg-slate-900 p-1 rounded-[2.5rem] shadow-2xl overflow-hidden ring-8 ring-slate-100">
+          <div className="bg-white rounded-[2.2rem] overflow-hidden aspect-[1/1.414] relative">
+            {!pdfDocument ? (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Loader2 className="h-8 w-8 text-emerald-500 animate-spin" />
+              </div>
+            ) : (
+              <PDFViewer className="w-full h-full border-none" showToolbar={false}>
+                {pdfDocument}
+              </PDFViewer>
+            )}
+          </div>
         </div>
-        <div className="p-6">
-          <div className="aspect-[1/1.414] w-full max-w-4xl mx-auto">
-            <PDFViewer className="w-full h-full rounded-lg border border-slate-200">
-              <TravelOrderAttachment
-                data={{
-                  document_number: travelOrder.document_number,
-                  departure_date: travelOrder.departure_date,
-                  return_date: travelOrder.return_date,
-                  destination: travelOrder.destination,
-                  purpose: travelOrder.purpose,
-                  transportation_type: travelOrder.transportation_type,
-                  accommodation_type: travelOrder.accommodation_type,
-                  daily_allowance: travelOrder.daily_allowance,
-                  total_budget: travelOrder.total_budget,
-                  notes: travelOrder.notes,
-                  assignment: {
-                    field_officer: {
-                      full_name: travelOrder.assignment?.field_officer?.full_name,
-                      email: travelOrder.assignment?.field_officer?.email
-                    },
-                    job_order: {
-                      tracking_code: travelOrder.assignment?.job_order?.tracking_code,
-                      quotation: {
-                        quotation_number: travelOrder.assignment?.job_order?.quotation?.quotation_number,
-                        total_amount: travelOrder.assignment?.job_order?.quotation?.total_amount,
-                        profile: {
-                          full_name: travelOrder.assignment?.job_order?.quotation?.profile?.full_name,
-                          company_name: travelOrder.assignment?.job_order?.quotation?.profile?.company_name
-                        },
-                        items: travelOrder.assignment?.job_order?.quotation?.items || []
-                      }
-                    }
-                  },
-                  created_at: travelOrder.created_at,
-                }}
-                company={companyProfile}
-              />
-            </PDFViewer>
+        
+        {/* Info Box */}
+        <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-2xl flex items-start gap-4">
+          <div className="p-2 bg-emerald-100 rounded-lg">
+            <FileText className="h-5 w-5 text-emerald-600" />
+          </div>
+          <div>
+            <h4 className="text-xs font-black text-emerald-900 uppercase tracking-widest">Informasi Cetak</h4>
+            <p className="text-xs text-emerald-700/80 mt-1 leading-relaxed">
+              Dokumen ini dioptimalkan untuk ukuran kertas <strong>A4</strong>. Gunakan pengaturan "Fit to Page" saat mencetak jika konten terlihat terlalu dekat dengan margin.
+            </p>
           </div>
         </div>
       </div>

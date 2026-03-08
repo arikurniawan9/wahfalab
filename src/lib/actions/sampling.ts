@@ -7,6 +7,78 @@ import { createClient } from '@/lib/supabase/server'
 import { generateInvoice } from '@/lib/actions/payment'
 import { notifySamplingCompleted, notifyInvoiceGenerated, notifyJobAssigned } from '@/lib/actions/notifications'
 
+import fs from 'fs'
+import path from 'path'
+
+export async function uploadSamplingPdf(assignmentId: string, file: File) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return { error: 'Unauthorized' }
+    }
+
+    const fileExt = file.name.split('.').pop()
+    if (fileExt?.toLowerCase() !== 'pdf') {
+      return { error: 'Hanya file PDF yang diizinkan' }
+    }
+
+    const fileName = `sampling-${assignmentId}-${Date.now()}.pdf`
+    const uploadDir = path.join(process.cwd(), 'public', 'surat-tugas')
+    
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true })
+    }
+
+    const filePath = path.join(uploadDir, fileName)
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+    
+    fs.writeFileSync(filePath, buffer)
+    const publicUrl = `/surat-tugas/${fileName}`
+
+    await prisma.samplingAssignment.update({
+      where: { id: assignmentId },
+      data: { signed_travel_order_url: publicUrl }
+    })
+
+    revalidatePath('/field')
+    revalidatePath(`/field/assignments/${assignmentId}`)
+
+    return { success: true, url: publicUrl }
+  } catch (error: any) {
+    console.error('Error uploading PDF:', error)
+    return { error: error.message }
+  }
+}
+
+export async function deleteSamplingPdf(assignmentId: string) {
+  try {
+    const assignment = await prisma.samplingAssignment.findUnique({
+      where: { id: assignmentId },
+      select: { signed_travel_order_url: true }
+    })
+
+    if (assignment?.signed_travel_order_url) {
+      const filePath = path.join(process.cwd(), 'public', assignment.signed_travel_order_url)
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath)
+      }
+
+      await prisma.samplingAssignment.update({
+        where: { id: assignmentId },
+        data: { signed_travel_order_url: null }
+      })
+    }
+
+    revalidatePath(`/field/assignments/${assignmentId}`)
+    return { success: true }
+  } catch (error: any) {
+    return { error: error.message }
+  }
+}
+
 export async function getSamplingAssignments(fieldOfficerId: string) {
   const assignments = await prisma.samplingAssignment.findMany({
     where: { field_officer_id: fieldOfficerId },
@@ -188,6 +260,48 @@ export async function completeSamplingAssignment(
   }
 }
 
+export async function rejectSamplingAssignment(assignmentId: string, reason: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) return { error: 'Unauthorized' }
+
+  try {
+    const assignment = await prisma.samplingAssignment.findUnique({
+      where: { id: assignmentId },
+      include: { job_order: true }
+    })
+
+    if (!assignment || assignment.field_officer_id !== user.id) {
+      return { error: 'Forbidden' }
+    }
+
+    await prisma.$transaction([
+      // 1. Update assignment status to cancelled
+      prisma.samplingAssignment.update({
+        where: { id: assignmentId },
+        data: { 
+          status: 'cancelled',
+          notes: `Ditolak oleh petugas: ${reason}`
+        }
+      }),
+      // 2. Reset job_order status to scheduled (back to queue)
+      prisma.jobOrder.update({
+        where: { id: assignment.job_order_id },
+        data: { status: 'scheduled' }
+      })
+    ])
+
+    // 3. TODO: Add notification to Operator/Admin here
+    
+    revalidatePath('/field')
+    revalidatePath('/operator/jobs')
+    return { success: true }
+  } catch (error: any) {
+    return { error: error.message }
+  }
+}
+
 export async function updateSamplingStatus(assignmentId: string, status: any, notes?: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -229,36 +343,42 @@ export async function updateSamplingStatus(assignmentId: string, status: any, no
 
   // Update JobOrder status jika sampling selesai
   if (status === 'completed') {
-    // Update to analysis_ready instead of completed
+    // 1. Update ke analysis_ready agar muncul di daftar tugas Analis
     const jobOrder = await prisma.jobOrder.update({
       where: { id: assignment.job_order_id },
       data: {
         status: 'analysis_ready',
         notes: `Sampling completed by ${user.email || 'field officer'} - ${notes || ''}`
+      },
+      include: {
+        quotation: {
+          include: { profile: true }
+        }
       }
     })
 
-    // Auto-generate invoice (draft)
-    const quotation = await prisma.quotation.findUnique({
-      where: { id: jobOrder.quotation_id },
-      include: { profile: true }
+    // 2. Auto-generate invoice dengan status 'sent' agar bisa diproses Finance/Customer
+    // CEK TERLEBIH DAHULU apakah invoice sudah ada untuk job ini
+    const existingInvoice = await prisma.invoice.findUnique({
+      where: { job_order_id: jobOrder.id }
     })
 
-    if (quotation) {
-      const invoiceNumber = `INV-${Date.now()}`
+    const quotation = jobOrder.quotation
+    if (quotation && !existingInvoice) {
+      const invoiceNumber = `INV-${jobOrder.tracking_code}-${Date.now().toString().slice(-4)}`
       invoice = await prisma.invoice.create({
         data: {
           invoice_number: invoiceNumber,
           job_order_id: jobOrder.id,
           quotation_id: quotation.id,
           amount: quotation.total_amount,
-          status: 'draft',
+          status: 'sent',
           due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
           created_by: user.id
         }
       })
 
-      // Send notifications
+      // 3. Kirim notifikasi otomatis (hanya jika invoice baru dibuat)
       await notifySamplingCompleted(jobOrder.id, jobOrder.tracking_code)
       await notifyInvoiceGenerated(
         invoice.id,
@@ -266,12 +386,26 @@ export async function updateSamplingStatus(assignmentId: string, status: any, no
         Number(invoice.amount),
         quotation.profile?.company_name || quotation.profile?.full_name || 'Client'
       )
+    } else if (existingInvoice) {
+      invoice = existingInvoice;
+      // Jika sudah ada, pastikan notifikasi sampling tetap terkirim jika perlu
+      await notifySamplingCompleted(jobOrder.id, jobOrder.tracking_code)
     }
   } else if (status === 'in_progress') {
+    // Saat petugas klik "Terima Tugas", update JobOrder ke status 'sampling'
     await prisma.jobOrder.update({
       where: { id: assignment.job_order_id },
       data: {
-        status: 'sampling'
+        status: 'sampling',
+        notes: `Tugas diterima oleh ${user.email || 'field officer'}`
+      }
+    })
+  } else if (status === 'pending') {
+    // Jika status dikembalikan ke pending, beri catatan khusus untuk operator
+    await prisma.jobOrder.update({
+      where: { id: assignment.job_order_id },
+      data: {
+        notes: `Petugas menangguhkan tugas (Pending). Alasan: ${notes || 'Tidak ada catatan'}`
       }
     })
   }
@@ -283,7 +417,7 @@ export async function updateSamplingStatus(assignmentId: string, status: any, no
   revalidatePath('/operator/jobs')
   revalidatePath('/dashboard')
 
-  return { success: true, invoice }
+  return serializeData({ success: true, invoice })
 }
 
 export async function updateSamplingPhotos(assignmentId: string, photoUrls: string[]) {
@@ -431,8 +565,21 @@ export async function createSamplingAssignment(data: {
   notes?: string
 }) {
   try {
-    const assignment = await prisma.samplingAssignment.create({
-      data: {
+    // Gunakan upsert untuk menangani penjadwalan ulang (reschedule)
+    const assignment = await prisma.samplingAssignment.upsert({
+      where: { job_order_id: data.job_order_id },
+      update: {
+        field_officer_id: data.field_officer_id,
+        assistants: {
+          set: [], // Hapus asisten lama dulu
+          connect: data.assistant_ids?.map(id => ({ id })) || []
+        },
+        scheduled_date: new Date(data.scheduled_date),
+        location: data.location,
+        notes: data.notes,
+        status: 'pending' // Reset status ke pending agar petugas harus menerima lagi
+      },
+      create: {
         job_order_id: data.job_order_id,
         field_officer_id: data.field_officer_id,
         assistants: {
@@ -450,15 +597,10 @@ export async function createSamplingAssignment(data: {
       }
     })
 
-    // Update JobOrder status ke sampling
-    await prisma.jobOrder.update({
-      where: { id: data.job_order_id },
-      data: {
-        status: 'sampling'
-      }
-    })
-
-    // Kirim notifikasi ke petugas lapangan secara aman (Hanya petugas utama karena asisten tidak punya akun user)
+    // Update JobOrder status tetap scheduled (atau jangan diupdate di sini)
+    // Penugasan sudah dibuat, tapi status Sampling baru aktif setelah petugas klik "Terima Tugas"
+    
+    // Kirim notifikasi ke petugas lapangan secara aman
     try {
       if (assignment.job_order?.tracking_code) {
         // Hanya kirim ke petugas utama karena relasi notification ke profile/user

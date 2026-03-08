@@ -11,7 +11,8 @@ import {
   MapPin,
   Settings,
   Wrench,
-  CreditCard
+  CreditCard,
+  History
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
@@ -26,11 +27,13 @@ const clientNavItems = [
 const fieldOfficerNavItems = [
   { icon: LayoutDashboard, label: "Beranda", href: "/field" },
   { icon: FileText, label: "Tugas", href: "/field/assignments" },
+  { icon: History, label: "Riwayat", href: "/field/history" },
 ];
 
 const analystNavItems = [
   { icon: LayoutDashboard, label: "Beranda", href: "/analyst" },
   { icon: FlaskConical, label: "Analisis", href: "/analyst/jobs" },
+  { icon: History, label: "Riwayat", href: "/analyst/history" },
 ];
 
 const reportingNavItems = [

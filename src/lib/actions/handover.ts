@@ -3,28 +3,70 @@
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
-import { generateInvoiceNumber } from '@/lib/utils/generateNumber'
+import { generateHandoverNumber } from '@/lib/utils/generateNumber'
+import { createClient } from '@/lib/supabase/server'
 
 export async function createSampleHandover(data: {
   job_order_id: string;
-  sender_id: string;
-  receiver_id: string;
   sample_condition: string;
   sample_qty: number;
-  sample_notes?: string;
+  notes?: string;
 }) {
   try {
-    const handoverNumber = await generateInvoiceNumber("BAST");
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return { error: 'Unauthorized' }
+    }
+
+    // Ambil profil analis (penerima)
+    const analystProfile = await prisma.profile.findUnique({
+      where: { email: user.email! }
+    })
+
+    if (!analystProfile) {
+      return { error: 'Analyst profile not found' }
+    }
+
+    // Ambil job order untuk mendapatkan sender_id (field officer)
+    const jobOrder = await prisma.jobOrder.findUnique({
+      where: { id: data.job_order_id },
+      include: {
+        sampling_assignment: true
+      }
+    })
+
+    if (!jobOrder) {
+      return { error: 'Job order not found' }
+    }
+
+    // Check if handover already exists
+    const existingHandover = await prisma.sampleHandover.findUnique({
+      where: { job_order_id: data.job_order_id }
+    })
+
+    if (existingHandover) {
+      return { success: true, handover: serializeData(existingHandover), message: 'Serah terima sudah ada' }
+    }
+
+    const senderId = jobOrder.sampling_assignment?.field_officer_id
+
+    if (!senderId) {
+      return { error: 'Data petugas lapangan tidak ditemukan untuk serah terima ini' }
+    }
+
+    const handoverNumber = await generateHandoverNumber("BAST");
 
     const handover = await prisma.sampleHandover.create({
       data: {
         job_order_id: data.job_order_id,
         handover_number: handoverNumber,
-        sender_id: data.sender_id,
-        receiver_id: data.receiver_id,
+        sender_id: senderId,
+        receiver_id: analystProfile.id,
         sample_condition: data.sample_condition,
         sample_qty: data.sample_qty,
-        sample_notes: data.sample_notes,
+        sample_notes: data.notes,
       },
       include: {
         sender: { select: { full_name: true, role: true } },
@@ -46,14 +88,14 @@ export async function createSampleHandover(data: {
       where: { id: data.job_order_id },
       data: {
         status: 'analysis',
-        analyst_id: data.receiver_id,
+        analyst_id: analystProfile.id,
         analysis_started_at: new Date()
       }
     });
 
-    revalidatePath('/analyst/jobs');
+    revalidatePath('/analyst');
+    revalidatePath(`/analyst/jobs/${data.job_order_id}`);
     revalidatePath('/operator/jobs');
-    revalidatePath('/admin/jobs');
 
     return { success: true, handover: serializeData(handover) };
   } catch (error: any) {

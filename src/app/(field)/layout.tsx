@@ -23,7 +23,8 @@ export default async function FieldLayout({
     select: { role: true, full_name: true, email: true }
   });
 
-  if (!profile || profile.role !== "field_officer") {
+  const allowedRoles = ["field_officer", "admin", "operator"];
+  if (!profile || !allowedRoles.includes(profile.role)) {
     redirect("/access-denied");
   }
 

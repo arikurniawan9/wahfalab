@@ -33,19 +33,13 @@ export async function getCategories(page = 1, limit = 10, search = "") {
   }
 }
 
+import { getCachedAllCategories, invalidateGlobalCache } from "@/lib/cache"
+
 /**
  * Get all categories (for dropdowns)
  */
 export async function getAllCategories() {
-  try {
-    return await prisma.serviceCategory.findMany({
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true }
-    })
-  } catch (error) {
-    handleError(error, { action: 'fetch', title: 'Gagal memuat kategori' })
-    return []
-  }
+  return await getCachedAllCategories()
 }
 
 /**
@@ -94,7 +88,9 @@ export async function createCategory(input: CategoryInput) {
       }
     })
 
+    invalidateGlobalCache("all_categories")
     revalidatePath('/admin/categories')
+    revalidatePath('/operator/categories')
     return { success: true, data: category }
   } catch (error) {
     handleError(error, { action: 'create', title: 'Gagal menambahkan kategori' })
@@ -137,7 +133,9 @@ export async function updateCategory(id: string, input: Partial<CategoryInput>) 
       }
     })
 
+    invalidateGlobalCache("all_categories")
     revalidatePath('/admin/categories')
+    revalidatePath('/operator/categories')
     return { success: true, data: category }
   } catch (error) {
     handleError(error, { action: 'update', title: 'Gagal memperbarui kategori' })
@@ -168,7 +166,9 @@ export async function deleteCategory(id: string) {
       where: { id }
     })
 
+    invalidateGlobalCache("all_categories")
     revalidatePath('/admin/categories')
+    revalidatePath('/operator/categories')
     return { success: true }
   } catch (error) {
     handleError(error, { action: 'delete', title: 'Gagal menghapus kategori' })
@@ -202,7 +202,9 @@ export async function deleteManyCategories(ids: string[]) {
       where: { id: { in: ids } }
     })
 
+    invalidateGlobalCache("all_categories")
     revalidatePath('/admin/categories')
+    revalidatePath('/operator/categories')
     return { success: true }
   } catch (error) {
     handleError(error, { action: 'delete', title: 'Gagal menghapus kategori' })

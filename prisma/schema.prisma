@@ -197,6 +197,7 @@ model Profile {
   company_name         String?
   address              String?
   phone                String?
+  permissions          Json?               @default("{}") // Store granular permissions: { modul: ["view", "create", "edit", "delete"] }
   created_at           DateTime            @default(now())
   quotations           Quotation[]
   sampling_assignments SamplingAssignment[] @relation("LeadOfficer")
@@ -437,9 +438,10 @@ model SamplingAssignment {
   scheduled_date   DateTime
   actual_date      DateTime?
   location         String
-  notes            String?
-  photos           Json?           // Array of photo URLs
-  created_at       DateTime        @default(now())
+  notes               String?
+  photos              Json?            // Array of {url, name}
+  signed_travel_order_url String?      // Path to uploaded PDF
+  created_at          DateTime         @default(now())
   updated_at       DateTime        @default(now())
   travel_order     TravelOrder?
 
@@ -485,6 +487,9 @@ model CompanyProfile {
   logo_url        String?
   tagline         String?
   npwp            String?
+  leader_name     String?   // Nama Kepala/Ketua
+  signature_url   String?   // URL Tanda Tangan Digital
+  stamp_url       String?   // URL Stempel Digital
   created_at      DateTime @default(now())
   updated_at      DateTime @default(now())
 

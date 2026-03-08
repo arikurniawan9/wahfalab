@@ -68,7 +68,9 @@ export async function createOrUpdateService(formData: any, id?: string) {
       })
     }
 
+    invalidateGlobalCache("all_services")
     revalidatePath('/admin/services')
+    revalidatePath('/operator/services')
     return { success: true }
   } catch (error: any) {
     console.error('Service Action Error:', error)
@@ -97,7 +99,9 @@ export async function deleteService(id: string) {
     await prisma.service.delete({
       where: { id }
     })
+    invalidateGlobalCache("all_services")
     revalidatePath('/admin/services')
+    revalidatePath('/operator/services')
     return { success: true }
   } catch (error: any) {
     return { success: false, error: 'Gagal menghapus data' }
@@ -109,21 +113,17 @@ export async function deleteManyServices(ids: string[]) {
     await prisma.service.deleteMany({
       where: { id: { in: ids } }
     })
+    invalidateGlobalCache("all_services")
     revalidatePath('/admin/services')
+    revalidatePath('/operator/services')
     return { success: true }
   } catch (error: any) {
     return { success: false, error: 'Gagal menghapus beberapa data' }
   }
 }
 
+import { getCachedAllServices, invalidateGlobalCache } from "@/lib/cache"
+
 export async function getAllServices() {
-  const services = await prisma.service.findMany({
-    include: { 
-      category_ref: true,
-      regulation_ref: { select: { name: true } }
-    },
-    orderBy: { name: 'asc' }
-  })
-  
-  return serializeData(services)
+  return await getCachedAllServices()
 }

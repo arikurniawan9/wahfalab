@@ -3,6 +3,8 @@ export { EmptyState } from "./empty-state";
 export { SearchInput } from "./search-input";
 export { Pagination } from "./pagination";
 export { DataTable } from "./data-table";
+export { ResponsiveTable } from "./responsive-table";
+export type { Column as TableColumn } from "./responsive-table";
 export { Skeleton, CardSkeleton, TableSkeleton, PageSkeleton } from "./skeleton";
 
 // Loading components (backward compatibility)
@@ -17,3 +19,6 @@ export { InlineLoader } from "./inline-loader";
 
 // Notification components
 export { NotificationBell } from "./notification-bell";
+
+// Standard Modal components
+export { StandardModal, FormModal, DetailModal, ConfirmModal } from "./standard-modal";

@@ -1,10 +1,22 @@
+// ============================================================================
+// PREMIUM ANALYST PRECISION INTERFACE - v4.0
+// Engineered for maximum speed and scientific accuracy.
+// ============================================================================
+
 "use client";
 
-import React, { useEffect, useState, use } from "react";
-import { getAnalysisJobById, startAnalysis, saveAnalysisResults, uploadAnalysisPDF, uploadRawData, completeAnalysis } from "@/lib/actions/analyst";
+import React, { useEffect, useState, use, useCallback } from "react";
+import { 
+  getAnalysisJobById, 
+  startAnalysis, 
+  saveAnalysisResults, 
+  uploadAnalysisPDF, 
+  uploadRawData, 
+  completeAnalysis 
+} from "@/lib/actions/analyst";
 import { createSampleHandover } from "@/lib/actions/handover";
 import { getProfile } from "@/lib/actions/auth";
-import { ChemicalLoader } from "@/components/ui";
+import { ChemicalLoader, LoadingOverlay } from "@/components/ui";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,7 +43,16 @@ import {
   ClipboardCheck,
   Send,
   Eye,
-  Download
+  Download,
+  Activity,
+  Beaker,
+  ShieldCheck,
+  ChevronRight,
+  Camera,
+  ExternalLink,
+  Info,
+  Layers,
+  FileCheck
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -53,6 +74,15 @@ import { pdf } from "@react-pdf/renderer";
 import { SampleHandoverPDF } from "@/components/pdf/SampleHandoverPDF";
 import { cn } from "@/lib/utils";
 
+const statusConfig: Record<string, { label: string; color: string; bg: string; icon: any; progress: number }> = {
+  sampling: { label: 'Logistik Sampel', color: 'text-blue-600', bg: 'bg-blue-50', icon: MapPin, progress: 20 },
+  analysis_ready: { label: 'Tunggu Lab', color: 'text-amber-600', bg: 'bg-amber-50', icon: PackageCheck, progress: 40 },
+  analysis: { label: 'Laboratorium', color: 'text-violet-600', bg: 'bg-violet-50', icon: Beaker, progress: 70 },
+  analysis_done: { label: 'Analisis Final', color: 'text-emerald-600', bg: 'bg-emerald-50', icon: ShieldCheck, progress: 90 },
+  reporting: { label: 'Penerbitan LHU', color: 'text-indigo-600', bg: 'bg-indigo-50', icon: FileText, progress: 95 },
+  completed: { label: 'Selesai', color: 'text-emerald-600', bg: 'bg-emerald-50', icon: CheckCircle, progress: 100 }
+};
+
 interface TestResult {
   parameter: string;
   result: string;
@@ -70,11 +100,9 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
   const [job, setJob] = useState<any>(null);
   const [analysis, setAnalysis] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
 
   // Form state
-  const [testResults, setTestResults] = useState<TestResult[]>([
-    { parameter: "", result: "", unit: "", method: "", limit: "" }
-  ]);
   const [analysisNotes, setAnalysisNotes] = useState("");
   const [equipmentUsed, setEquipmentUsed] = useState("");
   const [sampleCondition, setSampleCondition] = useState("");
@@ -88,1012 +116,559 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
   });
   const [handover, setHandover] = useState<any>(null);
 
-  // Confirmation dialog for sending to reporting
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
-
-  // Photo viewer
   const [photoDialogOpen, setPhotoDialogOpen] = useState(false);
   const [selectedPhotos, setSelectedPhotos] = useState<any[]>([]);
 
-  useEffect(() => {
-    async function loadJob() {
-      try {
-        const [data, prof] = await Promise.all([
-          getAnalysisJobById(id),
-          getProfile()
-        ]);
+  const loadData = useCallback(async () => {
+    try {
+      const [result, profResult] = await Promise.all([
+        getAnalysisJobById(id),
+        getProfile()
+      ]);
 
-        if (!data.success || !data.jobOrder) {
-          toast.error(data.error || "Gagal memuat job order");
-          return;
-        }
-
-        setJob(data.jobOrder);
-        setProfile(prof);
-
-        // Load handover with full details if exists
-        if (data.jobOrder.sample_handover) {
-          // Get fresh handover data with complete job_order details
-          const { getHandoverByJobId } = await import('@/lib/actions/handover');
-          const freshHandover = await getHandoverByJobId(id);
-          if (freshHandover) {
-            setHandover(freshHandover);
-          }
-        }
-
-        // Load existing analysis data OR auto-populate from quotation
-        if (data.jobOrder.lab_analysis) {
-          setAnalysis(data.jobOrder.lab_analysis);
-          const results = (data.jobOrder.lab_analysis.test_results as any) as TestResult[] || [];
-          setTestResults(results.length > 0 ? results : [{ parameter: "", result: "", unit: "", method: "", limit: "" }]);
-          setAnalysisNotes(data.jobOrder.lab_analysis.analysis_notes || "");
-          setEquipmentUsed(Array.isArray(data.jobOrder.lab_analysis.equipment_used)
-            ? data.jobOrder.lab_analysis.equipment_used.join(", ")
-            : "");
-          setSampleCondition(data.jobOrder.lab_analysis.sample_condition || "");
-        } else {
-          // Auto-populate parameters from quotation items
-          const quotationItems = data.jobOrder.quotation?.items || [];
-          const parametersFromQuotation: TestResult[] = [];
-
-          quotationItems.forEach((item: any) => {
-            const service = item.service;
-            if (service?.parameters && Array.isArray(service.parameters)) {
-              service.parameters.forEach((param: any) => {
-                parametersFromQuotation.push({
-                  parameter: param.name || param.parameter || "",
-                  result: "",
-                  unit: param.unit || "",
-                  method: param.method || service.code || "",
-                  limit: param.limit || param.max_limit || ""
-                });
-              });
-            }
-
-            // If no parameters in service, add service name as placeholder
-            if (!service?.parameters || service.parameters.length === 0) {
-              parametersFromQuotation.push({
-                parameter: service?.name || item.service_name || "Parameter",
-                result: "",
-                unit: service?.unit || item.unit || "",
-                method: service?.code || item.code || "",
-                limit: ""
-              });
-            }
-          });
-
-          // Set test results with parameters from quotation
-          if (parametersFromQuotation.length > 0) {
-            setTestResults(parametersFromQuotation);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to load job:", error);
-        toast.error("Gagal memuat data job order");
-      } finally {
-        setLoading(false);
+      if (!result.success || !result.jobOrder) {
+        toast.error(result.error || "Gagal memuat data");
+        return;
       }
+
+      setJob(result.jobOrder);
+      setProfile(profResult);
+      setCompanyProfile(result.companyProfile);
+
+      if (result.jobOrder.sample_handover) {
+        setHandover(result.jobOrder.sample_handover);
+      }
+
+      if (result.jobOrder.lab_analysis) {
+        setAnalysis(result.jobOrder.lab_analysis);
+        setAnalysisNotes(result.jobOrder.lab_analysis.analysis_notes || "");
+        setEquipmentUsed(Array.isArray(result.jobOrder.lab_analysis.equipment_used)
+          ? result.jobOrder.lab_analysis.equipment_used.join(", ")
+          : "");
+        setSampleCondition(result.jobOrder.lab_analysis.sample_condition || "");
+      }
+    } catch (error) {
+      console.error("Load Error:", error);
+      toast.error("Terjadi kesalahan sinkronisasi");
+    } finally {
+      setLoading(false);
     }
-    loadJob();
   }, [id]);
 
-  const handleAddParameter = () => {
-    setTestResults([...testResults, { parameter: "", result: "", unit: "", method: "", limit: "" }]);
-  };
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-  const handleRemoveParameter = (index: number) => {
-    if (testResults.length === 1) return;
-    setTestResults(testResults.filter((_, i) => i !== index));
-  };
-
-  const handleParameterChange = (index: number, field: keyof TestResult, value: string) => {
-    const updated = [...testResults];
-    updated[index][field] = value;
-    setTestResults(updated);
-  };
-
-  const validateAnalysis = () => {
-    const filledResults = testResults.filter(t => t.parameter && t.result);
-    if (filledResults.length === 0) {
-      toast.error("Minimal isi 1 parameter hasil analisis");
-      return false;
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: "pdf" | "raw") => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      if (type === "pdf") {
+        const res = await uploadAnalysisPDF(id, formData);
+        if (res.success) {
+          toast.success("✅ Berkas analisis tersimpan");
+          setAnalysis((prev: any) => ({ ...prev, result_pdf_url: res.url }));
+        }
+      } else {
+        const res = await uploadRawData(id, formData);
+        if (res.success) {
+          toast.success("✅ Data mentah tersimpan");
+          setAnalysis((prev: any) => ({ ...prev, raw_data_url: res.url }));
+        }
+      }
+      loadData();
+    } catch (error: any) {
+      toast.error("Gagal mengunggah file");
+    } finally {
+      setSubmitting(false);
     }
-    return true;
   };
 
   const handleSave = async () => {
-    if (!validateAnalysis()) return;
-
     setSubmitting(true);
     try {
-      const equipmentList = equipmentUsed.split(",").map(e => e.trim()).filter(e => e);
-
       await saveAnalysisResults(id, {
-        test_results: testResults.filter(t => t.parameter),
         analysis_notes: analysisNotes,
-        equipment_used: equipmentList,
+        equipment_used: equipmentUsed.split(",").map(e => e.trim()).filter(e => e),
         sample_condition: sampleCondition
       });
-
-      toast.success("✅ Hasil analisis berhasil disimpan", {
-        description: "Draft tersimpan, Anda dapat melanjutkan nanti"
-      });
+      toast.success("✅ Draft progres lab berhasil disimpan");
     } catch (error: any) {
-      toast.error(error.message || "Gagal menyimpan hasil analisis");
+      toast.error("Gagal menyimpan draft");
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const handleStartAnalysis = async () => {
-    setSubmitting(true);
-    try {
-      await startAnalysis(id);
-      toast.success("✅ Analisis dimulai");
-      router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || "Gagal memulai analisis");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleOpenConfirm = () => {
-    if (!validateAnalysis()) return;
-    setConfirmDialogOpen(true);
   };
 
   const handleComplete = async () => {
     setSubmitting(true);
     try {
-      // Save first before completing
-      const equipmentList = equipmentUsed.split(",").map(e => e.trim()).filter(e => e);
+      // Save first
       await saveAnalysisResults(id, {
-        test_results: testResults.filter(t => t.parameter),
         analysis_notes: analysisNotes,
-        equipment_used: equipmentList,
+        equipment_used: equipmentUsed.split(",").map(e => e.trim()).filter(e => e),
         sample_condition: sampleCondition
       });
-
       // Then complete
       await completeAnalysis(id);
-
-      toast.success("✅ Analisis selesai & dikirim ke Reporting!", {
-        description: "Job order akan diteruskan ke staff reporting untuk pembuatan laporan",
-        duration: 5000
-      });
-
+      toast.success("✅ Analisis Selesai. Notifikasi dikirim ke tim Reporting.");
       router.push("/analyst/jobs");
     } catch (error: any) {
-      toast.error(error.message || "Gagal menyelesaikan analisis");
+      toast.error("Gagal mengirim hasil analisis");
     } finally {
       setSubmitting(false);
       setConfirmDialogOpen(false);
     }
   };
 
-  // Get current analysis summary for confirmation dialog
-  const getAnalysisSummary = () => {
-    const filledParams = testResults.filter(t => t.parameter && t.result);
-    const equipmentList = equipmentUsed.split(",").map(e => e.trim()).filter(e => e);
-    
-    return {
-      parameterCount: filledParams.length,
-      equipmentCount: equipmentList.length,
-      hasSampleCondition: !!sampleCondition,
-      hasNotes: !!analysisNotes,
-      parameters: filledParams
-    };
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: "pdf" | "raw") => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const handleHandoverSubmit = async () => {
     setSubmitting(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      if (type === "pdf") {
-        await uploadAnalysisPDF(id, formData);
-        toast.success("✅ PDF hasil analisis berhasil diupload");
-      } else {
-        await uploadRawData(id, formData);
-        toast.success("✅ Data mentah berhasil diupload");
-      }
-      router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || "Gagal upload file");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleOpenHandover = () => {
-    setHandoverDialogOpen(true);
-  };
-
-  const handleCreateHandover = async () => {
-    if (!job || !profile) return;
-    setSubmitting(true);
-    try {
-      const res = await createSampleHandover({
-        job_order_id: job.id,
-        sender_id: job.sampling_assignment?.field_officer_id || profile.id,
-        receiver_id: profile.id,
-        ...handoverData
+      const result = await createSampleHandover({
+        job_order_id: id,
+        sample_condition: handoverData.sample_condition,
+        sample_qty: handoverData.sample_qty,
+        notes: handoverData.sample_notes
       });
-
-      if (res.success) {
-        toast.success("✅ BAST Berhasil dibuat", {
-          description: "Sampel telah diterima dan status berubah ke Analisis."
-        });
-        setHandoverDialogOpen(false);
-        window.location.reload();
-      } else {
-        toast.error(res.error || "Gagal membuat BAST");
-      }
-    } catch (error) {
-      toast.error("Terjadi kesalahan sistem");
+      if (result.error) throw new Error(result.error);
+      toast.success("✅ Serah terima sampel berhasil");
+      setHandoverDialogOpen(false);
+      loadData();
+    } catch (error: any) {
+      toast.error(error.message || "Gagal serah terima");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDownloadBAST = async () => {
-    if (!job) return;
+  if (loading) return <div className="flex h-[80vh] items-center justify-center"><ChemicalLoader /></div>;
+  if (!job) return <div className="p-10 text-center">Data tidak ditemukan.</div>;
 
-    try {
-      // Get fresh handover data with full job_order details
-      const { getHandoverByJobId } = await import('@/lib/actions/handover');
-      const freshHandover = await getHandoverByJobId(id);
-
-      if (!freshHandover) {
-        toast.error("Data BAST tidak ditemukan");
-        return;
-      }
-
-      const blob = await pdf(<SampleHandoverPDF data={freshHandover} />).toBlob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `BAST-${job.tracking_code}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      toast.success("✅ BAST berhasil diunduh");
-    } catch (error) {
-      toast.error("Gagal mengunduh BAST");
-    }
-  };
-
-  const handleViewPhotos = () => {
-    const photos = job?.sampling_assignment?.photos;
-    if (photos && photos.length > 0) {
-      setSelectedPhotos(Array.isArray(photos) ? photos : JSON.parse(photos));
-      setPhotoDialogOpen(true);
-    }
-  };
-
-  const getPhotoName = (photo: any, index: number) => {
-    if (typeof photo === 'string') return `Foto ${index + 1}`;
-    if (typeof photo === 'object' && photo.name) return photo.name;
-    return `Foto ${index + 1}`;
-  };
-
-  if (loading) {
-    return (
-      <div className="p-10 flex justify-center">
-        <ChemicalLoader />
-      </div>
-    );
-  }
-
-  if (!job) {
-    return (
-      <div className="p-10 text-center">
-        <h2 className="text-xl font-semibold text-slate-700">Job order tidak ditemukan</h2>
-        <p className="text-sm text-slate-500 mt-2">
-          Job order mungkin tidak ada atau Anda tidak memiliki akses.
-        </p>
-        <Link href="/analyst/jobs">
-          <Button className="mt-4 cursor-pointer">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Kembali
-          </Button>
-        </Link>
-      </div>
-    );
-  }
-
-  const statusColors: any = {
-    sampling: "bg-blue-100 text-blue-700 border-blue-200",
-    analysis: "bg-violet-100 text-violet-700 border-violet-200",
-    analysis_done: "bg-emerald-100 text-emerald-700 border-emerald-200",
-    reporting: "bg-amber-100 text-amber-700 border-amber-200"
-  };
-
-  const statusLabels: any = {
-    sampling: "Menunggu Handover",
-    analysis: "Sedang Analisis",
-    analysis_done: "Selesai Analisis",
-    reporting: "Ke Reporting"
-  };
-
-  // Workflow steps
-  const workflowSteps = [
-    { id: 1, name: "Sampling", icon: MapPin, completed: job.status !== 'sampling' && job.status !== 'scheduled' },
-    { id: 2, name: "Handover", icon: PackageCheck, completed: !!handover || job.status !== 'sampling' },
-    { id: 3, name: "Analisis", icon: FlaskConical, completed: job.status === 'analysis_done' || job.status === 'reporting' },
-    { id: 4, name: "Reporting", icon: FileText, completed: job.status === 'reporting' || job.status === 'completed' }
-  ];
+  const currentStatus = statusConfig[job.status] || statusConfig.analysis;
 
   return (
-    <div className="p-4 md:p-10 pb-24 md:pb-10 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="mb-8">
-        <Link href="/analyst/jobs">
-          <Button variant="ghost" size="sm" className="mb-4 cursor-pointer">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Kembali
+    <div className="p-4 md:p-8 pb-24 md:pb-10 max-w-[1600px] mx-auto space-y-6 animate-in fade-in duration-700">
+      <LoadingOverlay isOpen={submitting} title="Memproses Data Lab..." description="Sinkronisasi berkas dan hasil ke basis data WahfaLab" />
+
+      {/* Ramping Header */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-4">
+          <Button 
+            variant="ghost" 
+            size="icon"
+            onClick={() => router.push('/analyst/jobs')} 
+            className="h-10 w-10 rounded-xl text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"
+          >
+            <ArrowLeft className="h-5 w-5" />
           </Button>
-        </Link>
-
-        <div className="flex items-start justify-between">
           <div>
-            <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-3xl font-bold text-emerald-900 tracking-tight">{job.tracking_code}</h1>
-              <Badge className={cn("text-xs px-3 py-1.5 font-bold uppercase", statusColors[job.status])}>
-                {statusLabels[job.status]}
-              </Badge>
+            <div className="flex items-center gap-2 mb-0.5">
+               <span className="font-mono text-xs font-black text-violet-600 bg-violet-50 px-2 py-0.5 rounded uppercase tracking-tighter">#{job.tracking_code}</span>
+               {job.invoice?.invoice_number && <Badge className="bg-emerald-100 text-emerald-700 border-none text-[8px] font-black">{job.invoice.invoice_number}</Badge>}
             </div>
-            <p className="text-slate-500 text-sm">
-              {job.quotation?.profile?.company_name || job.quotation?.profile?.full_name}
-            </p>
+            <h1 className="text-xl font-black text-slate-800 uppercase tracking-tight font-[family-name:var(--font-montserrat)] leading-none">
+               Lab Performance Dashboard
+            </h1>
           </div>
+        </div>
+        
+        <div className="flex items-center gap-4 w-full lg:w-auto">
+           <div className="flex-1 lg:text-right">
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Status Progres</p>
+              <p className={cn("text-xs font-black uppercase tracking-tight", currentStatus.color)}>{currentStatus.label}</p>
+           </div>
+           <div className="h-10 w-10 bg-violet-600 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-violet-900/20">
+              {profile?.full_name?.charAt(0)}
+           </div>
         </div>
       </div>
 
-      {/* Workflow Progress */}
-      <Card className="mb-6 border-emerald-200 bg-gradient-to-r from-emerald-50/50 to-white">
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between">
-            {workflowSteps.map((step, index) => (
-              <React.Fragment key={step.id}>
-                <div className="flex flex-col items-center gap-2">
-                  <div className={cn(
-                    "h-12 w-12 rounded-full flex items-center justify-center border-2 transition-all",
-                    step.completed
-                      ? "bg-emerald-600 border-emerald-600 text-white"
-                      : job.status === 'analysis' && step.id === 3
-                      ? "bg-violet-600 border-violet-600 text-white animate-pulse"
-                      : "bg-white border-slate-300 text-slate-400"
-                  )}>
-                    <step.icon className="h-5 w-5" />
-                  </div>
-                  <span className={cn(
-                    "text-xs font-bold uppercase tracking-wide",
-                    step.completed ? "text-emerald-700" : "text-slate-500"
-                  )}>
-                    {step.name}
-                  </span>
-                </div>
-                {index < workflowSteps.length - 1 && (
-                  <div className={cn(
-                    "flex-1 h-1 mx-4 rounded",
-                    step.completed ? "bg-emerald-600" : "bg-slate-200"
-                  )} />
-                )}
-              </React.Fragment>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Main Content - Analysis Form */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Analysis Input Form */}
-          {(job.status === "analysis" || job.status === "analysis_done" || analysis) && (
-            <Card className="border-violet-200 shadow-lg shadow-violet-900/5">
-              <CardHeader className="bg-gradient-to-r from-violet-50 to-white border-b border-violet-100">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-emerald-900 flex items-center gap-2">
-                      <FlaskConical className="h-5 w-5 text-violet-600" />
-                      Input Hasil Analisis
-                    </CardTitle>
-                    <CardDescription>
-                      {testResults.length > 0 && testResults[0].parameter ? (
-                        <span className="text-emerald-600 font-medium">
-                          ✅ Parameter terisi otomatis dari penawaran ({testResults.length} parameter)
-                        </span>
-                      ) : (
-                        "Masukkan parameter hasil uji laboratorium"
-                      )}
-                    </CardDescription>
-                  </div>
-                  <Badge variant="outline" className="border-violet-300 text-violet-700">
-                    {testResults.filter(t => t.parameter && t.result).length}/{testResults.length} Parameter Terisi
-                  </Badge>
-                </div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column: Client & Sampling Info */}
+        <div className="lg:col-span-3 space-y-6">
+           <Card className="border-none shadow-sm rounded-[2rem] bg-white overflow-hidden">
+              <CardHeader className="p-6 pb-2">
+                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Identitas Klien</h3>
+                 <CardTitle className="text-lg font-black text-slate-800 leading-tight">
+                    {job.quotation?.profile?.company_name || job.quotation?.profile?.full_name}
+                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-6 space-y-4">
-                {/* Test Results Table */}
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-slate-50">
-                        <tr>
-                          <th className="text-left p-3 font-semibold text-slate-700 text-sm">Parameter</th>
-                          <th className="text-left p-3 font-semibold text-slate-700 text-sm">Hasil</th>
-                          <th className="text-left p-3 font-semibold text-slate-700 text-sm">Satuan</th>
-                          <th className="text-left p-3 font-semibold text-slate-700 text-sm">Metode</th>
-                          <th className="text-left p-3 font-semibold text-slate-700 text-sm">Batas Limit</th>
-                          <th className="w-16"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {testResults.map((result, index) => (
-                          <tr key={index} className="hover:bg-slate-50">
-                            <td className="p-2">
-                              <Input
-                                value={result.parameter}
-                                onChange={(e) => handleParameterChange(index, "parameter", e.target.value)}
-                                placeholder="Contoh: pH"
-                                className="border-0 bg-transparent"
-                              />
-                            </td>
-                            <td className="p-2">
-                              <Input
-                                value={result.result}
-                                onChange={(e) => handleParameterChange(index, "result", e.target.value)}
-                                placeholder="Hasil"
-                                className="border-0 bg-transparent font-semibold text-emerald-700"
-                              />
-                            </td>
-                            <td className="p-2">
-                              <Input
-                                value={result.unit}
-                                onChange={(e) => handleParameterChange(index, "unit", e.target.value)}
-                                placeholder="mg/L"
-                                className="border-0 bg-transparent w-20"
-                              />
-                            </td>
-                            <td className="p-2">
-                              <Input
-                                value={result.method}
-                                onChange={(e) => handleParameterChange(index, "method", e.target.value)}
-                                placeholder="SMEWW"
-                                className="border-0 bg-transparent"
-                              />
-                            </td>
-                            <td className="p-2">
-                              <Input
-                                value={result.limit}
-                                onChange={(e) => handleParameterChange(index, "limit", e.target.value)}
-                                placeholder="6-9"
-                                className="border-0 bg-transparent"
-                              />
-                            </td>
-                            <td className="p-2 text-center">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleRemoveParameter(index)}
-                                disabled={testResults.length === 1}
-                                className="h-8 w-8 text-red-500 hover:bg-red-50 cursor-pointer"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <Button
-                  onClick={handleAddParameter}
-                  variant="outline"
-                  size="sm"
-                  className="cursor-pointer"
-                >
-                  <Plus className="mr-2 h-4 w-4" /> Tambah Parameter
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Additional Information */}
-          {(job.status === "analysis" || job.status === "analysis_done" || analysis) && (
-            <Card className="shadow-lg shadow-emerald-900/5">
-              <CardHeader>
-                <CardTitle className="text-emerald-900">Informasi Tambahan</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="sampleCondition">Kondisi Sampel</Label>
-                  <Textarea
-                    id="sampleCondition"
-                    value={sampleCondition}
-                    onChange={(e) => setSampleCondition(e.target.value)}
-                    placeholder="Deskripsikan kondisi sampel..."
-                    className="mt-1 min-h-[80px]"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="equipmentUsed">Peralatan yang Digunakan</Label>
-                  <Input
-                    id="equipmentUsed"
-                    value={equipmentUsed}
-                    onChange={(e) => setEquipmentUsed(e.target.value)}
-                    placeholder="pH Meter, TDS Meter, Spectrophotometer"
-                  />
-                  <p className="text-xs text-slate-500 mt-1">Pisahkan dengan koma (,)</p>
-                </div>
-
-                <div>
-                  <Label htmlFor="analysisNotes">Catatan Analis</Label>
-                  <Textarea
-                    id="analysisNotes"
-                    value={analysisNotes}
-                    onChange={(e) => setAnalysisNotes(e.target.value)}
-                    placeholder="Catatan atau observasi khusus..."
-                    className="mt-1 min-h-[100px]"
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* File Upload */}
-          {(job.status === "analysis" || job.status === "analysis_done" || analysis) && (
-            <Card className="shadow-lg shadow-emerald-900/5">
-              <CardHeader>
-                <CardTitle className="text-emerald-900 flex items-center gap-2">
-                  <FileText className="h-5 w-5" /> Upload Dokumen
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label>Hasil Analisis (PDF)</Label>
-                  <div className="mt-2 flex items-center gap-4">
-                    <Input
-                      type="file"
-                      accept=".pdf"
-                      onChange={(e) => handleFileUpload(e, "pdf")}
-                      disabled={submitting}
-                      className="max-w-md"
-                    />
-                    {analysis?.result_pdf_url && (
-                      <Button variant="outline" size="sm" asChild className="cursor-pointer">
-                        <a href={analysis.result_pdf_url} target="_blank" rel="noopener noreferrer">
-                          <Eye className="h-4 w-4 mr-2" /> Lihat
-                        </a>
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <Label>Data Mentah (Foto/Dokumen)</Label>
-                  <div className="mt-2 flex items-center gap-4">
-                    <Input
-                      type="file"
-                      accept="image/*,.pdf"
-                      onChange={(e) => handleFileUpload(e, "raw")}
-                      disabled={submitting}
-                      className="max-w-md"
-                    />
-                    {analysis?.raw_data_url && (
-                      <Button variant="outline" size="sm" asChild className="cursor-pointer">
-                        <a href={analysis.raw_data_url} target="_blank" rel="noopener noreferrer">
-                          <Download className="h-4 w-4 mr-2" /> Unduh
-                        </a>
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {/* Sidebar - Info & Actions */}
-        <div className="space-y-6">
-          {/* Sampling Info */}
-          <Card className="shadow-lg shadow-emerald-900/5">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold text-slate-700">Informasi Sampling</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <Label className="text-[10px] font-bold text-slate-500 uppercase">Customer</Label>
-                <p className="text-sm font-semibold text-slate-800 mt-1">
-                  {job.quotation?.profile?.company_name || job.quotation?.profile?.full_name || "-"}
-                </p>
-              </div>
-              <div>
-                <Label className="text-[10px] font-bold text-slate-500 uppercase">Lokasi</Label>
-                <div className="flex items-center gap-2 mt-1">
-                  <MapPin className="h-4 w-4 text-slate-400" />
-                  <p className="text-sm font-medium text-slate-700">{job.sampling_assignment?.location || "-"}</p>
-                </div>
-              </div>
-              <div>
-                <Label className="text-[10px] font-bold text-slate-500 uppercase">Tanggal</Label>
-                <div className="flex items-center gap-2 mt-1">
-                  <Calendar className="h-4 w-4 text-slate-400" />
-                  <p className="text-sm font-medium text-slate-700">
-                    {job.sampling_assignment?.scheduled_date
-                      ? new Date(job.sampling_assignment.scheduled_date).toLocaleDateString("id-ID")
-                      : "-"}
-                  </p>
-                </div>
-              </div>
-              <div>
-                <Label className="text-[10px] font-bold text-slate-500 uppercase">Field Officer</Label>
-                <div className="flex items-center gap-2 mt-1">
-                  <User className="h-4 w-4 text-slate-400" />
-                  <p className="text-sm font-medium text-slate-700">{job.sampling_assignment?.field_officer?.full_name || "-"}</p>
-                </div>
-              </div>
-
-              {/* Sampling Photos */}
-              {job.sampling_assignment?.photos && job.sampling_assignment.photos.length > 0 && (
-                <div className="pt-3 border-t">
-                  <div className="flex items-center justify-between mb-2">
-                    <Label className="text-[10px] font-bold text-slate-500 uppercase">Foto Sampling</Label>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleViewPhotos}
-                      className="h-6 text-xs cursor-pointer"
-                    >
-                      <Eye className="h-3 w-3 mr-1" />
-                      Lihat
-                    </Button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {job.sampling_assignment.photos.slice(0, 3).map((photo: any, idx: number) => {
-                      const photoUrl = typeof photo === 'string' ? photo : photo.url;
-                      return (
-                        <a
-                          key={idx}
-                          href={photoUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="aspect-square rounded-lg overflow-hidden border border-slate-200 hover:border-emerald-400 transition-all"
-                        >
-                          <img src={photoUrl} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover" />
-                        </a>
-                      );
-                    })}
-                  </div>
-                  {job.sampling_assignment.photos.length > 3 && (
-                    <p className="text-xs text-slate-500 mt-2 text-center">
-                      +{job.sampling_assignment.photos.length - 3} foto lainnya
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* Sampling Notes */}
-              {job.sampling_assignment?.notes && (
-                <div className="pt-3 border-t">
-                  <Label className="text-[10px] font-bold text-slate-500 uppercase">Catatan Sampling</Label>
-                  <p className="text-xs text-slate-600 mt-1 bg-slate-50 p-2 rounded">{job.sampling_assignment.notes}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Actions Card */}
-          <Card className="shadow-lg shadow-emerald-900/5 border-emerald-200">
-            <CardHeader>
-              <CardTitle className="text-emerald-900">Aksi</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {/* Handover - Show when status is sampling and no handover yet */}
-              {(job.status === "sampling" || job.status === "analysis_ready") && !handover && (
-                <Button
-                  onClick={handleOpenHandover}
-                  disabled={submitting}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 cursor-pointer h-11"
-                >
-                  <PackageCheck className="mr-2 h-4 w-4" /> Terima Sampel (BAST)
-                </Button>
-              )}
-
-              {/* Download BAST - Show when handover exists */}
-              {handover && (
-                <Button
-                  onClick={handleDownloadBAST}
-                  disabled={submitting}
-                  variant="outline"
-                  className="w-full cursor-pointer border-emerald-600 text-emerald-600 hover:bg-emerald-50 h-11"
-                >
-                  <FileText className="mr-2 h-4 w-4" /> Unduh BAST
-                </Button>
-              )}
-
-              {/* Start Analysis - Show when analysis not started yet */}
-              {!analysis && (job.status === "analysis" || job.status === "analysis_ready" || (job.status === "sampling" && handover)) && (
-                <Button
-                  onClick={handleStartAnalysis}
-                  disabled={submitting}
-                  className="w-full bg-violet-600 hover:bg-violet-700 cursor-pointer h-11"
-                >
-                  <FlaskConical className="mr-2 h-4 w-4" /> Mulai Analisis
-                </Button>
-              )}
-
-              {/* Save Draft - Show when analysis exists or in progress */}
-              {(analysis || job.status === "analysis") && (
-                <Button
-                  onClick={handleSave}
-                  disabled={submitting}
-                  variant="outline"
-                  className="w-full cursor-pointer h-11"
-                >
-                  <Save className="mr-2 h-4 w-4" /> Simpan Draft
-                </Button>
-              )}
-
-              {/* Complete & Send to Reporting - Show when analysis in progress or done */}
-              {(job.status === "analysis" || job.status === "analysis_done") && (
-                <Button
-                  onClick={handleOpenConfirm}
-                  disabled={submitting}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 cursor-pointer h-11"
-                >
-                  <Send className="mr-2 h-4 w-4" /> Selesai & Kirim ke Reporting
-                </Button>
-              )}
-
-              {/* Info message when no actions available */}
-              {job.status !== "sampling" && job.status !== "analysis" && job.status !== "analysis_done" && job.status !== "analysis_ready" && !handover && (
-                <div className="text-center py-4 text-sm text-slate-500">
-                  <AlertCircle className="h-8 w-8 mx-auto mb-2 text-slate-400" />
-                  <p>Belum ada aksi yang tersedia</p>
-                  <p className="text-xs mt-1">Job order masih dalam status {job.status}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* Handover Modal */}
-      <Dialog open={handoverDialogOpen} onOpenChange={setHandoverDialogOpen}>
-        <DialogContent className="sm:max-w-xl p-0 border-none shadow-2xl rounded-3xl overflow-hidden">
-          <div className="bg-emerald-700 p-4 text-white flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center border border-white/20">
-                <PackageCheck className="h-4 w-4" />
-              </div>
-              <DialogTitle className="text-base font-black uppercase tracking-widest">Serah Terima Sampel (BAST)</DialogTitle>
-            </div>
-            <Button variant="ghost" size="icon" onClick={() => setHandoverDialogOpen(false)} className="text-white/60 hover:text-white h-8 w-8"><X className="h-4 w-4" /></Button>
-          </div>
-
-          <div className="p-6 space-y-6">
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-2xl bg-white flex items-center justify-center shadow-sm border border-slate-100">
-                  <PackageCheck className="h-6 w-6 text-emerald-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-bold text-slate-900">{job?.tracking_code}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {job?.quotation?.profile?.company_name || job?.quotation?.profile?.full_name || "-"}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="sampleCondition" className="text-sm font-semibold">Kondisi Sampel</Label>
-                <Select
-                  value={handoverData.sample_condition}
-                  onValueChange={(value) => setHandoverData({ ...handoverData, sample_condition: value })}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Pilih kondisi" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Segel Utuh">Segel Utuh</SelectItem>
-                    <SelectItem value="Segel Rusak">Segel Rusak</SelectItem>
-                    <SelectItem value="Tanpa Segel">Tanpa Segel</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label htmlFor="sampleQty" className="text-sm font-semibold">Jumlah Sampel</Label>
-                <Input
-                  id="sampleQty"
-                  type="number"
-                  value={handoverData.sample_qty}
-                  onChange={(e) => setHandoverData({ ...handoverData, sample_qty: parseInt(e.target.value) || 1 })}
-                  className="mt-1"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="sampleNotes" className="text-sm font-semibold">Catatan Tambahan</Label>
-                <Textarea
-                  id="sampleNotes"
-                  value={handoverData.sample_notes}
-                  onChange={(e) => setHandoverData({ ...handoverData, sample_notes: e.target.value })}
-                  placeholder="Catatan kondisi sampel..."
-                  className="mt-1 min-h-[80px]"
-                />
-              </div>
-            </div>
-
-            <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setHandoverDialogOpen(false)} disabled={submitting} className="flex-1">Batal</Button>
-              <Button onClick={handleCreateHandover} disabled={submitting} className="flex-1 bg-emerald-600 hover:bg-emerald-700">
-                {submitting ? "Memproses..." : "Terima Sampel"}
-              </Button>
-            </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Photo Viewer Modal */}
-      <Dialog open={photoDialogOpen} onOpenChange={setPhotoDialogOpen}>
-        <DialogContent className="sm:max-w-4xl p-0 border-none shadow-2xl rounded-3xl overflow-hidden max-h-[90vh]">
-          <div className="bg-emerald-700 p-4 text-white flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center border border-white/20">
-                <FileText className="h-4 w-4" />
-              </div>
-              <DialogTitle className="text-base font-black uppercase tracking-widest">
-                {job?.tracking_code} - Foto Sampling
-              </DialogTitle>
-            </div>
-            <Button variant="ghost" size="icon" onClick={() => setPhotoDialogOpen(false)} className="text-white/60 hover:text-white h-8 w-8">
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <div className="p-6 overflow-y-auto max-h-[70vh]">
-            {selectedPhotos.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {selectedPhotos.map((photo: any, index: number) => {
-                  const photoUrl = typeof photo === 'string' ? photo : photo.url;
-                  const photoName = getPhotoName(photo, index);
-
-                  return (
-                    <div key={index} className="relative group rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
-                      <div className="absolute top-2 left-2 right-2 z-10 bg-gradient-to-r from-black/80 to-transparent text-white text-xs font-bold px-3 py-2 rounded-lg backdrop-blur-sm">
-                        {photoName}
-                      </div>
-                      <img
-                        src={photoUrl}
-                        alt={photoName}
-                        className="w-full h-auto object-cover aspect-video group-hover:scale-105 transition-transform duration-300"
-                      />
+              <CardContent className="p-6 pt-0 space-y-4">
+                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+                    <div className="flex items-center gap-3">
+                       <User className="h-3 w-3 text-indigo-400" />
+                       <span className="text-[10px] font-bold text-slate-500 uppercase">{job.quotation?.profile?.full_name}</span>
                     </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <p className="text-slate-500">Tidak ada foto</p>
-              </div>
-            )}
+                    <div className="flex items-center gap-3">
+                       <MapPin className="h-3 w-3 text-indigo-400" />
+                       <span className="text-[10px] font-bold text-slate-500 uppercase truncate">{job.sampling_assignment?.location || "Lokasi Lab"}</span>
+                    </div>
+                 </div>
+              </CardContent>
+           </Card>
+
+           <Card className="border-none shadow-sm rounded-[2rem] bg-white">
+              <CardHeader className="p-6 pb-2">
+                 <h3 className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em]">Info Lapangan</h3>
+              </CardHeader>
+              <CardContent className="p-6 pt-0 space-y-4">
+                 <div className="flex items-center gap-3 p-3 bg-emerald-50 rounded-xl border border-emerald-100">
+                    <div className="h-8 w-8 rounded-lg bg-white flex items-center justify-center shadow-sm">
+                       <User className="h-4 w-4 text-emerald-600" />
+                    </div>
+                    <div className="min-w-0">
+                       <p className="text-[8px] font-black text-slate-400 uppercase leading-none">Petugas</p>
+                       <p className="text-[10px] font-black text-slate-800 truncate uppercase mt-1">{job.sampling_assignment?.field_officer?.full_name}</p>
+                    </div>
+                 </div>
+
+                 {job.sampling_assignment?.photos?.length > 0 && (
+                   <div className="grid grid-cols-3 gap-2">
+                      {job.sampling_assignment.photos.slice(0, 3).map((photo: any, idx: number) => (
+                        <div key={idx} onClick={() => { setSelectedPhotos(job.sampling_assignment.photos); setPhotoDialogOpen(true); }} className="aspect-square rounded-xl overflow-hidden border border-slate-100 cursor-zoom-in group relative">
+                           <img src={typeof photo === 'string' ? photo : photo.url} className="w-full h-full object-cover group-hover:scale-110 transition-transform" alt="Sampling" />
+                           {idx === 2 && job.sampling_assignment.photos.length > 3 && (
+                              <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white font-black text-xs">+{job.sampling_assignment.photos.length - 3}</div>
+                           )}
+                        </div>
+                      ))}
+                   </div>
+                 )}
+              </CardContent>
+           </Card>
+
+           {job.sampling_assignment?.signed_travel_order_url && (
+              <Button 
+                onClick={() => window.open(job.sampling_assignment.signed_travel_order_url, '_blank')} 
+                className="w-full h-12 bg-emerald-900 hover:bg-black text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-xl shadow-emerald-900/10"
+              >
+                 SURAT TUGAS PDF <ExternalLink className="ml-2 h-3 w-3" />
+              </Button>
+           )}
+        </div>
+
+        {/* Middle Column: Scope & Lab Data */}
+        <div className="lg:col-span-6 space-y-6">
+           <Card className="border-none shadow-sm rounded-[2.5rem] bg-white overflow-hidden">
+              <CardHeader className="bg-slate-50/50 p-6 border-b border-slate-100 flex flex-row items-center justify-between">
+                 <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-violet-100 text-violet-600"><FlaskConical className="h-5 w-5" /></div>
+                    <div>
+                       <CardTitle className="text-base font-black uppercase text-slate-800 tracking-tight">Cakupan Pengujian</CardTitle>
+                       <CardDescription className="text-[9px] font-bold uppercase text-slate-400 tracking-widest">Daftar parameter wajib</CardDescription>
+                    </div>
+                 </div>
+                 <Badge className="bg-violet-600 text-white border-none text-[8px] font-black px-3 py-1 uppercase">{job.quotation?.items?.length} Layanan</Badge>
+              </CardHeader>
+              <CardContent className="p-0">
+                 <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                       <thead className="bg-slate-50/50 text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                          <tr>
+                             <th className="px-6 py-4">Layanan</th>
+                             <th className="px-6 py-4">Regulasi</th>
+                             <th className="px-6 py-4 text-center">Unit</th>
+                          </tr>
+                       </thead>
+                       <tbody className="divide-y divide-slate-50">
+                          {job.quotation?.items?.map((item: any, index: number) => (
+                             <tr key={index} className="group hover:bg-slate-50/30 transition-colors">
+                                <td className="px-6 py-4">
+                                   <p className="text-xs font-black text-slate-800 leading-tight uppercase mb-1">{item.service?.name || "Layanan Lab"}</p>
+                                   <div className="flex flex-wrap gap-1">
+                                      {item.parameter_snapshot?.split(", ").map((p: string, i: number) => (
+                                         <span key={i} className="text-[8px] font-bold text-violet-500 bg-violet-50 px-1.5 py-0.5 rounded uppercase">{p}</span>
+                                      ))}
+                                   </div>
+                                </td>
+                                <td className="px-6 py-4">
+                                   <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-lg uppercase">
+                                      {item.service?.regulation_ref?.name || "SOP Internal"}
+                                   </span>
+                                </td>
+                                <td className="px-6 py-4 text-center font-black text-slate-700 text-xs">{item.qty} {item.service?.unit || "Unit"}</td>
+                             </tr>
+                          ))}
+                       </tbody>
+                    </table>
+                 </div>
+              </CardContent>
+           </Card>
+
+           <Card className="border-none shadow-sm rounded-[2.5rem] bg-white">
+              <CardHeader className="p-6">
+                 <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest flex items-center gap-2">
+                    <ClipboardCheck className="h-4 w-4 text-emerald-600" /> Lembar Kerja Analis
+                 </h3>
+              </CardHeader>
+              <CardContent className="p-6 pt-0 space-y-6">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                       <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Kondisi Fisik Sampel</Label>
+                       <Textarea 
+                         value={sampleCondition} 
+                         onChange={(e) => setSampleCondition(e.target.value)}
+                         className="rounded-2xl bg-slate-50 border-none min-h-[100px] text-xs font-medium focus-visible:ring-violet-500 p-4"
+                         placeholder="Warna, Bau, Endapan, Segel, dll..."
+                       />
+                    </div>
+                    <div className="space-y-2">
+                       <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Peralatan Utama</Label>
+                       <Textarea 
+                         value={equipmentUsed} 
+                         onChange={(e) => setEquipmentUsed(e.target.value)}
+                         className="rounded-2xl bg-slate-50 border-none min-h-[100px] text-xs font-medium focus-visible:ring-violet-500 p-4"
+                         placeholder="Peralatan lab yang digunakan..."
+                       />
+                    </div>
+                 </div>
+                 <div className="space-y-2">
+                    <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Catatan Teknis Pengujian</Label>
+                    <Textarea 
+                      value={analysisNotes} 
+                      onChange={(e) => setAnalysisNotes(e.target.value)}
+                      className="rounded-2xl bg-slate-50 border-none min-h-[120px] text-xs font-medium focus-visible:ring-violet-500 p-6"
+                      placeholder="Input narasi hasil pengujian sementara di sini..."
+                    />
+                 </div>
+                 <div className="flex justify-end pt-4">
+                    <Button onClick={handleSave} disabled={submitting} className="h-12 bg-white hover:bg-slate-50 text-slate-800 font-black uppercase text-[10px] tracking-widest rounded-xl border-2 border-slate-100 shadow-sm flex items-center gap-2 px-8">
+                       <Save className="h-4 w-4" /> Simpan Draft
+                    </Button>
+                 </div>
+              </CardContent>
+           </Card>
+        </div>
+
+        {/* Right Column: Uploads & Actions */}
+        <div className="lg:col-span-3 space-y-6">
+           {/* Upload Zone Premium */}
+           <Card className="border-none shadow-sm rounded-[2.5rem] bg-indigo-950 text-white overflow-hidden">
+              <CardHeader className="p-6 pb-2">
+                 <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-indigo-900 border border-indigo-800"><Upload className="h-5 w-5 text-indigo-400" /></div>
+                    <CardTitle className="text-sm font-black uppercase tracking-tight">Berkas Analisis</CardTitle>
+                 </div>
+              </CardHeader>
+              <CardContent className="p-6 space-y-4">
+                 <div className="space-y-4">
+                    {/* PDF Upload */}
+                    <div className="group relative">
+                       <Label className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-2 block">Laporan PDF</Label>
+                       <div className="flex items-center gap-2">
+                          <div className="flex-1 relative">
+                             <Input 
+                               type="file" accept=".pdf"
+                               onChange={(e) => handleFileUpload(e, "pdf")}
+                               className="bg-indigo-900/50 border-none text-[10px] text-indigo-200 file:bg-indigo-600 file:text-white file:border-none file:rounded-lg file:mr-2 file:px-2 file:py-1 cursor-pointer h-10"
+                             />
+                             {analysis?.result_pdf_url && (
+                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                                   <div className="h-6 w-6 rounded-lg bg-emerald-500 flex items-center justify-center text-white"><FileCheck className="h-3 w-3" /></div>
+                                   <Link href={analysis.result_pdf_url} target="_blank" className="text-white hover:text-indigo-300"><Eye className="h-4 w-4" /></Link>
+                                </div>
+                             )}
+                          </div>
+                       </div>
+                    </div>
+
+                    {/* Raw Data Upload */}
+                    <div className="group relative">
+                       <Label className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-2 block">Data Mentah / Foto</Label>
+                       <div className="flex items-center gap-2">
+                          <div className="flex-1 relative">
+                             <Input 
+                               type="file" accept="image/*,.pdf"
+                               onChange={(e) => handleFileUpload(e, "raw")}
+                               className="bg-indigo-900/50 border-none text-[10px] text-indigo-200 file:bg-indigo-600 file:text-white file:border-none file:rounded-lg file:mr-2 file:px-2 file:py-1 cursor-pointer h-10"
+                             />
+                             {analysis?.raw_data_url && (
+                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                                   <div className="h-6 w-6 rounded-lg bg-emerald-500 flex items-center justify-center text-white"><FileCheck className="h-3 w-3" /></div>
+                                   <Link href={analysis.raw_data_url} target="_blank" className="text-white hover:text-indigo-300"><Eye className="h-4 w-4" /></Link>
+                                </div>
+                             )}
+                          </div>
+                       </div>
+                    </div>
+                 </div>
+              </CardContent>
+           </Card>
+
+           {/* Main Action Hub */}
+           <Card className="border-none shadow-2xl shadow-emerald-900/5 rounded-[2.5rem] bg-white">
+              <CardContent className="p-8 space-y-6 text-center">
+                 <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest flex items-center justify-center gap-2 mb-4">
+                    <Activity className="h-4 w-4 text-emerald-600" /> Operasional Lab
+                 </h3>
+                 
+                 {!job.sample_handover ? (
+                    <div className="space-y-4">
+                       <div className="p-6 bg-amber-50 rounded-[2rem] border-2 border-amber-100">
+                          <AlertCircle className="h-8 w-8 text-amber-600 mx-auto mb-3" />
+                          <h4 className="text-xs font-black text-amber-900 uppercase leading-tight mb-2">Peringatan SOP</h4>
+                          <p className="text-[9px] text-amber-700 font-bold uppercase leading-relaxed">Lakukan serah terima (BAST) sebelum memulai analisis.</p>
+                       </div>
+                       <Button 
+                         onClick={() => setHandoverDialogOpen(true)}
+                         className="w-full h-16 bg-amber-600 hover:bg-amber-700 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-amber-900/20 flex items-center justify-center gap-3 transition-all active:scale-95"
+                       >
+                          TERIMA SAMPEL <PackageCheck className="h-6 w-6" />
+                       </Button>
+                    </div>
+                 ) : (
+                    <div className="space-y-4">
+                       <div className="p-6 bg-emerald-50 rounded-[2rem] border-2 border-emerald-100 space-y-4">
+                          <div className="flex items-center justify-center gap-3">
+                             <ShieldCheck className="h-5 w-5 text-emerald-600" />
+                             <span className="text-xs font-black text-emerald-950 uppercase tracking-tight">BAST Tervalidasi</span>
+                          </div>
+                          <Button 
+                            variant="outline"
+                            onClick={async () => {
+                               const doc = <SampleHandoverPDF data={handover || job.sample_handover} company={companyProfile} />;
+                               const blob = await pdf(doc).toBlob();
+                               const url = URL.createObjectURL(blob);
+                               window.open(url, '_blank');
+                            }}
+                            className="w-full rounded-xl border-emerald-200 text-emerald-700 font-black text-[9px] uppercase h-10 bg-white hover:bg-emerald-50 transition-colors"
+                          >
+                             CETAK BAST <Download className="ml-2 h-3 w-3" />
+                          </Button>
+                       </div>
+
+                       {job.status === 'analysis_ready' ? (
+                          <Button 
+                            onClick={async () => {
+                               setSubmitting(true);
+                               try { await startAnalysis(id); toast.success("Analisis Dimulai"); loadData(); }
+                               catch (e) { toast.error("Gagal memulai"); }
+                               finally { setSubmitting(false); }
+                            }}
+                            className="w-full h-16 bg-violet-600 hover:bg-violet-700 text-white font-black uppercase tracking-widest text-[10px] md:text-xs rounded-2xl shadow-xl shadow-violet-900/20 flex items-center justify-center gap-2"
+                          >
+                             MULAI KERJA LAB <FlaskConical className="h-5 w-5 shrink-0" />
+                          </Button>
+                       ) : ["analysis_done", "reporting", "completed"].includes(job.status) ? (
+                          <div className="space-y-3">
+                             <Button 
+                               disabled
+                               className="w-full h-16 bg-slate-100 text-emerald-600 font-black uppercase tracking-widest text-[10px] md:text-xs rounded-2xl border-2 border-emerald-100 flex items-center justify-center gap-2 px-2"
+                             >
+                                <CheckCircle className="h-5 w-5 shrink-0" /> <span className="truncate">BERHASIL DIKIRIM</span>
+                             </Button>
+                             <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center gap-3">
+                                <Info className="h-4 w-4 text-emerald-600 shrink-0" />
+                                <p className="text-[9px] text-emerald-700 font-bold uppercase leading-tight text-left">Data pengujian telah diteruskan ke tim Reporting untuk proses penerbitan LHU.</p>
+                             </div>
+                          </div>
+                       ) : (
+                          <Button 
+                            onClick={() => setConfirmDialogOpen(true)}
+                            disabled={submitting}
+                            className="w-full h-16 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest text-[10px] md:text-xs rounded-2xl shadow-xl shadow-emerald-900/20 flex items-center justify-center gap-2 px-2"
+                          >
+                             <span className="truncate">KIRIM KE REPORTING</span> <Send className="h-5 w-5 shrink-0" />
+                          </Button>
+                       )}
+                    </div>
+                 )}
+              </CardContent>
+           </Card>
+        </div>
+      </div>
+
+      {/* Handover Dialog */}
+      <Dialog open={handoverDialogOpen} onOpenChange={setHandoverDialogOpen}>
+        <DialogContent className="sm:max-w-md rounded-[3rem] p-0 overflow-hidden border-none shadow-2xl">
+          <div className="bg-amber-600 p-8 text-white text-center relative overflow-hidden">
+             <div className="relative z-10 space-y-4">
+                <div className="h-16 w-16 rounded-3xl bg-white/20 backdrop-blur-md flex items-center justify-center mx-auto border border-white/30 shadow-inner">
+                   <PackageCheck className="h-8 w-8 text-white" />
+                </div>
+                <div>
+                   <DialogTitle className="text-xl font-black uppercase tracking-tight">Berita Acara Serah Terima</DialogTitle>
+                   <p className="text-amber-100 text-[10px] font-bold uppercase mt-1 tracking-widest">Validasi Sampel Lapangan ke Lab</p>
+                </div>
+             </div>
+          </div>
+          <div className="p-8 bg-white space-y-6">
+             <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                   <Label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Kondisi Sampel</Label>
+                   <Select value={handoverData.sample_condition} onValueChange={(val) => setHandoverData({...handoverData, sample_condition: val})}>
+                      <SelectTrigger className="h-12 rounded-xl bg-slate-50 border-none font-bold text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent className="rounded-xl border-slate-100">
+                         <SelectItem value="Segel Utuh">Segel Utuh</SelectItem>
+                         <SelectItem value="Suhu Terjaga">Suhu Terjaga</SelectItem>
+                         <SelectItem value="Rusak/Cacat">Rusak/Cacat</SelectItem>
+                      </SelectContent>
+                   </Select>
+                </div>
+                <div className="space-y-2">
+                   <Label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Volume/Qty</Label>
+                   <Input type="number" value={handoverData.sample_qty} onChange={(e) => setHandoverData({...handoverData, sample_qty: parseInt(e.target.value)})} className="h-12 rounded-xl bg-slate-50 border-none font-black text-xs" />
+                </div>
+             </div>
+             <Textarea value={handoverData.sample_notes} onChange={(e) => setHandoverData({...handoverData, sample_notes: e.target.value})} className="rounded-2xl bg-slate-50 border-none min-h-[100px] font-medium text-xs p-4" placeholder="Catatan penerimaan..." />
+             <Button onClick={handleHandoverSubmit} disabled={submitting} className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-xs rounded-2xl shadow-xl shadow-emerald-900/20 gap-3">
+                TERIMA & TERBITKAN BAST <ShieldCheck className="h-5 w-5" />
+             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Confirmation Dialog - Send to Reporting */}
+      {/* Confirmation Dialog */}
       <Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
-        <DialogContent className="sm:max-w-md p-0 border-none shadow-2xl rounded-3xl overflow-hidden">
-          <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 p-6 text-white text-center">
-            <div className="mx-auto w-16 h-16 rounded-full bg-white/20 flex items-center justify-center mb-3">
-              <Send className="h-8 w-8" />
-            </div>
-            <DialogTitle className="text-lg font-black uppercase tracking-widest">
-              Kirim ke Reporting?
-            </DialogTitle>
+        <DialogContent className="sm:max-w-md rounded-[3rem] p-0 overflow-hidden border-none shadow-2xl">
+          <div className="bg-emerald-950 p-10 text-white text-center relative overflow-hidden">
+             <div className="relative z-10 space-y-4">
+                <div className="h-16 w-16 rounded-3xl bg-emerald-600 flex items-center justify-center mx-auto shadow-2xl border-4 border-emerald-800"><Send className="h-8 w-8 text-white" /></div>
+                <DialogTitle className="text-2xl font-black uppercase tracking-tight">Kirim ke Reporting?</DialogTitle>
+                <p className="text-emerald-500 text-[10px] font-black uppercase tracking-[0.2em]">Verifikasi Kelengkapan Berkas</p>
+             </div>
           </div>
+          <div className="p-8 bg-white space-y-6">
+             <div className="space-y-3">
+                <div className={cn("p-4 rounded-2xl border flex items-center justify-between", (analysis?.result_pdf_url || job?.lab_analysis?.result_pdf_url) ? "bg-emerald-50 border-emerald-100" : "bg-slate-50 border-slate-100")}>
+                   <div className="flex items-center gap-3">
+                      <FileText className={cn("h-4 w-4", (analysis?.result_pdf_url || job?.lab_analysis?.result_pdf_url) ? "text-emerald-600" : "text-slate-300")} />
+                      <span className="text-[10px] font-bold uppercase text-slate-600 tracking-wider">Laporan Lab (PDF)</span>
+                   </div>
+                   {(analysis?.result_pdf_url || job?.lab_analysis?.result_pdf_url) ? <Badge className="bg-emerald-500 text-white text-[8px] px-3">READY</Badge> : <Badge variant="outline" className="text-[8px] px-3">KOSONG</Badge>}
+                </div>
+                <div className={cn("p-4 rounded-2xl border flex items-center justify-between", (sampleCondition && equipmentUsed) ? "bg-emerald-50 border-emerald-100" : "bg-slate-50 border-slate-100")}>
+                   <div className="flex items-center gap-3">
+                      <Beaker className={cn("h-4 w-4", (sampleCondition && equipmentUsed) ? "text-emerald-600" : "text-slate-300")} />
+                      <span className="text-[10px] font-bold uppercase text-slate-600 tracking-wider">Lembar Kerja</span>
+                   </div>
+                   {(sampleCondition && equipmentUsed) ? <Badge className="bg-emerald-500 text-white text-[8px] px-3">LENGKAP</Badge> : <Badge variant="outline" className="text-[8px] px-3">INPUT</Badge>}
+                </div>
+             </div>
+             <p className="text-center text-slate-500 text-[10px] leading-relaxed font-bold uppercase tracking-tight italic">
+                Pastikan seluruh data rill telah sesuai. Setelah dikirim, Anda tidak dapat mengubah data ini lagi.
+             </p>
+             <Button onClick={handleComplete} disabled={submitting} className="w-full h-16 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest text-[10px] md:text-xs rounded-2xl shadow-xl shadow-emerald-900/20 flex items-center justify-center gap-3">
+                KONFIRMASI SELESAI <Send className="h-5 w-5 shrink-0" />
+             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-          <div className="p-6 space-y-4">
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-              <div className="text-sm text-amber-900">
-                <p className="font-bold mb-1">Pastikan semua data sudah benar:</p>
-                <ul className="list-disc list-inside space-y-1 text-amber-800">
-                  <li>Parameter hasil analisis terisi</li>
-                  <li>Kondisi sampel didokumentasikan</li>
-                  <li>Catatan analis lengkap (jika ada)</li>
-                </ul>
-              </div>
-            </div>
-
-            <div className="bg-slate-50 p-4 rounded-lg">
-              <p className="text-sm font-semibold text-slate-700 mb-3">Ringkasan Analisis:</p>
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-slate-600">Parameter terisi:</span>
-                  <Badge variant="outline" className="border-emerald-300 text-emerald-700 font-bold">
-                    {getAnalysisSummary().parameterCount} parameter
-                  </Badge>
+      {/* Photo Preview Dialog */}
+      <Dialog open={photoDialogOpen} onOpenChange={setPhotoDialogOpen}>
+        <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black/90 border-none">
+          <div className="relative aspect-video flex flex-wrap justify-center gap-4 p-10 overflow-y-auto">
+             <Button variant="ghost" size="icon" className="absolute top-4 right-4 text-white hover:bg-white/20 z-50" onClick={() => setPhotoDialogOpen(false)}><X className="h-6 w-6" /></Button>
+             {selectedPhotos.map((photo: any, idx: number) => (
+                <div key={idx} className="h-[400px] aspect-square rounded-2xl overflow-hidden border-4 border-white/10">
+                   <img src={typeof photo === 'string' ? photo : photo.url} className="w-full h-full object-contain" alt="Preview" />
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-slate-600">Equipment:</span>
-                  <span className="text-sm font-semibold text-slate-700">
-                    {getAnalysisSummary().equipmentCount} alat
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-slate-600">Kondisi sampel:</span>
-                  <span className="text-sm font-semibold text-slate-700">
-                    {sampleCondition || "-"}
-                  </span>
-                </div>
-                {analysisNotes && (
-                  <div className="pt-2 border-t border-slate-200">
-                    <span className="text-xs text-slate-500 block mb-1">Catatan Analis:</span>
-                    <p className="text-xs text-slate-700 italic line-clamp-2">{analysisNotes}</p>
-                  </div>
-                )}
-              </div>
-              
-              {/* Parameter Preview */}
-              {getAnalysisSummary().parameters.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-slate-200">
-                  <p className="text-xs font-semibold text-slate-600 mb-2">Parameter yang diisi:</p>
-                  <div className="space-y-1 max-h-32 overflow-y-auto">
-                    {getAnalysisSummary().parameters.map((param, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-xs">
-                        <span className="font-medium text-slate-700">{param.parameter}</span>
-                        <span className="text-slate-500">= {param.result} {param.unit}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <DialogFooter className="gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setConfirmDialogOpen(false)}
-                disabled={submitting}
-                className="flex-1"
-              >
-                Batal
-              </Button>
-              <Button
-                onClick={handleComplete}
-                disabled={submitting}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-              >
-                {submitting ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Memproses...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Ya, Kirim
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
+             ))}
           </div>
         </DialogContent>
       </Dialog>

@@ -232,10 +232,10 @@ export default function CustomersDataPage() {
             <TableHeader className="bg-slate-50/30">
               <TableRow className="border-b border-slate-100">
                 <TableHead className="w-[50px] px-6 py-4 text-center"><Checkbox checked={selectedIds.length === data.users.length && data.users.length > 0} onCheckedChange={toggleSelectAll} /></TableHead>
-                <TableHead className="px-6 py-4 font-black uppercase tracking-widest text-[8px] text-slate-400">Customer Name</TableHead>
-                <TableHead className="px-6 py-4 font-black uppercase tracking-widest text-[8px] text-slate-400">Corporate Identity</TableHead>
-                <TableHead className="px-6 py-4 font-black uppercase tracking-widest text-[8px] text-slate-400">Direct Contact</TableHead>
-                <TableHead className="px-6 py-4 text-right font-black uppercase tracking-widest text-[8px] text-slate-400">Manage</TableHead>
+                <TableHead className="px-6 py-4 font-bold text-slate-700 text-sm">Customer Name</TableHead>
+                <TableHead className="px-6 py-4 font-bold text-slate-700 text-sm">Corporate Identity</TableHead>
+                <TableHead className="px-6 py-4 font-bold text-slate-700 text-sm">Direct Contact</TableHead>
+                <TableHead className="px-6 py-4 text-right font-bold text-slate-700 text-sm">Manage</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -247,13 +247,13 @@ export default function CustomersDataPage() {
                     <TableCell className="px-6 py-4 text-center"><Checkbox checked={selectedIds.includes(user.id)} onCheckedChange={() => toggleSelect(user.id)} /></TableCell>
                     <TableCell className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-xl bg-blue-50 flex items-center justify-center border border-blue-100 shrink-0 text-blue-600 font-black text-xs uppercase shadow-sm">{(user.full_name || 'C').charAt(0)}</div>
-                        <div className="flex flex-col min-w-0"><span className="text-[12px] font-black text-slate-900 truncate">{user.full_name}</span><span className="text-[9px] font-bold text-slate-400 uppercase truncate">{user.email}</span></div>
+                        <div className="h-9 w-9 rounded-xl bg-blue-50 flex items-center justify-center border border-blue-100 shrink-0 text-blue-600 font-bold text-sm uppercase shadow-sm">{(user.full_name || 'C').charAt(0)}</div>
+                        <div className="flex flex-col min-w-0"><span className="text-sm font-bold text-slate-900 truncate">{user.full_name}</span><span className="text-xs text-slate-500 truncate">{user.email}</span></div>
                       </div>
                     </TableCell>
-                    <TableCell className="px-6 py-4"><div className="flex items-center gap-2"><Building className="h-3 w-3 text-slate-400" /><span className="text-[10px] font-bold text-slate-600 uppercase truncate max-w-[150px]">{user.company_name || "Personal"}</span></div></TableCell>
-                    <TableCell className="px-6 py-4"><div className="flex items-center gap-2 text-emerald-600"><Phone className="h-3 w-3" /><span className="text-[10px] font-black">{user.phone || "-"}</span></div></TableCell>
-                    <TableCell className="px-6 py-4 text-right"><Button variant="ghost" size="sm" onClick={() => openDetail(user)} className="h-8 px-3 rounded-lg font-black text-[8px] uppercase tracking-widest text-slate-400 hover:text-blue-600 transition-all gap-1.5"><Settings2 className="h-3 w-3" /> Manage</Button></TableCell>
+                    <TableCell className="px-6 py-4"><div className="flex items-center gap-2"><Building className="h-3 w-3 text-slate-400" /><span className="text-sm font-semibold text-slate-600 truncate max-w-[150px]">{user.company_name || "Personal"}</span></div></TableCell>
+                    <TableCell className="px-6 py-4"><div className="flex items-center gap-2 text-emerald-600"><Phone className="h-3 w-3" /><span className="text-sm font-bold">{user.phone || "-"}</span></div></TableCell>
+                    <TableCell className="px-6 py-4 text-right"><Button variant="ghost" size="sm" onClick={() => openDetail(user)} className="h-8 px-3 rounded-lg font-medium text-slate-600 hover:text-blue-600 transition-all gap-1.5"><Settings2 className="h-3 w-3" /> Manage</Button></TableCell>
                   </TableRow>
                 ))
               )}
@@ -262,10 +262,10 @@ export default function CustomersDataPage() {
         </div>
 
         <div className="p-4 bg-slate-50/50 flex items-center justify-between border-t border-slate-100">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{data.total} Registered Clients</p>
+          <p className="text-sm font-semibold text-slate-600">{data.total} Registered Clients</p>
           <div className="flex gap-1.5">
             <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg bg-white border-slate-200" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft className="h-3.5 w-3.5" /></Button>
-            <div className="flex items-center px-3 text-[9px] font-black bg-white border border-slate-200 rounded-lg text-slate-700">{page} / {data.pages}</div>
+            <div className="flex items-center px-3 text-sm font-semibold bg-white border border-slate-200 rounded-lg text-slate-700">{page} / {data.pages}</div>
             <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg bg-white border-slate-200" disabled={page === data.pages} onClick={() => setPage(p => p + 1)}><ChevronRight className="h-3.5 w-3.5" /></Button>
           </div>
         </div>

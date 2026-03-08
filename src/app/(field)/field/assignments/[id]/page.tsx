@@ -1,42 +1,48 @@
+// ============================================================================
+// PREMIUM FIELD ASSIGNMENT DETAIL - v3.2
+// Optimized for mobile-first operational precision and high-end lab aesthetics.
+// ============================================================================
+
 "use client";
 
-import React, { useState, useEffect, useTransition } from "react";
+import React, { useState, useEffect, useTransition, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
-  ArrowLeft,
-  MapPin,
-  Calendar,
-  Clock,
-  CheckCircle2,
-  Play,
-  Pause,
-  Upload,
-  Image as ImageIcon,
-  FileText,
-  User,
-  Download,
-  Package,
-  Building,
-  Receipt,
-  Trash2,
-  ExternalLink,
-  Car
+  ArrowLeft, MapPin, Calendar, Clock, CheckCircle2, Play, Pause, Upload,
+  Image as ImageIcon, FileText, User, Download, Package, ExternalLink,
+  Car, Receipt, Info, Trash2, Camera, ShieldCheck, ChevronRight, X, Building, RefreshCw
 } from "lucide-react";
 import Link from "next/link";
-import { getAssignmentById, updateSamplingStatus, saveSamplingPhotosWithNames } from "@/lib/actions/sampling";
+import { 
+  getAssignmentById, 
+  updateSamplingStatus, 
+  saveSamplingPhotosWithNames,
+  uploadSamplingPdf,
+  deleteSamplingPdf
+} from "@/lib/actions/sampling";
 import { getTravelOrderByAssignmentId } from "@/lib/actions/travel-order";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { pdf } from "@react-pdf/renderer";
 import { TravelOrderPDF } from "@/components/pdf/TravelOrderPDF";
 import { TravelOrderAttachment } from "@/components/pdf/TravelOrderAttachment";
+import { ChemicalLoader, LoadingOverlay, PageSkeleton } from "@/components/ui";
+import { PremiumPageWrapper, PremiumCard } from "@/components/layout/PremiumPageWrapper";
+
+const statusConfig: Record<string, { label: string; color: string; bg: string; icon: any; theme: string }> = {
+  pending: { label: 'Tugas Baru', color: 'text-amber-600', bg: 'bg-amber-50', icon: Clock, theme: 'border-amber-100' },
+  in_progress: { label: 'Sampling Aktif', color: 'text-blue-600', bg: 'bg-blue-50', icon: Play, theme: 'border-blue-100' },
+  completed: { label: 'Selesai', color: 'text-emerald-600', bg: 'bg-emerald-50', icon: CheckCircle2, theme: 'border-emerald-100' },
+  cancelled: { label: 'Dibatalkan', color: 'text-rose-600', bg: 'bg-rose-50', icon: X, theme: 'border-rose-100' }
+};
 
 export default function AssignmentDetailPage() {
   const params = useParams();
@@ -48,201 +54,73 @@ export default function AssignmentDetailPage() {
   const [notes, setNotes] = useState("");
   const [photos, setPhotos] = useState<{ url: string; name: string }[]>([]);
   const [photoNames, setPhotoNames] = useState<Record<string, string>>({});
+  const [removedPhotoUrls, setRemovedPhotoUrls] = useState<string[]>([]);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+  const pdfInputRef = React.useRef<HTMLInputElement>(null);
   const supabase = createClient();
 
-  useEffect(() => {
-    async function loadAssignment() {
-      try {
-        const [assignmentData, travelOrderData] = await Promise.all([
-          getAssignmentById(params.id as string),
-          getTravelOrderByAssignmentId(params.id as string)
-        ]);
-        setAssignment(assignmentData);
-        setTravelOrder(travelOrderData);
-        
-        // Pre-populate notes if exists
-        if (assignmentData?.notes) {
-          setNotes(assignmentData.notes);
-        }
-      } catch (error) {
-        console.error('Failed to load assignment:', error);
-        toast.error("Gagal memuat data assignment");
-      } finally {
-        setLoading(false);
-      }
+  const loadData = useCallback(async () => {
+    try {
+      const [assignmentData, travelOrderData] = await Promise.all([
+        getAssignmentById(params.id as string),
+        getTravelOrderByAssignmentId(params.id as string)
+      ]);
+      setAssignment(assignmentData);
+      setTravelOrder(travelOrderData);
+      if (assignmentData?.notes) setNotes(assignmentData.notes);
+    } catch (error) {
+      toast.error("Gagal sinkronisasi data");
+    } finally {
+      setLoading(false);
     }
-    loadAssignment();
   }, [params.id]);
 
-  const handleDownloadPdf = async () => {
-    if (!travelOrder) return;
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type !== 'application/pdf') {
+      toast.error("Hanya file PDF yang diizinkan");
+      return;
+    }
+
+    setUploadingPdf(true);
     try {
-      // Prepare data with null checks
-      const fieldOfficer = travelOrder.assignment?.field_officer || {};
-      const jobOrder = travelOrder.assignment?.job_order || {};
-      const quotation = jobOrder.quotation || {};
-      const profile = quotation.profile || {};
-      const items = quotation.items || [];
-
-      // Default company profile
-      const companyProfile = {
-        company_name: 'WahfaLab',
-        address: null,
-        phone: null,
-        email: null,
-        logo_url: '/logo-wahfalab.png',
-        tagline: null,
-        npwp: null
-      };
-
-      // Create main PDF document
-      const mainPdfDoc = (
-        <TravelOrderPDF
-          data={{
-            document_number: travelOrder.document_number,
-            departure_date: travelOrder.departure_date,
-            return_date: travelOrder.return_date,
-            destination: travelOrder.destination,
-            purpose: travelOrder.purpose,
-            transportation_type: travelOrder.transportation_type,
-            accommodation_type: travelOrder.accommodation_type,
-            daily_allowance: travelOrder.daily_allowance,
-            total_budget: travelOrder.total_budget,
-            notes: travelOrder.notes,
-            assignment: {
-              field_officer: {
-                full_name: fieldOfficer.full_name,
-                email: fieldOfficer.email
-              },
-              assistants: travelOrder.assignment?.assistants ? travelOrder.assignment.assistants.map((ast: any) => ({
-                full_name: ast.full_name,
-                email: ast.email
-              })) : [],
-              job_order: {
-                tracking_code: jobOrder.tracking_code,
-                quotation: {
-                  quotation_number: quotation.quotation_number,
-                  total_amount: quotation.total_amount,
-                  profile: {
-                    full_name: profile.full_name,
-                    company_name: profile.company_name
-                  }
-                }
-              }
-            },
-            created_at: travelOrder.created_at,
-          }}
-          company={companyProfile}
-        />
-      );
-
-      // Create attachment PDF document
-      const attachmentPdfDoc = (
-        <TravelOrderAttachment
-          data={{
-            document_number: travelOrder.document_number,
-            departure_date: travelOrder.departure_date,
-            return_date: travelOrder.return_date,
-            destination: travelOrder.destination,
-            purpose: travelOrder.purpose,
-            transportation_type: travelOrder.transportation_type,
-            accommodation_type: travelOrder.accommodation_type,
-            daily_allowance: travelOrder.daily_allowance,
-            total_budget: travelOrder.total_budget,
-            notes: travelOrder.notes,
-            assignment: {
-              field_officer: {
-                full_name: fieldOfficer.full_name,
-                email: fieldOfficer.email
-              },
-              assistants: travelOrder.assignment?.assistants ? travelOrder.assignment.assistants.map((ast: any) => ({
-                full_name: ast.full_name,
-                email: ast.email
-              })) : [],
-              job_order: {
-                tracking_code: jobOrder.tracking_code,
-                quotation: {
-                  quotation_number: quotation.quotation_number,
-                  total_amount: quotation.total_amount,
-                  profile: {
-                    full_name: profile.full_name,
-                    company_name: profile.company_name
-                  },
-                  items: items
-                }
-              }
-            },
-            created_at: travelOrder.created_at,
-          }}
-          company={companyProfile}
-        />
-      );
-
-      // Generate and download PDFs
-      const mainBlob = await pdf(mainPdfDoc).toBlob();
-      const attachmentBlob = await pdf(attachmentPdfDoc).toBlob();
-
-      // Download main PDF
-      const url = URL.createObjectURL(mainBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `Surat_Tugas-${travelOrder.document_number}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      // Download attachment
-      const attachmentUrl = URL.createObjectURL(attachmentBlob);
-      const attachmentLink = document.createElement('a');
-      attachmentLink.href = attachmentUrl;
-      attachmentLink.download = `Lampiran-${travelOrder.document_number}.pdf`;
-      document.body.appendChild(attachmentLink);
-      attachmentLink.click();
-      document.body.removeChild(attachmentLink);
-      URL.revokeObjectURL(attachmentUrl);
-
-      toast.success("✅ Surat tugas & lampiran berhasil diunduh");
-    } catch (error) {
-      console.error('PDF generation error:', error);
-      toast.error("Gagal membuat PDF");
+      const result = await uploadSamplingPdf(params.id as string, file);
+      if (result.error) throw new Error(result.error);
+      toast.success("Dokumen PDF berhasil diunggah");
+      loadData();
+    } catch (e: any) {
+      toast.error(e.message || "Gagal mengunggah PDF");
+    } finally {
+      setUploadingPdf(false);
+      if (e.target) e.target.value = "";
     }
   };
 
-  const [generatedInvoice, setGeneratedInvoice] = useState<any>(null);
+  const handleDeletePdf = async () => {
+    if (!window.confirm("Hapus dokumen PDF ini?")) return;
+    try {
+      const result = await deleteSamplingPdf(params.id as string);
+      if (result.error) throw new Error(result.error);
+      toast.success("Dokumen PDF dihapus");
+      loadData();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
 
   const handleStatusUpdate = (status: string) => {
     startTransition(async () => {
       const result = await updateSamplingStatus(params.id as string, status, notes);
-      if (result.error) {
-        toast.error(result.error);
-      } else {
-        // User-friendly notification messages
-        const statusMessages: Record<string, string> = {
-          in_progress: "🚀 Sampling dimulai! Petugas sedang melaksanakan tugas.",
-          completed: "✅ Sampling selesai! Invoice telah dibuat otomatis.",
-          pending: "⏸️ Sampling ditunda. Status dikembalikan ke menunggu.",
-          cancelled: "❌ Sampling dibatalkan."
-        };
-
-        toast.success(
-          statusMessages[status] || `Status berhasil diubah ke ${status}`
-        );
-
-        // If completed and invoice was generated, store it and show link
-        if (status === 'completed' && result.invoice) {
-          setGeneratedInvoice(result.invoice);
-          toast.success(
-            `📄 Invoice ${result.invoice.invoice_number} telah dibuat`,
-            {
-              description: "Invoice dapat diunduh dan dikirim ke customer",
-              duration: 5000,
-            }
-          );
-        }
-
-        router.refresh();
+      if (result.error) toast.error(result.error);
+      else {
+        toast.success(`Status diperbarui: ${status.replace('_', ' ')}`);
+        loadData();
       }
     });
   };
@@ -250,777 +128,370 @@ export default function AssignmentDetailPage() {
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+    toast.info("Sedang mengunggah foto...");
 
     const uploadPromises = Array.from(files).map(async (file) => {
       const fileExt = file.name.split('.').pop();
       const fileName = `${params.id}-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const { data, error } = await supabase.storage
-        .from('sampling-photos')
-        .upload(fileName, file);
-
-      if (error) {
-        toast.error(`Gagal upload foto: ${error.message}`);
-        return null;
-      }
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('sampling-photos')
-        .getPublicUrl(fileName);
-
-      return {
-        url: publicUrl,
-        name: file.name.replace(/\.[^/.]+$/, '') // Remove extension
-      };
+      const { data, error } = await supabase.storage.from('sampling-photos').upload(fileName, file);
+      if (error) return null;
+      const { data: { publicUrl } } = supabase.storage.from('sampling-photos').getPublicUrl(fileName);
+      return { url: publicUrl, name: file.name.replace(/\.[^/.]+$/, '') };
     });
 
     const results = (await Promise.all(uploadPromises)).filter(Boolean) as { url: string; name: string }[];
-    
     if (results.length > 0) {
       setPhotos([...photos, ...results]);
-      
-      // Initialize photo names
-      const newNames: Record<string, string> = {};
-      results.forEach((photo, idx) => {
-        newNames[photo.url] = `Foto ${photos.length + idx + 1}`;
-      });
-      setPhotoNames({ ...photoNames, ...newNames });
-      
-      toast.success(`${results.length} foto berhasil diupload`);
+      toast.success(`${results.length} foto siap disimpan`);
     }
   };
 
-  const handlePhotoNameChange = (url: string, newName: string) => {
-    setPhotoNames(prev => ({
-      ...prev,
-      [url]: newName
-    }));
+  const handleRemovePhoto = (url: string) => {
+    setRemovedPhotoUrls(prev => [...prev, url]);
+    toast.info("Foto ditandai untuk dihapus. Klik 'Simpan Semua' untuk mempermanenkan.");
   };
 
-  const handleSavePhotoNames = async () => {
+  const handleSaveAllData = async () => {
     try {
-      // Combine existing photos from DB with new photos
-      const existingPhotos = assignment.photos || [];
-      const existingPhotoUrls = new Set(existingPhotos.map((p: { url: string; name: string } | string) => 
-        typeof p === 'string' ? p : p.url
-      ));
-      
-      // Filter out photos that are already saved
-      const newPhotos = photos.filter(p => !existingPhotoUrls.has(p.url));
-      
-      // Merge: existing photos + new photos with names
-      const allPhotos = [
-        ...existingPhotos,
-        ...newPhotos.map(p => ({
-          url: p.url,
-          name: photoNames[p.url] || p.name
-        }))
-      ];
-      
-      // Remove duplicates based on URL
-      const uniquePhotos = allPhotos.filter(
-        (photo, index, self) => 
-          index === self.findIndex(p => {
-            const pUrl = typeof p === 'string' ? p : p.url;
-            const photoUrl = typeof photo === 'string' ? photo : photo.url;
-            return pUrl === photoUrl;
-          })
-      );
-      
-      // Call server action
-      const result = await saveSamplingPhotosWithNames(params.id as string, uniquePhotos);
-      
+      // Sinkronkan foto yang sudah ada dan yang baru, filter yang ditandai hapus
+      const allPhotos = [...(assignment.photos || []), ...photos]
+        .filter((p: any) => {
+          const url = typeof p === 'string' ? p : p.url;
+          return !removedPhotoUrls.includes(url);
+        })
+        .map((p: any) => {
+          const url = typeof p === 'string' ? p : p.url;
+          const name = photoNames[url] || (typeof p === 'object' ? p.name : "");
+          return { url, name };
+        });
+
+      const result = await saveSamplingPhotosWithNames(params.id as string, allPhotos);
       if (result.error) throw new Error(result.error);
       
-      // Update UI immediately - optimistic update
-      setAssignment({
-        ...assignment,
-        photos: uniquePhotos
-      });
-      
-      // Clear local state after successful save
+      toast.success("Dokumentasi & Foto Berhasil Diperbarui");
       setPhotos([]);
       setPhotoNames({});
-      
-      toast.success('Nama foto berhasil disimpan');
-    } catch (error) {
-      console.error('Save photo names error:', error);
-      toast.error('Gagal menyimpan nama foto');
+      setRemovedPhotoUrls([]);
+      loadData();
+    } catch (e) { 
+      toast.error("Gagal menyimpan data"); 
     }
   };
 
-  const handleDeletePhoto = async (photoUrl: string, photoName: string) => {
-    // Quick confirmation
-    if (!confirm(`Hapus foto "${photoName}"?`)) return;
+  if (loading) return <div className="p-8"><PageSkeleton /></div>;
+  if (!assignment) return <div className="p-20 text-center font-black text-slate-400 uppercase tracking-widest">Tugas tidak ditemukan</div>;
 
-    try {
-      // Remove from local state first (optimistic update)
-      setPhotos(prev => prev.filter(p => p.url !== photoUrl));
-      
-      // Also delete from Supabase Storage
-      const supabase = createClient();
-      const fileName = photoUrl.split('/').pop()?.split('?')[0];
-      
-      if (fileName) {
-        await supabase.storage
-          .from('sampling-photos')
-          .remove([fileName]);
-      }
-      
-      toast.success('Foto berhasil dihapus');
-    } catch (error) {
-      console.error('Delete photo error:', error);
-      toast.error('Gagal menghapus foto');
-    }
-  };
-
-  const handleDeleteSavedPhoto = async (photoUrl: string, photoName: string) => {
-    if (!confirm(`Hapus foto "${photoName}" secara permanen?`)) return;
-
-    try {
-      const supabase = createClient();
-      const fileName = photoUrl.split('/').pop()?.split('?')[0];
-      
-      // Delete from storage
-      if (fileName) {
-        await supabase.storage
-          .from('sampling-photos')
-          .remove([fileName]);
-      }
-      
-      // Delete from database - optimistic update
-      const existingPhotos = assignment.photos || [];
-      const updatedPhotos = existingPhotos.filter((p: { url: string; name: string } | string) => {
-        const url = typeof p === 'string' ? p : p.url;
-        return url !== photoUrl;
-      });
-      
-      // Update UI immediately
-      setAssignment({
-        ...assignment,
-        photos: updatedPhotos
-      });
-      
-      // Save to database in background
-      await saveSamplingPhotosWithNames(params.id as string, updatedPhotos as { url: string; name: string }[]);
-      
-      toast.success('Foto berhasil dihapus');
-    } catch (error) {
-      console.error('Delete photo error:', error);
-      toast.error('Gagal menghapus foto');
-      // Reload only if error to sync state
-      router.refresh();
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="p-4 md:p-8 max-w-7xl mx-auto">
-        <div className="mb-6 space-y-2">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-8 w-64" />
-        </div>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <Skeleton className="h-48 rounded-lg" />
-          <Skeleton className="h-48 rounded-lg" />
-          <Skeleton className="h-48 rounded-lg" />
-        </div>
-        <Skeleton className="h-64 rounded-lg mt-6" />
-        <Skeleton className="h-48 rounded-lg mt-6" />
-      </div>
-    );
-  }
-
-  if (!assignment) {
-    return (
-      <div className="p-4 md:p-8">
-        <Card>
-          <CardContent className="py-8 text-center">
-            <FileText className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500">Assignment tidak ditemukan</p>
-            <Link href="/field">
-              <Button variant="link" className="mt-2">Kembali</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  const statusColors: Record<string, string> = {
-    pending: "bg-amber-100 text-amber-700 border-amber-200",
-    in_progress: "bg-blue-100 text-blue-700 border-blue-200",
-    completed: "bg-emerald-100 text-emerald-700 border-emerald-200",
-    cancelled: "bg-red-100 text-red-700 border-red-200"
-  };
-
-  const statusLabels: Record<string, string> = {
-    pending: "Menunggu",
-    in_progress: "Sedang Dilaksanakan",
-    completed: "Selesai",
-    cancelled: "Dibatalkan"
-  };
+  const cfg = statusConfig[assignment.status] || statusConfig.pending;
+  const isLocked = assignment.status === 'pending';
 
   return (
-    <div className="bg-slate-50 min-h-screen pb-32">
-      {/* Sticky Glassmorphism Header */}
-      <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 py-4 md:px-8 shadow-sm">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <PremiumPageWrapper className="pb-40">
+      {/* Header Premium (Sticky) */}
+      <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-slate-100 p-4 md:p-6 shadow-sm">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <Link 
-              href="/field" 
-              className="h-10 w-10 bg-slate-100 hover:bg-emerald-50 text-slate-500 hover:text-emerald-600 rounded-full flex items-center justify-center transition-colors"
-            >
-              <ArrowLeft className="h-5 w-5" />
+            <Link href="/field">
+              <Button variant="ghost" size="icon" className="h-12 w-12 rounded-2xl bg-slate-50 text-slate-400 hover:text-emerald-600 transition-all">
+                <ArrowLeft className="h-6 w-6" />
+              </Button>
             </Link>
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="text-xl font-black text-emerald-900 uppercase tracking-tight">
-                  Detail Penugasan
-                </h1>
-                <Badge className={cn(
-                  "text-[10px] h-6 px-3 font-bold uppercase tracking-widest rounded-full", 
-                  statusColors[assignment.status] || statusColors.pending
-                )}>
-                  {statusLabels[assignment.status] || assignment.status}
-                </Badge>
+                <h1 className="text-xl md:text-2xl font-black text-emerald-950 uppercase tracking-tight leading-none pt-1">Detail Tugas</h1>
+                <Badge className={cn("font-black text-[9px] px-3 py-1 rounded-full border-none shadow-sm", cfg.bg, cfg.color)}>{cfg.label}</Badge>
               </div>
-              <p className="text-xs font-bold text-slate-500 flex items-center gap-1 mt-1">
-                <Package className="h-3 w-3" />
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1.5 flex items-center gap-1.5">
+                <ShieldCheck className="h-3 w-3 text-emerald-500" />
                 {assignment.job_order.tracking_code}
               </p>
             </div>
           </div>
-          
-          {/* Quick Info Badges */}
-          <div className="flex flex-wrap gap-2">
-            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-full border border-slate-200 shadow-sm">
-              <Calendar className="h-3.5 w-3.5 text-emerald-600" />
-              <span className="text-[11px] font-bold text-slate-700">
-                {new Date(assignment.scheduled_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-              </span>
-            </div>
+          <div className="hidden sm:flex items-center gap-3 bg-slate-50 p-1.5 rounded-2xl border border-slate-100">
+             <div className="px-4 py-2"><p className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">Rencana</p><p className="text-xs font-black text-slate-700">{new Date(assignment.scheduled_date).toLocaleDateString('id-ID')}</p></div>
           </div>
         </div>
       </div>
 
-      <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
-      {/* Info Cards Grid */}
-      <div className="grid gap-4 md:gap-6 md:grid-cols-3">
-        {/* Location Card */}
-        <Card className="rounded-2xl border-none shadow-md overflow-hidden">
-          <div className="bg-emerald-600 h-2 w-full"></div>
-          <CardHeader className="pb-2 bg-white">
-            <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2 text-slate-400">
-              <MapPin className="h-3.5 w-3.5 text-emerald-500" />
-              Lokasi Sampling
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="bg-white">
-            <p className="text-slate-800 font-bold text-sm leading-relaxed">{assignment.location}</p>
-            
-            <div className="mt-4 pt-3 border-t border-slate-100 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400 font-semibold">Rencana:</span>
-                <span className="font-bold text-slate-700">
-                  {new Date(assignment.scheduled_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </span>
-              </div>
-              {assignment.actual_date && (
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400 font-semibold flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-emerald-500"/> Aktual:</span>
-                  <span className="font-black text-emerald-600">
-                    {new Date(assignment.actual_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </span>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Job Order Card */}
-        <Card className="rounded-2xl border-none shadow-md overflow-hidden">
-          <div className="bg-blue-600 h-2 w-full"></div>
-          <CardHeader className="pb-2 bg-white">
-            <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2 text-slate-400">
-              <FileText className="h-3.5 w-3.5 text-blue-500" />
-              Informasi Order
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="bg-white space-y-3">
-            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-              <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Customer / Klien</p>
-              <p className="text-sm font-black text-slate-800">
-                {assignment.job_order.quotation.profile?.company_name || assignment.job_order.quotation.profile?.full_name || 'N/A'}
-              </p>
-              {assignment.job_order.quotation.profile?.company_name && (
-                <p className="text-xs font-medium text-slate-500 mt-0.5">{assignment.job_order.quotation.profile?.full_name}</p>
-              )}
-            </div>
-            
-            <div className="flex items-start gap-2">
-              <div className="h-6 w-6 rounded bg-blue-50 flex items-center justify-center shrink-0 mt-0.5"><Package className="h-3 w-3 text-blue-600"/></div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Layanan Utama</p>
-                <p className="text-xs font-bold text-slate-700 line-clamp-2">
-                  {assignment.job_order.quotation.items?.[0]?.service?.name || 'Multi Layanan'}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Field Officer Card */}
-        <Card className="rounded-2xl border-none shadow-md overflow-hidden">
-          <div className="bg-amber-500 h-2 w-full"></div>
-          <CardHeader className="pb-2 bg-white">
-            <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2 text-slate-400">
-              <User className="h-3.5 w-3.5 text-amber-500" />
-              Petugas Lapangan
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="bg-white h-full pb-6 pt-2">
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center gap-3">
-                <div className="h-12 w-12 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full flex items-center justify-center text-white font-black text-lg shadow-inner border-2 border-amber-50">
-                  {assignment.field_officer?.full_name?.charAt(0).toUpperCase() || 'F'}
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Petugas Utama</p>
-                  <p className="font-black text-slate-800 text-sm">
-                    {assignment.field_officer?.full_name || 'N/A'}
-                  </p>
-                </div>
-              </div>
-
-              {assignment.assistants && assignment.assistants.length > 0 && (
-                <div className="flex flex-col gap-3 pt-3 border-t border-slate-50">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Asisten Petugas</p>
-                  {assignment.assistants.map((ast: any) => (
-                    <div key={ast.id} className="flex items-center gap-3">
-                      <div className="h-10 w-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 font-bold text-base border border-slate-200 shadow-sm">
-                        {ast.full_name?.charAt(0).toUpperCase() || 'A'}
-                      </div>
-                      <p className="font-bold text-slate-700 text-xs">
-                        {ast.full_name || 'N/A'}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Travel Order Card - Full Width */}
-      {travelOrder && (
-        <Card className="rounded-2xl border-none shadow-md overflow-hidden bg-gradient-to-br from-emerald-50/50 to-white">
-          <div className="bg-emerald-600/20 h-1 w-full"></div>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2 text-emerald-800">
-              <FileText className="h-4 w-4 text-emerald-600" />
-              Surat Tugas Perjalanan Dinas
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 bg-white p-4 rounded-xl border border-emerald-100/50 shadow-sm">
-              <div className="col-span-2 md:col-span-1">
-                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Nomor Surat</p>
-                <p className="font-mono text-sm font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded w-fit">{travelOrder.document_number}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Berangkat</p>
-                <p className="text-sm font-black text-slate-800">
-                  {new Date(travelOrder.departure_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Kembali</p>
-                <p className="text-sm font-black text-slate-800">
-                  {new Date(travelOrder.return_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </p>
-              </div>
-              <div className="col-span-2 md:col-span-4 pt-2 border-t border-slate-100">
-                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Tujuan</p>
-                <p className="text-sm font-bold text-slate-700 leading-snug">{travelOrder.destination}</p>
-              </div>
-            </div>
-            
-            {(travelOrder.transportation_type || travelOrder.daily_allowance) && (
-              <div className="flex flex-col sm:flex-row gap-4 pt-2">
-                {travelOrder.transportation_type && (
-                  <div className="flex items-center gap-3 bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex-1">
-                    <div className="h-10 w-10 bg-emerald-50 rounded-full flex items-center justify-center">
-                      <Car className="h-5 w-5 text-emerald-600" />
-                    </div>
+      <div className="p-4 md:p-10 max-w-7xl mx-auto space-y-8">
+        {/* Row 1: Core Info */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <div className="lg:col-span-8 space-y-8">
+            {/* Status Alert */}
+            <AnimatePresence>
+              {isLocked && (
+                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 h-40 w-40 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" />
+                  <div className="relative z-10 flex items-start gap-6">
+                    <div className="h-16 w-16 rounded-3xl bg-white/20 flex items-center justify-center border-2 border-white/20 shadow-inner shrink-0 transform rotate-3"><Info className="h-8 w-8" /></div>
                     <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">Transportasi</p>
-                      <p className="text-sm font-black text-slate-800">{travelOrder.transportation_type}</p>
+                      <h3 className="text-xl font-black uppercase tracking-tight leading-none mb-2">Segera Konfirmasi Tugas</h3>
+                      <p className="text-blue-50/80 text-xs font-medium leading-relaxed max-w-md">Silakan klik tombol **Mulai Perjalanan** di bagian bawah layar untuk membuka akses pengisian foto dan catatan sampling rill.</p>
                     </div>
                   </div>
-                )}
-                {travelOrder.daily_allowance && (
-                  <div className="flex items-center gap-3 bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex-1">
-                    <div className="h-10 w-10 bg-emerald-50 rounded-full flex items-center justify-center">
-                      <Receipt className="h-5 w-5 text-emerald-600" />
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">Uang Harian</p>
-                      <p className="text-sm font-black text-emerald-700">
-                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(travelOrder.daily_allowance)}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-            
-            <div className="flex gap-3 mt-5 pt-5 border-t border-emerald-200/50">
-              <Link href={`/field/travel-orders/${travelOrder.id}/preview`} target="_blank" className="flex-1">
-                <Button variant="outline" className="w-full rounded-xl h-11 border-emerald-200 text-emerald-700 hover:bg-emerald-50 font-bold text-xs uppercase tracking-wider">
-                  <FileText className="h-4 w-4 mr-2" />
-                  Lihat Surat
-                </Button>
-              </Link>
-              <Button
-                variant="default"
-                className="flex-1 rounded-xl h-11 bg-emerald-600 hover:bg-emerald-700 font-bold text-xs uppercase tracking-wider shadow-lg shadow-emerald-900/20"
-                onClick={handleDownloadPdf}
-                disabled={!travelOrder}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Unduh PDF
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-      {/* Photo Documentation */}
-      <Card className="rounded-2xl border-none shadow-md overflow-hidden bg-white">
-        <CardHeader className="pb-4 bg-slate-50 border-b border-slate-100">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 bg-white rounded-xl shadow-sm flex items-center justify-center">
-                <ImageIcon className="h-5 w-5 text-slate-500" />
-              </div>
-              <div>
-                <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-700">
-                  Dokumentasi Foto
-                </CardTitle>
-                <p className="text-[10px] font-bold text-emerald-600 mt-0.5 uppercase">
-                  {assignment.photos?.length || 0} TERSIMPAN • {photos.length} BARU
-                </p>
-              </div>
-            </div>
-            {photos.length > 0 && (
-              <Button
-                size="sm"
-                onClick={handleSavePhotoNames}
-                className="h-10 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-900/20"
-              >
-                <CheckCircle2 className="h-4 w-4 mr-2" />
-                Simpan Nama
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="pt-6">
-          {/* Existing Photos */}
-          {(assignment.photos?.length || 0) > 0 && (
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-3">
-                <Label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
-                  <div className="h-1.5 w-1.5 bg-emerald-500 rounded-full"></div>
-                  Foto Tersimpan
-                </Label>
-                <Badge variant="secondary" className="text-xs">
-                  {assignment.photos?.length || 0} foto
-                </Badge>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {assignment.photos.map((photo: { url: string; name: string } | string, idx: number) => {
-                  const photoUrl = typeof photo === 'string' ? photo : photo.url;
-                  const photoName = typeof photo === 'string' ? `Foto ${idx + 1}` : (photo.name || `Foto ${idx + 1}`);
-                  
-                  return (
-                    <div key={idx} className="group relative">
-                      <div className="relative aspect-square rounded-xl overflow-hidden border-2 border-slate-200 shadow-sm group-hover:shadow-lg group-hover:border-emerald-400 transition-all duration-300 mb-2 bg-slate-50">
-                        <img 
-                          src={photoUrl} 
-                          alt={photoName} 
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
+            {/* Location & Client Information */}
+            <PremiumCard className="border-none shadow-2xl shadow-emerald-900/5 rounded-[2.5rem] overflow-hidden bg-white">
+               <CardHeader className="bg-slate-50/50 p-8 border-b border-slate-100 flex flex-row items-center justify-between flex-wrap gap-4">
+                  <div className="flex items-center gap-4">
+                     <div className="p-3 rounded-2xl bg-emerald-100 text-emerald-600"><MapPin className="h-6 w-6" /></div>
+                     <div><CardTitle className="text-xl font-black uppercase tracking-tight text-emerald-950 leading-none">Lokasi & Klien</CardTitle><p className="text-[10px] font-bold text-slate-400 uppercase mt-1.5 tracking-widest">Informasi rute penugasan</p></div>
+                  </div>
+                  <Badge variant="outline" className="border-2 border-slate-100 rounded-xl px-4 py-1.5 font-black text-[10px] text-slate-400">TARGET: {new Date(assignment.scheduled_date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB</Badge>
+               </CardHeader>
+               <CardContent className="p-8 space-y-8">
+                  <div className="p-6 bg-slate-50 rounded-[2rem] border-2 border-white shadow-inner flex flex-col md:flex-row justify-between items-start md:items-center gap-4 group">
+                     <div>
+                        <p className="text-[10px] font-black text-emerald-600 uppercase tracking-[2px] mb-2">Tujuan Pengambilan Sampel</p>
+                        <h3 className="text-lg font-black leading-tight uppercase text-slate-800">{assignment.location}</h3>
+                     </div>
+                     <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(assignment.location)}`, '_blank')}
+                        className="rounded-xl border-emerald-200 text-emerald-700 font-black text-[10px] uppercase h-10 px-4 bg-white shadow-sm hover:bg-emerald-600 hover:text-white transition-all shrink-0"
+                     >
+                        <MapPin className="h-3 w-3 mr-2" /> Buka Google Maps
+                     </Button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                     <div className="flex items-center gap-4 p-5 bg-white border-2 border-slate-50 rounded-2xl hover:border-blue-100 transition-all group">
+                        <div className="h-12 w-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0"><User className="h-6 w-6" /></div>
+                        <div><p className="text-[10px] font-black text-slate-400 uppercase">Kontak Klien</p><p className="font-black text-slate-800 text-sm">{assignment.job_order.quotation.profile?.full_name}</p></div>
+                     </div>
+                     <div className="flex items-center gap-4 p-5 bg-white border-2 border-slate-50 rounded-2xl hover:border-indigo-100 transition-all group">
+                        <div className="h-12 w-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0"><Building className="h-6 w-6" /></div>
+                        <div><p className="text-[10px] font-black text-slate-400 uppercase">Perusahaan</p><p className="font-black text-slate-800 text-sm truncate max-w-[150px]">{assignment.job_order.quotation.profile?.company_name || '-'}</p></div>
+                     </div>
+                  </div>
+               </CardContent>
+            </PremiumCard>
+
+            {/* Documentation Section (Blurred if Pending) */}
+            <div className={cn("transition-all duration-700", isLocked && "opacity-40 grayscale blur-[2px] pointer-events-none")}>
+               <PremiumCard className="border-none shadow-2xl shadow-emerald-900/5 rounded-[2.5rem] overflow-hidden bg-white">
+                  <CardHeader className="bg-slate-50/50 p-8 border-b border-slate-100 flex flex-row items-center justify-between">
+                     <div className="flex items-center gap-4">
+                        <div className="p-3 rounded-2xl bg-amber-100 text-amber-600"><Camera className="h-6 w-6" /></div>
+                        <div><CardTitle className="text-xl font-black uppercase tracking-tight text-emerald-950 leading-none">Dokumentasi</CardTitle><p className="text-[10px] font-bold text-slate-400 uppercase mt-1.5 tracking-widest">Bukti pengambilan sampel rill</p></div>
+                     </div>
+                     <div className="flex items-center gap-2">
+                        {photos.length > 0 && <Button onClick={handleSaveAllData} className="h-10 px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase rounded-xl">Simpan Semua</Button>}
+                        <label htmlFor="photo-upload" className="h-10 px-6 bg-white border-2 border-slate-100 text-slate-600 hover:bg-slate-50 font-black text-[10px] uppercase rounded-xl flex items-center justify-center cursor-pointer transition-all"><Upload className="h-4 w-4 mr-2" /> Upload</label>
+                        <input type="file" id="photo-upload" accept="image/*" multiple onChange={handlePhotoUpload} className="hidden" />
+                     </div>
+                  </CardHeader>
+                  <CardContent className="p-8 space-y-8">
+                     {(!assignment.photos?.length && !photos.length) ? (
+                        <div className="py-20 text-center space-y-4">
+                           <div className="h-20 w-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto border-2 border-dashed border-slate-200"><ImageIcon className="h-10 w-10 text-slate-200" /></div>
+                           <p className="text-xs font-black text-slate-300 uppercase tracking-widest">Belum ada foto dokumentasi</p>
+                        </div>
+                     ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                           {/* Render existing & new photos beautifully */}
+                           {[...(assignment.photos || []), ...photos]
+                            .filter((p: any) => {
+                              const url = typeof p === 'string' ? p : p.url;
+                              return !removedPhotoUrls.includes(url);
+                            })
+                            .map((p: any, idx: number) => {
+                              const url = typeof p === 'string' ? p : p.url;
+                              const currentName = typeof p === 'object' ? p.name : (photoNames[url] || "");
+                              
+                              return (
+                                <div key={idx} className="space-y-2 relative group/item">
+                                  <div className="group relative aspect-video rounded-2xl overflow-hidden border-4 border-white shadow-md hover:shadow-xl transition-all duration-500">
+                                     <img src={url} className="w-full h-full object-cover" />
+                                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                        <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" onClick={() => window.open(url, '_blank')}>
+                                          <ExternalLink className="h-6 w-6" />
+                                        </Button>
+                                     </div>
+                                  </div>
+
+                                  {/* Quick Delete Button */}
+                                  <button 
+                                    onClick={() => handleRemovePhoto(url)}
+                                    className="absolute -top-2 -right-2 h-8 w-8 bg-rose-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-rose-700 transition-all z-10 border-2 border-white scale-0 group-hover/item:scale-100"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </button>
+
+                                  <Input 
+                                    placeholder="Beri nama foto..."
+                                    value={photoNames[url] || currentName}
+                                    onChange={(e) => setPhotoNames({...photoNames, [url]: e.target.value})}
+                                    className="h-9 text-[10px] font-bold uppercase tracking-tight rounded-xl bg-slate-50 border-none focus-visible:ring-emerald-500"
+                                  />
+                                </div>
+                              );
+                           })}
+                        </div>
+                     )}
+                     
+                     <div className="space-y-3">
+                        <Label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">Catatan Operasional</Label>
+                        <Textarea 
+                          value={notes} 
+                          onChange={(e) => setNotes(e.target.value)}
+                          placeholder="Ketik kondisi lingkungan atau kendala teknis di sini..."
+                          className="rounded-[1.5rem] bg-slate-50 border-none min-h-[120px] focus-visible:ring-emerald-500 font-medium text-sm p-6"
                         />
-                        
-                        {/* Overlay with actions */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                          <div className="absolute bottom-0 left-0 right-0 p-2 flex items-center justify-between gap-2">
-                            <a
-                              href={photoUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="h-8 w-8 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-colors shadow-lg"
-                              title="Buka foto"
-                            >
-                              <ExternalLink className="h-4 w-4 text-slate-700" />
-                            </a>
-                            <button
-                              onClick={() => handleDeleteSavedPhoto(photoUrl, photoName)}
-                              className="h-8 w-8 bg-red-500/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
-                              title="Hapus foto"
-                            >
-                              <Trash2 className="h-4 w-4 text-white" />
-                            </button>
+                     </div>
+                  </CardContent>
+               </PremiumCard>
+
+               {/* PDF Results / Signed Travel Order Section */}
+               <PremiumCard className="border-none shadow-2xl shadow-emerald-900/5 rounded-[2.5rem] overflow-hidden bg-white mt-8">
+                  <CardHeader className="bg-slate-50/50 p-8 border-b border-slate-100 flex flex-row items-center justify-between">
+                     <div className="flex items-center gap-4">
+                        <div className="p-3 rounded-2xl bg-blue-100 text-blue-600"><FileText className="h-6 w-6" /></div>
+                        <div>
+                          <CardTitle className="text-xl font-black uppercase tracking-tight text-slate-900 leading-none">Berkas Hasil Sampling</CardTitle>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase mt-1.5 tracking-widest">Upload Surat Tugas / Laporan Lapangan (PDF)</p>
+                        </div>
+                     </div>
+                  </CardHeader>
+                  <CardContent className="p-8">
+                    {assignment.signed_travel_order_url ? (
+                      <div className="p-6 bg-slate-50 rounded-[2rem] border-2 border-white shadow-inner flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div className="flex items-center gap-4">
+                          <div className="h-12 w-12 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                            <CheckCircle2 className="h-6 w-6" />
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Dokumen Tersedia</p>
+                            <h4 className="text-sm font-black text-slate-800 uppercase truncate max-w-[200px]">Hasil_Sampling_{assignment.job_order.tracking_code}.pdf</h4>
                           </div>
                         </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="outline"
+                            onClick={() => window.open(assignment.signed_travel_order_url, '_blank')}
+                            className="rounded-xl border-slate-200 font-black text-[10px] uppercase h-10 px-4 bg-white"
+                          >
+                            <Download className="h-3 w-3 mr-2" /> Lihat PDF
+                          </Button>
+                          <Button 
+                            variant="ghost"
+                            onClick={handleDeletePdf}
+                            className="rounded-xl text-rose-600 hover:bg-rose-50 font-black text-[10px] uppercase h-10 px-4"
+                          >
+                            <Trash2 className="h-3 w-3 mr-2" /> Hapus
+                          </Button>
+                        </div>
                       </div>
-                      <p className="text-xs font-medium text-slate-700 text-center truncate px-1" title={photoName}>
-                        {photoName}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* New Photos to Upload */}
-          {photos.length > 0 && (
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-3">
-                <Label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
-                  <div className="h-1.5 w-1.5 bg-amber-500 rounded-full animate-pulse"></div>
-                  Foto Baru (Belum Disimpan)
-                </Label>
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="text-xs">
-                    {photos.length} foto
-                  </Badge>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => {
-                      if (confirm('Hapus semua foto yang belum disimpan?')) {
-                        setPhotos([]);
-                        setPhotoNames({});
-                      }
-                    }}
-                    className="h-7 text-[10px] px-2"
-                  >
-                    <Trash2 className="h-3 w-3 mr-1" />
-                    Hapus Semua
-                  </Button>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {photos.map((photo, idx) => (
-                  <div key={photo.url} className="group relative">
-                    <div className="relative aspect-square rounded-xl overflow-hidden border-2 border-amber-300 shadow-sm group-hover:shadow-lg group-hover:border-amber-400 transition-all duration-300 mb-2 bg-amber-50/30">
-                      <img 
-                        src={photo.url} 
-                        alt={photoNames[photo.url] || photo.name} 
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
-                      />
-                      <div className="absolute top-2 right-2 flex gap-1">
-                        <Badge className="bg-amber-500 text-white text-[10px] h-5 px-1.5 shadow-lg">
-                          Baru
-                        </Badge>
-                        <button
-                          onClick={() => handleDeletePhoto(photo.url, photoNames[photo.url] || photo.name)}
-                          className="h-6 w-6 bg-red-500/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
-                          title="Hapus foto"
-                        >
-                          <Trash2 className="h-3 w-3 text-white" />
-                        </button>
+                    ) : (
+                      <div 
+                        onClick={() => !isLocked && pdfInputRef.current?.click()}
+                        className={cn(
+                          "py-12 border-2 border-dashed rounded-[2rem] flex flex-col items-center justify-center gap-4 transition-all",
+                          isLocked ? "border-slate-100 opacity-50 cursor-not-allowed" : "border-slate-200 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 group"
+                        )}
+                      >
+                        <div className="h-16 w-16 rounded-full bg-slate-50 flex items-center justify-center border-2 border-white shadow-inner group-hover:bg-blue-100 transition-colors">
+                          {uploadingPdf ? <RefreshCw className="h-8 w-8 text-blue-600 animate-spin" /> : <Upload className="h-8 w-8 text-slate-300 group-hover:text-blue-500" />}
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Klik untuk upload hasil sampling</p>
+                          <p className="text-[9px] font-bold text-slate-300 uppercase mt-1">Format: PDF (Maks. 5MB)</p>
+                        </div>
+                        <input 
+                          type="file" 
+                          ref={pdfInputRef} 
+                          onChange={handlePdfUpload} 
+                          accept="application/pdf" 
+                          className="hidden" 
+                        />
                       </div>
-                    </div>
-                    <div className="space-y-1">
-                      <input
-                        type="text"
-                        value={photoNames[photo.url] || photo.name}
-                        onChange={(e) => handlePhotoNameChange(photo.url, e.target.value)}
-                        className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                        placeholder="Nama foto..."
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
+                    )}
+                  </CardContent>
+               </PremiumCard>
             </div>
-          )}
-
-          {/* Upload Area */}
-          {assignment.status !== 'completed' && assignment.status !== 'cancelled' && (
-            <div className="border-t border-emerald-100 pt-5 mt-5">
-              <div className="flex items-center justify-between mb-4">
-                <Label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                  <Upload className="h-4 w-4 text-emerald-600" />
-                  Upload Foto Baru
-                </Label>
-                <Badge variant="secondary" className="text-xs bg-slate-100">
-                  Max 5MB per file
-                </Badge>
-              </div>
-              
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handlePhotoUpload}
-                className="hidden"
-                id="photo-upload"
-              />
-              
-              <label htmlFor="photo-upload">
-                <div className="border-2 border-dashed border-emerald-200 rounded-xl p-6 text-center hover:border-emerald-400 hover:bg-emerald-50/50 transition-all cursor-pointer group">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="h-12 w-12 bg-emerald-100 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
-                      <Upload className="h-6 w-6 text-emerald-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-slate-700">
-                        Klik untuk upload foto
-                      </p>
-                      <p className="text-xs text-slate-500 mt-1">
-                        JPG, PNG, WEBP • Multiple files
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </label>
-              
-              {photos.length > 0 && (
-                <div className="mt-4 p-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl">
-                  <div className="flex items-start gap-3">
-                    <div className="h-6 w-6 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <span className="text-sm">💡</span>
-                    </div>
-                    <div>
-                      <p className="text-xs text-amber-900 font-medium">
-                        Beri nama untuk setiap foto
-                      </p>
-                      <p className="text-xs text-amber-700 mt-1">
-                        Setelah upload, beri nama yang deskriptif untuk setiap foto, lalu klik tombol <strong>"Simpan Nama"</strong> di atas.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          
-          {/* Empty State */}
-          {!assignment.photos?.length && photos.length === 0 && (
-            <div className="text-center py-12">
-              <div className="h-16 w-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <ImageIcon className="h-8 w-8 text-slate-400" />
-              </div>
-              <p className="text-slate-500 text-sm font-medium">Belum ada foto dokumentasi</p>
-              <p className="text-slate-400 text-xs mt-1">Upload foto untuk mendokumentasikan sampling</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Notes Section */}
-      <Card className="rounded-2xl border-none shadow-md overflow-hidden bg-white mt-6 mb-24">
-        <CardHeader className="pb-3 bg-slate-50 border-b border-slate-100">
-          <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2 text-slate-700">
-            <FileText className="h-4 w-4 text-slate-400" />
-            Catatan Sampling
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4 pt-4">
-          <div>
-            {assignment.notes ? (
-              <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
-                <p className="text-sm font-medium text-slate-800 whitespace-pre-wrap leading-relaxed">{assignment.notes}</p>
-              </div>
-            ) : (
-              <p className="text-sm text-slate-400 italic bg-slate-50 p-4 rounded-xl text-center">Tidak ada catatan tugas.</p>
-            )}
           </div>
 
-          {assignment.status !== 'completed' && assignment.status !== 'cancelled' && (
-            <div>
-              <Label htmlFor="notes" className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">
-                Tambah / Update Catatan (Opsional)
-              </Label>
-              <Textarea
-                id="notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Tuliskan kondisi lokasi, kendala, atau info penting lainnya di sini..."
-                className="min-h-[120px] resize-none rounded-xl border-slate-200 focus:border-emerald-400 focus:ring-emerald-400 bg-slate-50/50"
-              />
-            </div>
-          )}
-
-          {assignment.status === 'completed' && (
-            <div className="space-y-4">
-              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3">
-                <div className="h-10 w-10 bg-emerald-100 rounded-full flex items-center justify-center shrink-0">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-black text-emerald-900">Sampling Telah Selesai</p>
-                  <p className="text-xs font-medium text-emerald-700">Terima kasih atas kerja keras Anda.</p>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          {assignment.status === 'cancelled' && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3">
-              <div className="h-10 w-10 bg-red-100 rounded-full flex items-center justify-center shrink-0">
-                <Pause className="h-5 w-5 text-red-600" />
-              </div>
-              <p className="text-sm font-black text-red-900">Penugasan Dibatalkan</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Sticky Bottom Action Bar */}
-      {assignment.status !== 'completed' && assignment.status !== 'cancelled' && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-slate-200 p-4 md:px-8 z-40 pb-safe shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row gap-3">
-            {assignment.status === 'pending' && (
-              <Button
-                onClick={() => handleStatusUpdate('in_progress')}
-                disabled={isPending}
-                className="bg-blue-600 hover:bg-blue-700 w-full h-14 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-blue-900/20"
-              >
-                <Play className="h-5 w-5 mr-2" />
-                Mulai Perjalanan & Sampling
-              </Button>
+          {/* Sidebar Area */}
+          <div className="lg:col-span-4 space-y-8">
+            {/* Travel Order Quick Look */}
+            {travelOrder && (
+              <Card className="border-none shadow-2xl shadow-blue-900/5 rounded-[2.5rem] overflow-hidden bg-blue-950 text-white">
+                 <CardHeader className="p-8">
+                    <div className="flex items-center gap-4 mb-6">
+                       <div className="h-12 w-12 rounded-2xl bg-blue-600 flex items-center justify-center border-2 border-blue-500 shadow-xl"><FileText className="h-6 w-6" /></div>
+                       <div><CardTitle className="text-lg font-black uppercase tracking-tight">Surat Tugas</CardTitle><p className="text-blue-400 font-bold text-[10px] uppercase">SPPD Digital Terbit</p></div>
+                    </div>
+                    <div className="bg-blue-900/50 p-5 rounded-2xl border border-blue-800/50 space-y-4">
+                       <div className="flex justify-between items-center"><span className="text-[10px] font-black text-blue-400 uppercase">Nomor Dokumen</span><span className="font-mono text-xs font-bold text-blue-200">{travelOrder.document_number}</span></div>
+                       <div className="flex justify-between items-center"><span className="text-[10px] font-black text-blue-400 uppercase">Uang Harian</span><span className="font-black text-emerald-400 text-sm">Rp {Number(travelOrder.daily_allowance).toLocaleString('id-ID')}</span></div>
+                    </div>
+                    <Button onClick={() => window.open(`/field/travel-orders/${travelOrder.id}/preview`, '_blank')} className="w-full h-14 bg-white hover:bg-blue-50 text-blue-900 font-black uppercase tracking-widest rounded-2xl shadow-xl mt-6">LIHAT BERKAS <ChevronRight className="ml-2 h-4 w-4" /></Button>
+                 </CardHeader>
+              </Card>
             )}
-            
-            {assignment.status === 'in_progress' && (
-              <>
-                <Button
-                  onClick={() => handleStatusUpdate('pending')}
-                  disabled={isPending}
-                  variant="outline"
-                  className="sm:flex-1 h-14 rounded-2xl font-black uppercase tracking-widest text-xs border-slate-200 text-slate-500 hover:bg-slate-50"
-                >
-                  <Pause className="h-4 w-4 mr-2" />
-                  Tunda
-                </Button>
-                <Button
-                  onClick={() => handleStatusUpdate('completed')}
-                  disabled={isPending}
-                  className="sm:flex-[3] bg-emerald-600 hover:bg-emerald-700 h-14 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-emerald-900/20"
-                >
-                  <CheckCircle2 className="h-5 w-5 mr-2" />
-                  Selesai & Laporkan Tugas
-                </Button>
-              </>
-            )}
+
+            {/* Team Members Card */}
+            <Card className="border-none shadow-2xl shadow-emerald-900/5 rounded-[2.5rem] overflow-hidden bg-white">
+               <CardContent className="p-8 space-y-6">
+                  <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest flex items-center gap-2">
+                     <User className="h-4 w-4 text-emerald-600" /> Personel Bertugas
+                  </h3>
+                  <div className="space-y-4">
+                     <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <div className="h-10 w-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white font-black">{assignment.field_officer?.full_name?.charAt(0)}</div>
+                        <div><p className="text-[10px] font-black text-emerald-600 uppercase">Petugas Utama</p><p className="text-xs font-bold text-slate-800">{assignment.field_officer?.full_name}</p></div>
+                     </div>
+                     {assignment.assistants?.map((ast: any) => (
+                        <div key={ast.id} className="flex items-center gap-4 p-4 bg-white border-2 border-slate-50 rounded-2xl">
+                           <div className="h-10 w-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 font-black">{ast.full_name?.charAt(0)}</div>
+                           <div><p className="text-[10px] font-black text-slate-400 uppercase">Asisten</p><p className="text-xs font-bold text-slate-800">{ast.full_name}</p></div>
+                        </div>
+                     ))}
+                  </div>
+               </CardContent>
+            </Card>
           </div>
         </div>
+      </div>
+
+      {/* Floating Action Bar (Responsive Mobile) */}
+      {!['completed', 'cancelled'].includes(assignment.status) && (
+        <div className="fixed bottom-0 left-0 right-0 p-4 md:p-8 z-50 pointer-events-none">
+           <div className="max-w-xl mx-auto pointer-events-auto">
+              <div className="bg-white/80 backdrop-blur-2xl border-2 border-slate-100 rounded-[2.5rem] p-4 md:p-6 shadow-[0_20px_50px_rgba(0,0,0,0.15)] flex flex-col sm:flex-row gap-3">
+                 {assignment.status === 'pending' ? (
+                    <Button 
+                      onClick={() => handleStatusUpdate('in_progress')}
+                      className="w-full h-16 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-blue-900/20 flex items-center justify-center gap-3 transition-all active:scale-95"
+                    >
+                       Mulai Perjalanan & Sampling <Play className="h-6 w-6" />
+                    </Button>
+                 ) : (
+                    <>
+                       <Button 
+                         variant="ghost"
+                         onClick={() => handleStatusUpdate('pending')}
+                         className="flex-1 h-16 rounded-2xl font-black uppercase tracking-widest text-xs text-slate-400 border-2 border-slate-50"
+                       >
+                          Tunda Tugas
+                       </Button>
+                       <Button 
+                         onClick={() => handleStatusUpdate('completed')}
+                         className="flex-[2] h-16 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-emerald-900/20 flex items-center justify-center gap-3"
+                       >
+                          Sampling Selesai <CheckCircle2 className="h-6 w-6" />
+                       </Button>
+                    </>
+                 )}
+              </div>
+           </div>
+        </div>
       )}
-    </div>
-    </div>
+    </PremiumPageWrapper>
   );
 }
+
+// Add Building import to lucide-react if missing above
+import { Building as BuildingIcon } from "lucide-react";

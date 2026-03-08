@@ -53,7 +53,8 @@ import {
   Layers,
   ArrowRightCircle,
   Maximize2,
-  MoreHorizontal
+  MoreHorizontal,
+  Check
 } from "lucide-react";
 import { LoadingOverlay, LoadingButton } from "@/components/ui";
 import { TableSkeleton } from "@/components/ui/skeleton";
@@ -325,14 +326,24 @@ export default function AdminJobProgressPage() {
       notes: ""
     });
 
+    // Open dialog immediately
+    setIsAssignDialogOpen(true);
+
+    // Load data in background
     setLoading(true);
     try {
-      const [officers, assistantList] = await Promise.all([getFieldOfficers(), getFieldAssistants()]);
+      const [officers, assistantList] = await Promise.all([
+        getFieldOfficers(),
+        getFieldAssistants()
+      ]);
       setFieldOfficers(officers || []);
       setAssistants(assistantList || []);
-      setIsAssignDialogOpen(true);
-    } catch (error) { toast.error("Gagal memuat data petugas"); }
-    finally { setLoading(false); }
+    } catch (error) { 
+      toast.error("Gagal memuat data petugas"); 
+    }
+    finally { 
+      setLoading(false); 
+    }
   };
 
   const handleAssignSubmit = async () => {
@@ -348,6 +359,542 @@ export default function AdminJobProgressPage() {
       loadData();
     } catch (error: any) { toast.error(error.message || "Gagal menugaskan petugas"); }
     finally { setSubmitting(false); }
+  };
+
+  const handlePrintInvoice = async (job: any) => {
+    try {
+      // Open invoice page in new tab
+      const invoiceUrl = `/quotations/${job.quotation_id}?print=true`;
+      window.open(invoiceUrl, '_blank');
+      toast.success("Membuka invoice untuk dicetak");
+    } catch (error: any) {
+      toast.error("Gagal membuka invoice");
+    }
+  };
+
+  const handlePrintManifest = async (job: any) => {
+    try {
+      // Check if job has sampling assignment
+      if (!job.sampling_assignment) {
+        toast.error("Belum ada penugasan untuk job ini", {
+          description: "Silakan tugaskan personel terlebih dahulu"
+        });
+        return;
+      }
+
+      // Open travel order preview in new tab
+      const manifestUrl = `/admin/travel-orders/${job.id}/preview`;
+      const newWindow = window.open(manifestUrl, '_blank');
+      
+      // If window.open fails or takes too long, show alternative
+      setTimeout(() => {
+        if (!newWindow || newWindow.closed) {
+          toast.info("Membuka manifes...", {
+            description: "Pastikan popup tidak diblokir"
+          });
+        }
+      }, 2000);
+      
+      toast.success("Membuka manifes untuk dicetak");
+    } catch (error: any) {
+      toast.error("Gagal membuka manifes", {
+        description: error.message || "Job belum memiliki penugasan"
+      });
+    }
+  };
+
+  const handleQuickPrintManifest = async (job: any) => {
+    // Print Surat Tugas (SPL)
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        toast.error("Popup diblokir", {
+          description: "Izinkan popup untuk mencetak surat tugas"
+        });
+        return;
+      }
+
+      // Fetch company profile for real data
+      let companyName = 'PT WAHFA LAB PRATAMA';
+      let companyAddress = 'Jl. Raya Laboratorium No. 123, Jakarta, Indonesia';
+      let companyPhone = '(021) 1234-5678';
+      let companyEmail = 'info@wahfalab.com';
+      let companyLogo = '';
+
+      try {
+        const companyResponse = await fetch('/api/company-profile');
+        if (companyResponse.ok) {
+          const companyData = await companyResponse.json();
+          if (companyData) {
+            companyName = companyData.company_name || companyName;
+            companyAddress = companyData.address || companyAddress;
+            companyPhone = companyData.phone || companyPhone;
+            companyEmail = companyData.email || companyEmail;
+            companyLogo = companyData.logo_url || '';
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching company profile:', error);
+      }
+
+      // Get data with fallbacks
+      const customerName = job.quotation?.profile?.company_name ||
+                          job.quotation?.profile?.full_name ||
+                          job.customer_name ||
+                          '-';
+
+      const location = job.sampling_assignment?.location ||
+                      job.location ||
+                      job.quotation?.profile?.address ||
+                      '-';
+
+      const scheduledDate = job.sampling_assignment?.scheduled_date;
+      const dateDisplay = scheduledDate
+        ? new Date(scheduledDate).toLocaleDateString('id-ID', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric'
+          })
+        : '-';
+
+      const officerName = job.sampling_assignment?.field_officer?.full_name ||
+                         job.sampling_assignment?.field_officer_name ||
+                         '-';
+
+      // Fix: Get assistants properly from sampling_assignment
+      let assistantsDisplay = '-';
+      if (job.sampling_assignment) {
+        const asstArray = Array.isArray(job.sampling_assignment.assistants) 
+          ? job.sampling_assignment.assistants 
+          : [];
+        if (asstArray.length > 0) {
+          assistantsDisplay = asstArray
+            .map((a: any) => a.full_name || a.name)
+            .filter(Boolean)
+            .join(', ');
+        }
+      }
+
+      const items = job.quotation?.items || [];
+      const servicesHTML = items.length > 0
+        ? items.map((item: any, idx: number) => {
+            const serviceName = item.service?.name || item.service_name || item.name || '-';
+            
+            // Fix: Get parameters properly
+            let paramsDisplay = '-';
+            const params = item.service?.parameters || item.parameters;
+            
+            if (params) {
+              try {
+                const parsed = typeof params === 'string' ? JSON.parse(params) : params;
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  paramsDisplay = parsed
+                    .map((p: any) => p.name || p.parameter_name || p)
+                    .filter(Boolean)
+                    .join(', ');
+                }
+              } catch (e) {
+                paramsDisplay = String(params);
+              }
+            }
+
+            return `
+              <tr>
+                <td style="text-align: center;">${idx + 1}</td>
+                <td>${serviceName}</td>
+                <td>${paramsDisplay || '-'}</td>
+              </tr>
+            `;
+          }).join('')
+        : '<tr><td colspan="3" style="text-align: center; padding: 20px; color: #666;">Tidak ada pengujian</td></tr>';
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            @page {
+              size: A4;
+              margin: 1.5cm 2cm 1.5cm 2cm;
+            }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+              font-family: 'Arial', sans-serif;
+              font-size: 11pt;
+              line-height: 1.5;
+              color: #000;
+              background: #fff;
+            }
+
+            /* Kop Surat */
+            .kop-surat {
+              border-bottom: 3px double #000;
+              padding-bottom: 10px;
+              margin-bottom: 15px;
+              display: flex;
+              align-items: center;
+              gap: 20px;
+            }
+            .kop-logo {
+              flex-shrink: 0;
+            }
+            .kop-logo img {
+              height: 70px;
+              width: auto;
+              object-fit: contain;
+              filter: none !important;
+              -webkit-filter: none !important;
+            }
+            .kop-logo .emoji-logo {
+              font-size: 56px;
+              line-height: 1;
+              color: inherit;
+            }
+            .kop-info {
+              flex: 1;
+            }
+            .kop-info .company-name {
+              font-size: 16pt;
+              font-weight: bold;
+              text-transform: uppercase;
+              margin-bottom: 3px;
+            }
+            .kop-info .company-address {
+              font-size: 9pt;
+              margin-bottom: 2px;
+            }
+            .kop-info .company-contact {
+              font-size: 9pt;
+              font-style: italic;
+            }
+
+            /* Force hide browser headers/footers */
+            @media print {
+              @page {
+                margin-top: 1cm;
+                margin-bottom: 1cm;
+                margin-left: 2cm;
+                margin-right: 2cm;
+                size: A4;
+              }
+              html, body {
+                height: auto !important;
+                overflow: visible !important;
+              }
+              body {
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+                -moz-print-color-adjust: exact;
+                margin: 0 !important;
+                padding: 0 !important;
+              }
+              /* Hide all browser annotations */
+              @page {
+                @top-left { content: none !important; display: none !important; }
+                @top-center { content: none !important; display: none !important; }
+                @top-right { content: none !important; display: none !important; }
+                @bottom-left { content: none !important; display: none !important; }
+                @bottom-center { content: none !important; display: none !important; }
+                @bottom-right { content: none !important; display: none !important; }
+                @left-top { content: none !important; }
+                @left-middle { content: none !important; }
+                @left-bottom { content: none !important; }
+                @right-top { content: none !important; }
+                @right-middle { content: none !important; }
+                @right-bottom { content: none !important; }
+              }
+            }
+            .judul-surat {
+              text-align: center;
+              margin: 20px 0 15px 0;
+            }
+            .judul-surat .document-title {
+              font-size: 14pt;
+              font-weight: bold;
+              text-transform: uppercase;
+              text-decoration: underline;
+              margin-bottom: 5px;
+            }
+            .judul-surat .document-number {
+              font-size: 10pt;
+            }
+            
+            /* Isi Surat */
+            .isi-surat {
+              margin-top: 20px;
+            }
+            .isi-surat p {
+              margin-bottom: 12px;
+              text-align: justify;
+            }
+            
+            /* Tabel Detail */
+            .detail-box {
+              margin: 15px 0;
+              width: 100%;
+              border-collapse: collapse;
+            }
+            .detail-box td {
+              padding: 6px 8px;
+              border: 1px solid #000;
+              vertical-align: top;
+            }
+            .detail-box td:first-child {
+              width: 25%;
+              font-weight: bold;
+              background: #f5f5f5;
+            }
+            .detail-box td:nth-child(2) {
+              width: 3%;
+              text-align: center;
+            }
+            
+            /* Tabel Pengujian */
+            .tabel-pengujian {
+              margin: 20px 0;
+              border-collapse: collapse;
+              width: 100%;
+            }
+            .tabel-pengujian th,
+            .tabel-pengujian td {
+              border: 1px solid #000;
+              padding: 8px;
+              text-align: left;
+              font-size: 10pt;
+            }
+            .tabel-pengujian th {
+              background: #e0e0e0;
+              font-weight: bold;
+              text-align: center;
+            }
+            .tabel-pengujian td:first-child {
+              text-align: center;
+              width: 40px;
+            }
+            
+            /* Tanda Tangan */
+            .tanda-tangan {
+              margin-top: 50px;
+              width: 100%;
+            }
+            .ttd-container {
+              display: flex;
+              justify-content: space-between;
+              gap: 50px;
+            }
+            .ttd-box {
+              flex: 1;
+              text-align: center;
+            }
+            .ttd-box .jabatan {
+              margin-bottom: 90px;
+              font-weight: bold;
+              line-height: 1.6;
+              min-height: 60px;
+            }
+            .ttd-box .nama {
+              border-top: 1px solid #000;
+              padding-top: 8px;
+              display: inline-block;
+              min-width: 200px;
+              font-weight: bold;
+            }
+            
+            /* Footer */
+            .footer {
+              margin-top: 30px;
+              font-size: 8pt;
+              font-style: italic;
+              text-align: center;
+              border-top: 1px solid #ccc;
+              padding-top: 8px;
+            }
+            
+            /* Print Controls */
+            .no-print {
+              margin-top: 40px;
+              text-align: center;
+              padding: 30px;
+              background: #f5f5f5;
+              border-radius: 10px;
+              border: 2px solid #ddd;
+            }
+            .btn {
+              padding: 14px 40px;
+              border: none;
+              border-radius: 8px;
+              cursor: pointer;
+              font-size: 14px;
+              font-weight: bold;
+              margin: 0 10px;
+              transition: all 0.3s ease;
+              text-transform: uppercase;
+            }
+            .btn-print {
+              background: #059669;
+              color: white;
+            }
+            .btn-print:hover {
+              background: #047857;
+              transform: translateY(-2px);
+              box-shadow: 0 4px 8px rgba(5, 150, 105, 0.3);
+            }
+            .btn-close {
+              background: #64748b;
+              color: white;
+            }
+            .btn-close:hover {
+              background: #475569;
+              transform: translateY(-2px);
+              box-shadow: 0 4px 8px rgba(100, 116, 139, 0.3);
+            }
+            
+            @media print {
+              .no-print { display: none; }
+              body { font-size: 11pt; }
+              @page { margin: 2cm 2cm 2cm 2cm; }
+            }
+          </style>
+        </head>
+        <body onload="window.print();">
+          <!-- Kop Surat -->
+          <div class="kop-surat">
+            <div class="kop-logo">
+              ${companyLogo ? `<img src="${companyLogo}" alt="Logo" />` : '<div class="emoji-logo">🧪</div>'}
+            </div>
+            <div class="kop-info">
+              <div class="company-name">${companyName}</div>
+              <div class="company-address">
+                ${companyAddress}
+              </div>
+              <div class="company-contact">
+                Telp: ${companyPhone} | Email: ${companyEmail}
+              </div>
+            </div>
+          </div>
+          
+          <!-- Judul Surat -->
+          <div class="judul-surat">
+            <div class="document-title">SURAT PERINTAH KERJA</div>
+            <div class="document-number">Nomor: ${job.tracking_code || job.id || '-'}/SPK/III/2026</div>
+          </div>
+          
+          <!-- Isi Surat -->
+          <div class="isi-surat">
+            <p>
+              Yang bertanda tangan di bawah ini, Manager Operasional PT Wahfa Lab Pratama, 
+              memberikan tugas kepada petugas untuk melaksanakan kegiatan sampling dan 
+              pengujian laboratorium dengan detail sebagai berikut:
+            </p>
+            
+            <table class="detail-box">
+              <tr>
+                <td>No. Job Order</td>
+                <td>:</td>
+                <td><strong>${job.tracking_code || '-'}</strong></td>
+              </tr>
+              <tr>
+                <td>Customer</td>
+                <td>:</td>
+                <td><strong>${customerName}</strong></td>
+              </tr>
+              <tr>
+                <td>Lokasi Sampling</td>
+                <td>:</td>
+                <td>${location}</td>
+              </tr>
+              <tr>
+                <td>Tanggal Sampling</td>
+                <td>:</td>
+                <td>${dateDisplay}</td>
+              </tr>
+              <tr>
+                <td>Petugas Sampling</td>
+                <td>:</td>
+                <td><strong>${officerName}</strong></td>
+              </tr>
+              ${assistantsDisplay !== '-' ? `
+              <tr>
+                <td>Asisten Lapangan</td>
+                <td>:</td>
+                <td><strong>${assistantsDisplay}</strong></td>
+              </tr>
+              ` : ''}
+            </table>
+            
+            <p><strong>Daftar Pengujian:</strong></p>
+            
+            <table class="tabel-pengujian">
+              <thead>
+                <tr>
+                  <th>No</th>
+                  <th>Nama Pengujian</th>
+                  <th>Parameter</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${servicesHTML}
+              </tbody>
+            </table>
+            
+            <p>
+              Demikian surat perintah kerja ini dibuat untuk dilaksanakan dengan penuh 
+              tanggung jawab dan profesionalisme.
+            </p>
+          </div>
+          
+          <!-- Tanda Tangan -->
+          <div class="tanda-tangan">
+            <div class="ttd-container">
+              <div class="ttd-box">
+                <div class="jabatan">
+                  Mengetahui,<br>
+                  Manager Operasional
+                </div>
+                <div class="nama">
+                  ( ___________________ )
+                </div>
+              </div>
+              <div class="ttd-box">
+                <div class="jabatan">
+                  Petugas Sampling
+                </div>
+                <div class="nama">
+                  ( ${officerName} )
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Footer -->
+          <div class="footer">
+            Dokumen ini dicetak secara otomatis dari sistem WahfaLab pada ${new Date().toLocaleDateString('id-ID', { 
+              day: 'numeric', 
+              month: 'long', 
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </div>
+          
+          <!-- Print Controls -->
+          <div class="no-print">
+            <button onclick="window.print()" class="btn btn-print">🖨️ Cetak A4</button>
+            <button onclick="window.close()" class="btn btn-close">❌ Tutup</button>
+          </div>
+        </body>
+        </html>
+      `;
+
+      printWindow.document.write(html);
+      printWindow.document.close();
+      toast.success("Surat tugas dibuka");
+    } catch (error: any) {
+      toast.error("Gagal mencetak surat tugas", {
+        description: error.message
+      });
+    }
   };
 
   const confirmDelete = async () => {
@@ -702,11 +1249,11 @@ export default function AdminJobProgressPage() {
                               </div>
                               Tugaskan Personel
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="rounded-2xl p-4 text-[11px] font-black uppercase tracking-widest text-slate-700 hover:bg-blue-50 focus:bg-blue-50 focus:text-blue-700 transition-colors">
+                            <DropdownMenuItem className="rounded-2xl p-4 text-[11px] font-black uppercase tracking-widest text-slate-700 hover:bg-blue-50 focus:bg-blue-50 focus:text-blue-700 transition-colors" onClick={() => handleQuickPrintManifest(job)}>
                               <div className="h-8 w-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center mr-4">
                                 <Printer className="h-4 w-4" />
                               </div>
-                              Cetak Manifes
+                              Cetak Surat Tugas
                             </DropdownMenuItem>
                             <DropdownMenuSeparator className="bg-slate-50" />
                             <DropdownMenuItem onClick={() => { setSelectedJob(job); setIsDeleteDialogOpen(true); }} className="rounded-2xl p-4 text-[11px] font-black uppercase tracking-widest text-rose-600 hover:bg-rose-50 focus:bg-rose-50 transition-colors">
@@ -778,90 +1325,230 @@ export default function AdminJobProgressPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ASSIGNMENT DIALOG - PREMIUM REDESIGN */}
+      {/* ASSIGNMENT DIALOG - PREMIUM v2.0 */}
       <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
-        <DialogContent className="rounded-[3rem] border-none shadow-2xl p-0 overflow-hidden bg-white max-w-2xl">
-          <div className="bg-emerald-900 p-10 flex flex-col items-center text-white relative">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500 rounded-full blur-[80px] opacity-20" />
-            <div className="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center mb-4 border border-white/10 shadow-inner">
-              <UserPlus className="h-8 w-8 text-emerald-400" />
-            </div>
-            <DialogTitle className="text-2xl font-black uppercase tracking-tight text-white">Penugasan Personel</DialogTitle>
-            <DialogDescription className="text-emerald-400 font-bold uppercase text-[9px] tracking-[0.3em] mt-1 opacity-80">Tugaskan Tim Sampling ke Pekerjaan: {selectedJob?.tracking_code}</DialogDescription>
-          </div>
-          
-          <div className="p-10 space-y-8 bg-white max-h-[60vh] overflow-y-auto scrollbar-thin">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                  <ShieldCheck className="h-3 w-3" /> Petugas Utama
-                </label>
-                <Select value={assignFormData.field_officer_id} onValueChange={(v) => setAssignFormData({...assignFormData, field_officer_id: v})}>
-                  <SelectTrigger className="h-16 rounded-2xl bg-slate-50 border-none font-black text-xs px-6">
-                    <SelectValue placeholder="Pilih Petugas Utama" />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-2xl border-none shadow-2xl">
-                    {fieldOfficers.map(o => <SelectItem key={o.id} value={o.id} className="text-[11px] font-black uppercase py-4">{o.full_name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+        <DialogContent className="max-w-[95vw] sm:max-w-3xl rounded-[2.5rem] border-none p-0 overflow-hidden shadow-2xl bg-white">
+          {/* Premium Header */}
+          <div className="bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 p-8 md:p-10 text-white relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500 rounded-full blur-[100px] opacity-20" />
+            <div className="absolute bottom-0 left-0 w-48 h-48 bg-teal-500 rounded-full blur-[80px] opacity-20" />
+            
+            <div className="relative z-10 flex items-center gap-5">
+              <div className="w-16 h-16 md:w-20 md:h-20 rounded-3xl bg-white/10 backdrop-blur-xl flex items-center justify-center border-2 border-white/20 shadow-2xl">
+                <UserPlus className="h-8 w-8 md:h-10 md:w-10 text-emerald-300" />
               </div>
-
-              <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                  <Calendar className="h-3 w-3" /> Tanggal Target
-                </label>
-                <Input 
-                  type="date" 
-                  value={assignFormData.scheduled_date} 
-                  onChange={(e) => setAssignFormData({...assignFormData, scheduled_date: e.target.value})} 
-                  className="h-16 rounded-2xl bg-slate-50 border-none font-black text-xs px-6" 
-                />
-              </div>
-
-              <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                  <Clock className="h-3 w-3" /> Waktu Penugasan
-                </label>
-                <Input 
-                  type="time" 
-                  value={assignFormData.scheduled_time} 
-                  onChange={(e) => setAssignFormData({...assignFormData, scheduled_time: e.target.value})} 
-                  className="h-16 rounded-2xl bg-slate-50 border-none font-black text-xs px-6" 
-                />
-              </div>
-
-              <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                  <MapPin className="h-3 w-3" /> Koordinat / Lokasi
-                </label>
-                <Input 
-                  placeholder="Alamat penugasan" 
-                  value={assignFormData.location} 
-                  onChange={(e) => setAssignFormData({...assignFormData, location: e.target.value})} 
-                  className="h-16 rounded-2xl bg-slate-50 border-none font-black text-xs px-6" 
-                />
+              <div className="flex-1 min-w-0">
+                <DialogTitle className="text-2xl md:text-3xl font-black uppercase tracking-tight text-white leading-none truncate">
+                  Penugasan Personel
+                </DialogTitle>
+                <DialogDescription className="text-emerald-200 font-bold uppercase text-[10px] md:text-[11px] tracking-[0.25em] mt-2 opacity-90 truncate">
+                  {selectedJob?.tracking_code} • {selectedJob?.quotation?.profile?.company_name || 'N/A'}
+                </DialogDescription>
               </div>
             </div>
-
-            <div className="space-y-3">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <Info className="h-3 w-3" /> Instruksi Penugasan
-              </label>
-              <textarea 
-                className="w-full h-32 bg-slate-50 border-none rounded-3xl p-6 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-emerald-500/20 transition-all placeholder:text-slate-300"
-                placeholder="Instruksi tambahan untuk tim lapangan..."
-                value={assignFormData.notes}
-                onChange={(e) => setAssignFormData({...assignFormData, notes: e.target.value})}
-              />
-            </div>
+            
+            <button
+              onClick={() => setIsAssignDialogOpen(false)}
+              className="absolute top-4 right-4 md:top-6 md:right-6 h-10 w-10 md:h-12 md:w-12 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-md flex items-center justify-center transition-all border border-white/10"
+            >
+              <X className="h-5 w-5 md:h-6 md:w-6 text-white" />
+            </button>
           </div>
 
-          <DialogFooter className="p-10 bg-slate-50/50 border-t border-slate-100">
-            <Button variant="ghost" onClick={() => setIsAssignDialogOpen(false)} className="h-16 rounded-2xl px-8 font-black text-slate-400 uppercase text-[11px] tracking-widest border-none hover:bg-slate-200 transition-all">Batal</Button>
-            <LoadingButton loading={submitting} onClick={handleAssignSubmit} className="h-16 rounded-2xl px-12 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[11px] tracking-widest shadow-xl shadow-emerald-900/10 transition-all active:scale-95">
-              Konfirmasi Penugasan
-            </LoadingButton>
-          </DialogFooter>
+          {/* Scrollable Content */}
+          <div className="max-h-[calc(100vh-300px)] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
+            <div className="p-6 md:p-8 space-y-6 bg-gradient-to-b from-white via-slate-50/50 to-white">
+              
+              {/* Main Grid - 2 Columns */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Field Officer */}
+                <div className="space-y-2.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <div className="h-6 w-6 rounded-lg bg-emerald-100 flex items-center justify-center">
+                      <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                    </div>
+                    Petugas Utama *
+                  </label>
+                  <Select value={assignFormData.field_officer_id} onValueChange={(v) => setAssignFormData({...assignFormData, field_officer_id: v})}>
+                    <SelectTrigger className="h-14 rounded-2xl bg-white border-2 border-slate-200 font-bold text-sm px-5 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all">
+                      <SelectValue placeholder="Pilih Petugas Utama" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-2xl border-none shadow-2xl max-h-48">
+                      {fieldOfficers.map(o => (
+                        <SelectItem key={o.id} value={o.id} className="text-sm font-bold py-3 px-4 rounded-xl mb-1 hover:bg-emerald-50 cursor-pointer">
+                          {o.full_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Target Date */}
+                <div className="space-y-2.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <div className="h-6 w-6 rounded-lg bg-blue-100 flex items-center justify-center">
+                      <Calendar className="h-3.5 w-3.5 text-blue-600" />
+                    </div>
+                    Tanggal Target *
+                  </label>
+                  <Input
+                    type="date"
+                    value={assignFormData.scheduled_date}
+                    onChange={(e) => setAssignFormData({...assignFormData, scheduled_date: e.target.value})}
+                    className="h-14 rounded-2xl bg-white border-2 border-slate-200 font-bold text-sm px-5 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                  />
+                </div>
+
+                {/* Time */}
+                <div className="space-y-2.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <div className="h-6 w-6 rounded-lg bg-amber-100 flex items-center justify-center">
+                      <Clock className="h-3.5 w-3.5 text-amber-600" />
+                    </div>
+                    Waktu Penugasan
+                  </label>
+                  <Input
+                    type="time"
+                    value={assignFormData.scheduled_time}
+                    onChange={(e) => setAssignFormData({...assignFormData, scheduled_time: e.target.value})}
+                    className="h-14 rounded-2xl bg-white border-2 border-slate-200 font-bold text-sm px-5 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                  />
+                </div>
+
+                {/* Location */}
+                <div className="space-y-2.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <div className="h-6 w-6 rounded-lg bg-violet-100 flex items-center justify-center">
+                      <MapPin className="h-3.5 w-3.5 text-violet-600" />
+                    </div>
+                    Lokasi Sampling
+                  </label>
+                  <Input
+                    placeholder="Alamat lengkap penugasan"
+                    value={assignFormData.location}
+                    onChange={(e) => setAssignFormData({...assignFormData, location: e.target.value})}
+                    className="h-14 rounded-2xl bg-white border-2 border-slate-200 font-bold text-sm px-5 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Assistant Selection - Premium */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <div className="h-6 w-6 rounded-lg bg-indigo-100 flex items-center justify-center">
+                      <UserPlus className="h-3.5 w-3.5 text-indigo-600" />
+                    </div>
+                    Asisten Lapangan (Opsional)
+                  </label>
+                  <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
+                    {assignFormData.assistant_ids.length} terpilih
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto p-3 bg-slate-50/80 rounded-3xl border-2 border-slate-100">
+                  {assistants.length > 0 ? (
+                    assistants.map((assistant) => {
+                      const isSelected = assignFormData.assistant_ids.includes(assistant.id);
+                      return (
+                        <label
+                          key={assistant.id}
+                          className={cn(
+                            "flex items-center gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all duration-300 group",
+                            isSelected 
+                              ? "bg-emerald-50 border-emerald-500 shadow-lg shadow-emerald-200/50 scale-[1.02]" 
+                              : "bg-white border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/30"
+                          )}
+                        >
+                          <div className={cn(
+                            "h-6 w-6 rounded-lg border-2 flex items-center justify-center transition-all",
+                            isSelected 
+                              ? "bg-emerald-500 border-emerald-500" 
+                              : "border-slate-300 group-hover:border-emerald-400"
+                          )}>
+                            {isSelected && <Check className="h-4 w-4 text-white" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={cn(
+                              "text-sm font-bold truncate transition-colors",
+                              isSelected ? "text-emerald-900" : "text-slate-900"
+                            )}>
+                              {assistant.full_name}
+                            </p>
+                            <p className="text-xs text-slate-500 truncate">
+                              {assistant.phone || "No phone"}
+                            </p>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setAssignFormData({
+                                  ...assignFormData,
+                                  assistant_ids: [...assignFormData.assistant_ids, assistant.id]
+                                });
+                              } else {
+                                setAssignFormData({
+                                  ...assignFormData,
+                                  assistant_ids: assignFormData.assistant_ids.filter((id: string) => id !== assistant.id)
+                                });
+                              }
+                            }}
+                            className="hidden"
+                          />
+                        </label>
+                      );
+                    })
+                  ) : (
+                    <div className="col-span-full flex flex-col items-center justify-center py-12 text-slate-400">
+                      <div className="h-16 w-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
+                        <User className="h-8 w-8 opacity-50" />
+                      </div>
+                      <p className="text-sm font-bold text-slate-500">Tidak ada asisten lapangan tersedia</p>
+                      <p className="text-xs text-slate-400 mt-1">Tambahkan asisten dari halaman Asisten Lapangan</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Instructions */}
+              <div className="space-y-2.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <div className="h-6 w-6 rounded-lg bg-slate-100 flex items-center justify-center">
+                    <Info className="h-3.5 w-3.5 text-slate-600" />
+                  </div>
+                  Instruksi Penugasan
+                </label>
+                <textarea
+                  className="w-full h-32 bg-white border-2 border-slate-200 rounded-3xl p-5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all placeholder:text-slate-300 resize-none"
+                  placeholder="Instruksi khusus untuk tim lapangan (protokol sampling,注意点，dll)..."
+                  value={assignFormData.notes}
+                  onChange={(e) => setAssignFormData({...assignFormData, notes: e.target.value})}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Premium Footer */}
+          <div className="p-6 md:p-8 bg-gradient-to-r from-slate-50 via-emerald-50/30 to-slate-50 border-t border-slate-100">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Button 
+                variant="ghost" 
+                onClick={() => setIsAssignDialogOpen(false)} 
+                className="flex-1 h-14 rounded-2xl font-black text-slate-400 uppercase text-[11px] tracking-widest border-2 border-slate-200 hover:bg-slate-100 hover:border-slate-300 transition-all"
+              >
+                Batal
+              </Button>
+              <LoadingButton 
+                loading={submitting} 
+                onClick={handleAssignSubmit} 
+                className="flex-[2] h-14 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black uppercase text-[11px] tracking-widest shadow-xl shadow-emerald-900/20 transition-all active:scale-[0.98]"
+              >
+                {submitting ? 'Memproses...' : 'Konfirmasi Penugasan'}
+              </LoadingButton>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

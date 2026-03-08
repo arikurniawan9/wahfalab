@@ -56,6 +56,9 @@ export async function updateCompanyProfile(data: {
   logo_url?: string
   tagline?: string
   npwp?: string
+  leader_name?: string
+  signature_url?: string
+  stamp_url?: string
 }) {
   try {
     // Get the first company profile
@@ -73,7 +76,10 @@ export async function updateCompanyProfile(data: {
           website: data.website,
           logo_url: data.logo_url,
           tagline: data.tagline,
-          npwp: data.npwp
+          npwp: data.npwp,
+          leader_name: data.leader_name,
+          signature_url: data.signature_url,
+          stamp_url: data.stamp_url
         }
       })
     } else {
@@ -91,14 +97,18 @@ export async function updateCompanyProfile(data: {
       if (data.logo_url !== undefined) updateData.logo_url = data.logo_url
       if (data.tagline !== undefined) updateData.tagline = data.tagline
       if (data.npwp !== undefined) updateData.npwp = data.npwp
+      if (data.leader_name !== undefined) updateData.leader_name = data.leader_name
+      if (data.signature_url !== undefined) updateData.signature_url = data.signature_url
+      if (data.stamp_url !== undefined) updateData.stamp_url = data.stamp_url
 
-      profile = await prisma.companyProfile.update({
+      profile = await (prisma.companyProfile as any).update({
         where: { id: profile.id },
         data: updateData
       })
     }
 
     revalidatePath('/admin/settings')
+    revalidatePath('/admin/settings/company')
     revalidatePath('/')
 
     return { success: true, profile }
@@ -109,6 +119,18 @@ export async function updateCompanyProfile(data: {
 }
 
 export async function uploadCompanyLogo(file: File) {
+  return uploadCompanyFile(file, 'logo');
+}
+
+export async function uploadCompanySignature(file: File) {
+  return uploadCompanyFile(file, 'signature');
+}
+
+export async function uploadCompanyStamp(file: File) {
+  return uploadCompanyFile(file, 'stamp');
+}
+
+async function uploadCompanyFile(file: File, type: 'logo' | 'signature' | 'stamp') {
   try {
     const profile = await getCompanyProfile();
     const companyName = profile?.company_name || 'wahfalab';
@@ -116,7 +138,7 @@ export async function uploadCompanyLogo(file: File) {
     // Create slug from company name
     const slug = slugify(companyName);
     const fileExt = file.name.split('.').pop();
-    const fileName = `${slug}-logo-${Date.now()}.${fileExt}`;
+    const fileName = `${slug}-${type}-${Date.now()}.${fileExt}`;
     
     // Local directory path
     const uploadDir = path.join(process.cwd(), 'public', 'img');
@@ -138,22 +160,32 @@ export async function uploadCompanyLogo(file: File) {
     // Path for web access
     const publicUrl = `/img/${fileName}`;
 
-    // Update company profile with new local logo path
-    await updateCompanyProfile({ logo_url: publicUrl });
+    // Update company profile with new local path based on type
+    const updateData: any = {};
+    if (type === 'logo') updateData.logo_url = publicUrl;
+    if (type === 'signature') updateData.signature_url = publicUrl;
+    if (type === 'stamp') updateData.stamp_url = publicUrl;
+
+    await updateCompanyProfile(updateData);
 
     return { success: true, url: publicUrl };
   } catch (error: any) {
-    console.error('Error uploading logo locally:', error);
+    console.error(`Error uploading ${type} locally:`, error);
     return { error: error.message };
   }
 }
 
-export async function deleteCompanyLogo() {
+export async function deleteCompanyFile(type: 'logo' | 'signature' | 'stamp') {
   try {
     const profile = await getCompanyProfile();
+    let currentUrl = '';
     
-    if (profile?.logo_url && profile.logo_url.startsWith('/img/')) {
-      const fileName = profile.logo_url.replace('/img/', '');
+    if (type === 'logo') currentUrl = profile?.logo_url;
+    if (type === 'signature') currentUrl = profile?.signature_url;
+    if (type === 'stamp') currentUrl = profile?.stamp_url;
+    
+    if (currentUrl && currentUrl.startsWith('/img/')) {
+      const fileName = currentUrl.replace('/img/', '');
       const filePath = path.join(process.cwd(), 'public', 'img', fileName);
       
       // Delete local file if exists
@@ -162,19 +194,28 @@ export async function deleteCompanyLogo() {
       }
     }
 
-    // Update database, setting logo_url back to null
+    // Update database, setting field back to null
     const existing = await prisma.companyProfile.findFirst();
     if (existing) {
+      const updateData: any = {};
+      if (type === 'logo') updateData.logo_url = null;
+      if (type === 'signature') updateData.signature_url = null;
+      if (type === 'stamp') updateData.stamp_url = null;
+
       await prisma.companyProfile.update({
         where: { id: existing.id },
-        data: { logo_url: null }
+        data: updateData
       });
     }
 
     revalidatePath('/admin/settings/company');
     return { success: true };
   } catch (error: any) {
-    console.error('Error deleting local logo:', error);
+    console.error(`Error deleting local ${type}:`, error);
     return { error: error.message };
   }
+}
+
+export async function deleteCompanyLogo() {
+  return deleteCompanyFile('logo');
 }

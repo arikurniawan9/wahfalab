@@ -46,6 +46,27 @@
   }
 }
 
+@layer utilities {
+  .glass {
+    @apply bg-white/70 backdrop-blur-md border border-white/20 shadow-xl;
+  }
+  .glass-dark {
+    @apply bg-slate-900/80 backdrop-blur-md border border-slate-800/50 shadow-2xl;
+  }
+  
+  /* Custom Premium Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-200 rounded-full transition-colors hover:bg-emerald-200;
+  }
+}
+
 /* Landing page animations */
 @keyframes wave {
   0%, 100% { transform: translateY(0) rotate(0); }

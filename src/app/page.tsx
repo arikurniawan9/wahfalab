@@ -71,6 +71,10 @@ export default async function LandingPage() {
     if (role === "admin") return "/admin";
     if (role === "operator") return "/operator";
     if (role === "content_manager") return "/content-manager";
+    if (role === "analyst") return "/analyst";
+    if (role === "field_officer") return "/field";
+    if (role === "finance") return "/finance";
+    if (role === "reporting") return "/reporting";
     return "/dashboard";
   };
 

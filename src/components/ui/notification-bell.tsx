@@ -11,6 +11,7 @@ import {
 } from './popover'
 import { ScrollArea } from './scroll-area'
 import { useNotifications } from '@/hooks/use-notifications'
+import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import { id } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
@@ -18,6 +19,7 @@ import { cn } from '@/lib/utils'
 export function NotificationBell() {
   const { notifications, stats, loading, markAsRead, markAllAsRead, deleteNotification, refresh } = useNotifications()
   const [open, setOpen] = useState(false)
+  const router = useRouter()
 
   const getNotificationIcon = (type: string) => {
     const icons: Record<string, React.ReactNode> = {
@@ -127,7 +129,8 @@ export function NotificationBell() {
                       markAsRead(notification.id)
                     }
                     if (notification.link) {
-                      window.location.href = notification.link
+                      router.push(notification.link)
+                      setOpen(false)
                     }
                   }}
                 >

@@ -158,7 +158,16 @@ export default function ClientOrdersPage() {
       const [prof, jobsData] = await Promise.all([getProfile(), getJobOrders(1, 100)]);
       setProfile(prof);
       const { data: { user } } = await supabase.auth.getUser();
-      const filteredOrders = (jobsData.items || []).filter((o: any) => o.quotation?.profile?.id === prof?.id || o.quotation?.profile?.email === user?.email || o.quotation?.user_id === user?.id);
+      
+      // Strict but inclusive filtering (Profile ID OR UserId OR Email Match)
+      const filteredOrders = (jobsData.items || []).filter((o: any) => {
+        const profileIdMatch = o.quotation?.profile?.id === prof?.id;
+        const userIdMatch = o.quotation?.user_id === user?.id;
+        const emailMatch = user?.email && o.quotation?.profile?.email?.toLowerCase() === user.email.toLowerCase();
+        
+        return profileIdMatch || userIdMatch || emailMatch;
+      });
+      
       setOrders(filteredOrders);
       if (showRefreshToast) toast.success("Data diperbarui");
     } catch (error: any) {
@@ -181,8 +190,19 @@ export default function ClientOrdersPage() {
     if (!order.invoice) { toast.error("Invoice belum tersedia"); return; }
     setIsDownloadingPdf(true);
     try {
+      // Get real company profile for logo and info
+      const { getCachedCompanyProfile } = await import('@/lib/cache');
+      const company = await getCachedCompanyProfile();
+      
       const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
-      const companyProfile = { company_name: 'WahfaLab', address: 'Jl. Laboratorium No. 123', phone: '+62 812-3456-7890', email: 'info@wahfalab.com', logo_url: `${origin}/logo-wahfalab.png`, npwp: '01.234.567.8-901.000' };
+      const companyProfile = { 
+        company_name: company?.company_name || 'WahfaLab', 
+        address: company?.address || 'Alamat Kantor WahfaLab', 
+        phone: company?.phone || '-', 
+        email: company?.email || '-', 
+        logo_url: company?.logo_url || `${origin}/next.svg`, // Fallback to Next.js logo if not set
+        npwp: company?.npwp || '-' 
+      };
       const items = order.quotation?.items?.map((item: any) => ({ 
         category_name: item.service?.category_ref?.name || item.service?.category || (item.equipment ? "ALAT LAB" : "Layanan Lab"), 
         service_name: item.service?.name || item.equipment?.name || 'Layanan', 

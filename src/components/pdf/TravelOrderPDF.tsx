@@ -32,6 +32,7 @@ interface TravelOrderData {
       email?: string | null;
     };
     assistants?: {
+      id: string;
       full_name?: string | null;
       email?: string | null;
     }[] | null;
@@ -44,6 +45,22 @@ interface TravelOrderData {
           full_name?: string | null;
           company_name?: string | null;
         };
+        items: {
+          id: string;
+          qty: number;
+          parameter_snapshot?: string | null;
+          service?: {
+            name: string;
+            category?: string | null;
+            regulation?: string | null;
+            regulation_ref?: {
+              name: string;
+            } | null;
+          } | null;
+          equipment?: {
+            name: string;
+          } | null;
+        }[];
       };
     };
   };
@@ -58,6 +75,9 @@ interface CompanyProfile {
   logo_url?: string | null;
   tagline?: string | null;
   npwp?: string | null;
+  leader_name?: string | null;
+  signature_url?: string | null;
+  stamp_url?: string | null;
 }
 
 interface TravelOrderPDFProps {
@@ -67,154 +87,179 @@ interface TravelOrderPDFProps {
 
 const styles = StyleSheet.create({
   page: {
-    padding: 30,
-    fontSize: 11,
+    paddingTop: 40,
+    paddingBottom: 60,
+    paddingLeft: 50,
+    paddingRight: 50,
+    fontSize: 10,
     fontFamily: 'Helvetica',
-    lineHeight: 1.5
+    lineHeight: 1.4,
+    color: '#1a1a1a'
   },
   header: {
-    marginBottom: 20,
+    marginBottom: 10,
     borderBottomWidth: 2,
-    borderBottomColor: '#059669',
+    borderBottomColor: '#000',
     borderBottomStyle: 'solid',
-    paddingBottom: 10
+    paddingBottom: 5,
+    position: 'relative'
+  },
+  headerDoubleLine: {
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#000',
+    borderBottomStyle: 'solid',
+    marginTop: 1,
+    width: '100%'
   },
   headerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
+    alignItems: 'center',
+    marginBottom: 5
   },
   logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10
+    width: 65,
+    marginRight: 15
   },
   logoImage: {
-    width: 50,
-    height: 50,
+    width: 60,
+    height: 60,
     objectFit: 'contain'
   },
-  logoText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#059669'
+  companyInfoContainer: {
+    flex: 1,
+    textAlign: 'left',
+    marginRight: 0
   },
   companyName: {
-    fontSize: 10,
-    color: '#666',
-    marginTop: 2
+    fontSize: 14,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    marginBottom: 2
   },
-  companyInfo: {
+  companyTagline: {
+    fontSize: 9,
+    fontStyle: 'italic',
+    marginBottom: 2
+  },
+  companyAddress: {
     fontSize: 8,
-    color: '#666',
-    marginTop: 1
+    color: '#333'
   },
   title: {
     textAlign: 'center',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: 'bold',
-    marginVertical: 15,
+    marginTop: 15,
+    marginBottom: 2,
     textDecoration: 'underline'
   },
+  docNumber: {
+    textAlign: 'center',
+    fontSize: 10,
+    marginBottom: 20
+  },
   section: {
-    marginBottom: 15
+    marginBottom: 12
   },
   sectionTitle: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: 'bold',
-    marginBottom: 8,
-    color: '#059669',
+    marginBottom: 5,
+    textDecoration: 'underline',
     textTransform: 'uppercase'
+  },
+  grid: {
+    marginLeft: 10
   },
   row: {
     flexDirection: 'row',
-    marginBottom: 5
+    marginBottom: 3
   },
   label: {
-    width: 120,
-    fontWeight: 'bold',
+    width: 130,
     fontSize: 10
   },
   separator: {
-    width: 10
+    width: 15,
+    textAlign: 'center'
   },
   value: {
     flex: 1,
     fontSize: 10
   },
   table: {
-    marginTop: 10,
+    marginTop: 5,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#000',
     borderStyle: 'solid'
   },
   tableRow: {
     flexDirection: 'row',
     borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
+    borderBottomColor: '#000',
     borderBottomStyle: 'solid'
   },
   tableHeader: {
-    backgroundColor: '#f0fdf4',
-    paddingVertical: 6
+    backgroundColor: '#f5f5f5',
+    fontWeight: 'bold'
   },
   tableCell: {
-    flex: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    fontSize: 10,
+    padding: 5,
+    fontSize: 9,
     borderRightWidth: 1,
-    borderRightColor: '#ddd',
+    borderRightColor: '#000',
     borderRightStyle: 'solid'
   },
-  tableCellLast: {
-    borderRightWidth: 0
+  tableCellNum: {
+    width: 25,
+    textAlign: 'center'
+  },
+  tableCellService: {
+    flex: 2
+  },
+  tableCellReg: {
+    flex: 2
+  },
+  tableCellParams: {
+    flex: 3
   },
   signatureSection: {
-    marginTop: 30,
+    marginTop: 40,
     flexDirection: 'row',
     justifyContent: 'space-between'
   },
   signatureBox: {
-    width: '45%',
+    width: 200,
     textAlign: 'center'
   },
-  signatureTitle: {
-    marginBottom: 60,
-    fontSize: 10
+  signatureDate: {
+    fontSize: 9,
+    marginBottom: 2,
+    textAlign: 'center'
+  },
+  signatureRole: {
+    fontSize: 10,
+    marginBottom: 5,
+    minHeight: 25 // Ensure consistent height for multiline roles
   },
   signatureName: {
     fontWeight: 'bold',
     fontSize: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#000',
-    borderTopStyle: 'solid',
+    textDecoration: 'underline',
     paddingTop: 5
   },
   footer: {
     position: 'absolute',
     bottom: 30,
-    left: 30,
-    right: 30,
-    borderTopWidth: 1,
-    borderTopColor: '#ddd',
-    borderTopStyle: 'solid',
-    paddingTop: 10,
+    left: 50,
+    right: 50,
     fontSize: 8,
-    color: '#999',
-    textAlign: 'center'
-  },
-  watermark: {
-    position: 'absolute',
-    top: 200,
-    left: 150,
-    right: 150,
+    color: '#666',
     textAlign: 'center',
-    fontSize: 40,
-    color: '#f0f0f0',
-    fontWeight: 'bold',
-    transform: 'rotate(-45deg)',
-    opacity: 0.5
+    fontStyle: 'italic',
+    borderTopWidth: 0.5,
+    borderTopColor: '#ccc',
+    paddingTop: 5
   }
 });
 
@@ -240,235 +285,187 @@ export const TravelOrderPDF: React.FC<TravelOrderPDFProps> = ({
     return date.toLocaleDateString('id-ID', options);
   };
 
-  const formatCurrency = (amount: number | null | undefined) => {
-    if (!amount) return 'Rp 0';
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
-    }).format(amount);
-  };
-
   return (
-    <Document>
+    <Document title={`Surat Tugas - ${data.document_number}`}>
       <Page size="A4" style={styles.page}>
-        {/* Header */}
+        {/* Header (Kop Surat) */}
         <View style={styles.header}>
           <View style={styles.headerRow}>
-            <View>
-              <View style={styles.logoContainer}>
-                {company.logo_url ? (
-                  <Image
-                    source={{ 
-                      uri: company.logo_url.startsWith('/') 
-                        ? `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}${company.logo_url}`
-                        : company.logo_url 
-                    }}
-                    style={styles.logoImage}
-                  />
-                ) : (
-                  <View style={{ width: 50, height: 50, backgroundColor: '#f0f0f0', borderRadius: 5, alignItems: 'center', justifyContent: 'center' }}>
-                    <Text style={{ fontSize: 24, color: '#059669' }}>🧪</Text>
-                  </View>
-                )}
-                <View>
-                  <Text style={styles.logoText}>{company.company_name}</Text>
-                  {company.address && (
-                    <Text style={styles.companyInfo}>{company.address}</Text>
-                  )}
-                  {(company.phone || company.email) && (
-                    <Text style={styles.companyInfo}>
-                      {company.phone && `Telp: ${company.phone}`}
-                      {company.phone && company.email && ' | '}
-                      {company.email && `Email: ${company.email}`}
-                    </Text>
-                  )}
+            <View style={styles.logoContainer}>
+              {company.logo_url ? (
+                <Image
+                  source={{ 
+                    uri: company.logo_url.startsWith('/') 
+                      ? `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}${company.logo_url}`
+                      : company.logo_url 
+                  }}
+                  style={styles.logoImage}
+                />
+              ) : (
+                <View style={{ width: 60, height: 60, backgroundColor: '#f5f5f5', borderRadius: 4, alignItems: 'center', justifyContent: 'center', border: '1px solid #ddd' }}>
+                  <Text style={{ fontSize: 20 }}>🧪</Text>
                 </View>
-              </View>
+              )}
             </View>
-          </View>
-        </View>
-
-        {/* Date - Right aligned below header */}
-        <View style={{ textAlign: 'right', marginBottom: 10 }}>
-          <Text style={{ fontSize: 10, color: '#666' }}>
-            {formatDate(data.created_at)}
-          </Text>
-        </View>
-
-        {/* Title */}
-        <Text style={styles.title}>SURAT TUGAS PERJALANAN DINAS</Text>
-        <Text style={{ textAlign: 'center', fontSize: 10, color: '#666', marginTop: -10, marginBottom: 15 }}>
-          Nomor: {data.document_number}
-        </Text>
-
-        {/* Assignment Info */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>I. DATA PETUGAS</Text>
-          <View style={styles.row}>
-            <Text style={styles.label}>Petugas Utama</Text>
-            <Text style={styles.separator}>:</Text>
-            <Text style={styles.value}>{data.assignment.field_officer.full_name || '-'}</Text>
-          </View>
-          {data.assignment.assistants && data.assignment.assistants.length > 0 && (
-            <View style={styles.row}>
-              <Text style={styles.label}>Asisten Petugas</Text>
-              <Text style={styles.separator}>:</Text>
-              <Text style={styles.value}>
-                {data.assignment.assistants.map(a => a.full_name).join(', ')}
+            <View style={styles.companyInfoContainer}>
+              <Text style={styles.companyName}>{company.company_name}</Text>
+              {company.tagline && <Text style={styles.companyTagline}>{company.tagline}</Text>}
+              <Text style={styles.companyAddress}>{company.address}</Text>
+              <Text style={styles.companyAddress}>
+                {company.phone && `Telp: ${company.phone}`}
+                {company.email && ` | Email: ${company.email}`}
               </Text>
             </View>
-          )}
-          <View style={styles.row}>
-            <Text style={styles.label}>Jabatan</Text>
-            <Text style={styles.separator}>:</Text>
-            <Text style={styles.value}>Petugas Lapangan & Sampling</Text>
           </View>
+          <View style={styles.headerDoubleLine} />
         </View>
 
-        {/* Assignment Details */}
+        {/* Document Title */}
+        <Text style={styles.title}>SURAT TUGAS PERJALANAN DINAS</Text>
+        <Text style={styles.docNumber}>Nomor: {data.document_number}</Text>
+
+        {/* Personnel Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>II. PELAKSANAAN TUGAS</Text>
-          <View style={styles.row}>
-            <Text style={styles.label}>Tanggal Berangkat</Text>
-            <Text style={styles.separator}>:</Text>
-            <Text style={styles.value}>{formatDate(data.departure_date)}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Tanggal Kembali</Text>
-            <Text style={styles.separator}>:</Text>
-            <Text style={styles.value}>{formatDate(data.return_date)}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Lokasi Tujuan</Text>
-            <Text style={styles.separator}>:</Text>
-            <Text style={styles.value}>{data.destination}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Dasar Tugas</Text>
-            <Text style={styles.separator}>:</Text>
-            <Text style={styles.value}>
-              Sampling untuk Job Order {data.assignment.job_order.tracking_code}
-            </Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Customer</Text>
-            <Text style={styles.separator}>:</Text>
-            <Text style={styles.value}>
-              {data.assignment.job_order.quotation.profile.full_name || '-'}
-              {data.assignment.job_order.quotation.profile.company_name && 
-                ` (${data.assignment.job_order.quotation.profile.company_name})`}
-            </Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Maksud & Tujuan</Text>
-            <Text style={styles.separator}>:</Text>
-            <Text style={styles.value}>{data.purpose}</Text>
+          <Text style={styles.sectionTitle}>I. PERSONALIA BERTUGAS</Text>
+          <View style={styles.grid}>
+            <View style={styles.row}>
+              <Text style={styles.label}>Petugas Utama</Text>
+              <Text style={styles.separator}>:</Text>
+              <Text style={[styles.value, { fontWeight: 'bold' }]}>{data.assignment.field_officer.full_name || '-'}</Text>
+            </View>
+            {data.assignment.assistants && data.assignment.assistants.length > 0 && (
+              <View style={styles.row}>
+                <Text style={styles.label}>Asisten</Text>
+                <Text style={styles.separator}>:</Text>
+                <View style={styles.value}>
+                  {data.assignment.assistants.map((a, i) => (
+                    <Text key={i}>{i + 1}. {a.full_name}</Text>
+                  ))}
+                </View>
+              </View>
+            )}
           </View>
         </View>
 
-        {/* Budget Table */}
-        {(data.transportation_type || data.accommodation_type || data.daily_allowance || data.total_budget) && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>III. RINCIAN BIAYA</Text>
-            <View style={styles.table}>
-              <View style={[styles.tableRow, styles.tableHeader]}>
-                <Text style={[styles.tableCell, styles.tableCellLast]}>Jenis Biaya</Text>
-                <Text style={styles.tableCell}>Keterangan</Text>
-                <Text style={[styles.tableCell, styles.tableCellLast]}>Jumlah</Text>
-              </View>
-              
-              {data.transportation_type && (
-                <View style={styles.tableRow}>
-                  <Text style={[styles.tableCell]}>Transportasi</Text>
-                  <Text style={styles.tableCell}>{data.transportation_type}</Text>
-                  <Text style={[styles.tableCell, styles.tableCellLast]}>-</Text>
-                </View>
-              )}
-              
-              {data.accommodation_type && (
-                <View style={styles.tableRow}>
-                  <Text style={[styles.tableCell]}>Akomodasi</Text>
-                  <Text style={styles.tableCell}>{data.accommodation_type}</Text>
-                  <Text style={[styles.tableCell, styles.tableCellLast]}>-</Text>
-                </View>
-              )}
-              
-              {data.daily_allowance && (
-                <View style={styles.tableRow}>
-                  <Text style={[styles.tableCell]}>Uang Harian</Text>
-                  <Text style={styles.tableCell}>Per hari</Text>
-                  <Text style={[styles.tableCell, styles.tableCellLast]}>
-                    {formatCurrency(data.daily_allowance)}
-                  </Text>
-                </View>
-              )}
-              
-              {data.total_budget && (
-                <View style={[styles.tableRow, { backgroundColor: '#f0fdf4' }]}>
-                  <Text style={[styles.tableCell, { fontWeight: 'bold' }]}>Total Estimasi</Text>
-                  <Text style={styles.tableCell}></Text>
-                  <Text style={[styles.tableCell, styles.tableCellLast, { fontWeight: 'bold' }]}>
-                    {formatCurrency(data.total_budget)}
-                  </Text>
-                </View>
-              )}
+        {/* Execution Details */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>II. RINCIAN PELAKSANAAN</Text>
+          <View style={styles.grid}>
+            <View style={styles.row}>
+              <Text style={styles.label}>Lokasi / Tujuan</Text>
+              <Text style={styles.separator}>:</Text>
+              <Text style={styles.value}>{data.destination}</Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.label}>Waktu</Text>
+              <Text style={styles.separator}>:</Text>
+              <Text style={styles.value}>{formatDate(data.departure_date)} s/d {formatDate(data.return_date)}</Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.label}>Maksud Tugas</Text>
+              <Text style={styles.separator}>:</Text>
+              <Text style={styles.value}>{data.purpose}</Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.label}>Customer</Text>
+              <Text style={styles.separator}>:</Text>
+              <Text style={styles.value}>
+                {data.assignment.job_order.quotation.profile.full_name || '-'}
+                {data.assignment.job_order.quotation.profile.company_name && ` (${data.assignment.job_order.quotation.profile.company_name})`}
+              </Text>
             </View>
           </View>
-        )}
+        </View>
 
-        {/* Additional Notes */}
+        {/* Sampling Scope Table */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>III. RUANG LINGKUP SAMPLING & PENGUJIAN</Text>
+          <View style={styles.table}>
+            <View style={[styles.tableRow, styles.tableHeader]}>
+              <Text style={[styles.tableCell, styles.tableCellNum]}>No</Text>
+              <Text style={[styles.tableCell, styles.tableCellService]}>Nama Pengujian / Sampel</Text>
+              <Text style={[styles.tableCell, styles.tableCellReg]}>Regulasi / Baku Mutu</Text>
+              <Text style={[styles.tableCell, styles.tableCellParams, { borderRightWidth: 0 }]}>Parameter Analisis</Text>
+            </View>
+            
+            {data.assignment.job_order.quotation.items?.map((item, index) => {
+              const isService = !!item.service;
+              return (
+                <View key={item.id} style={[styles.tableRow, { borderBottomWidth: index === data.assignment.job_order.quotation.items.length - 1 ? 0 : 1 }]}>
+                  <Text style={[styles.tableCell, styles.tableCellNum]}>{index + 1}</Text>
+                  <Text style={[styles.tableCell, styles.tableCellService]}>
+                    {isService ? item.service?.name : (item.equipment?.name || 'Item Kustom')}
+                  </Text>
+                  <Text style={[styles.tableCell, styles.tableCellReg]}>
+                    {isService 
+                      ? (item.service?.regulation_ref?.name || item.service?.regulation || item.service?.category || '-') 
+                      : 'Penyewaan Alat / Peralatan'}
+                  </Text>
+                  <Text style={[styles.tableCell, styles.tableCellParams, { borderRightWidth: 0 }]}>
+                    {isService 
+                      ? (item.parameter_snapshot || 'Sesuai standar operasional') 
+                      : `Jumlah: ${item.qty} unit`}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Instructions / Notes */}
         {data.notes && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>IV. CATATAN TAMBAHAN</Text>
-            <Text style={{ fontSize: 10, lineHeight: 1.4 }}>{data.notes}</Text>
+            <Text style={styles.sectionTitle}>IV. INSTRUKSI KHUSUS</Text>
+            <Text style={{ fontSize: 9 }}>{data.notes}</Text>
           </View>
         )}
 
-        {/* Signature Section */}
+        {/* Signature Area */}
         <View style={styles.signatureSection}>
           <View style={styles.signatureBox}>
-            <Text style={styles.signatureTitle}>
-              Petugas Utama,
-            </Text>
-            <Text style={styles.signatureName}>
-              {data.assignment.field_officer.full_name || '(..........................)'}
-            </Text>
+            <View style={{ height: 15 }} />
+            <Text style={styles.signatureRole}>Petugas Pelaksana,</Text>
+            <View style={{ height: 50 }} />
+            <Text style={styles.signatureName}>{data.assignment.field_officer.full_name}</Text>
           </View>
           
           <View style={styles.signatureBox}>
-            <Text style={styles.signatureTitle}>
-              Mengetahui,
-              {'\n'}
-              Kepala Laboratorium
-            </Text>
-            <Text style={styles.signatureName}>
-              (..........................)
-            </Text>
+            <Text style={styles.signatureDate}>Cianjur, {formatDate(data.created_at)}</Text>
+            <Text style={styles.signatureRole}>Mengesahkan, {'\n'}Kepala Operasional</Text>
+            
+            {/* Digital Validation Container */}
+            <View style={{ height: 60, position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
+              {company.signature_url && (
+                <Image 
+                  source={{ 
+                    uri: company.signature_url.startsWith('/') 
+                      ? `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}${company.signature_url}`
+                      : company.signature_url 
+                  }} 
+                  style={{ width: 100, height: 50, zIndex: 2 }} 
+                />
+              )}
+              {company.stamp_url && (
+                <Image 
+                  source={{ 
+                    uri: company.stamp_url.startsWith('/') 
+                      ? `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}${company.stamp_url}`
+                      : company.stamp_url 
+                  }} 
+                  style={{ width: 70, height: 70, position: 'absolute', opacity: 0.6, zIndex: 1, left: 10 }} 
+                />
+              )}
+            </View>
+
+            <Text style={styles.signatureName}>{company.leader_name || '( ........................................... )'}</Text>
           </View>
         </View>
 
-        {/* Assistant Signatures (if any) */}
-        {data.assignment.assistants && data.assignment.assistants.length > 0 && (
-          <View style={[styles.signatureSection, { marginTop: 10 }]}>
-            {data.assignment.assistants.map((assistant, idx) => (
-              <View key={idx} style={styles.signatureBox}>
-                <Text style={styles.signatureTitle}>
-                  Asisten Petugas,
-                </Text>
-                <Text style={styles.signatureName}>
-                  {assistant.full_name || '(..........................)'}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
-
         {/* Footer */}
-        <Text style={styles.footer}>
-          Dokumen ini dibuat secara elektronik dan sah tanpa tanda tangan basah.
-          {' | '}Dicetak pada: {new Date().toLocaleDateString('id-ID')}
-        </Text>
+        <View style={styles.footer}>
+          <Text>WahfaLab - LIMS Digital Document | Tracking Code: {data.assignment.job_order.tracking_code}</Text>
+          <Text>Surat tugas ini diterbitkan secara resmi melalui sistem dan sah sebagai instruksi kerja lapangan.</Text>
+        </View>
       </Page>
     </Document>
   );

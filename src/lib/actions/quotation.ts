@@ -71,10 +71,11 @@ export async function getQuotationById(id: string) {
 }
 
 export async function getQuotations(
-  pageOrOptions?: number | { page?: number; limit?: number; search?: string; status?: string },
+  pageOrOptions?: number | { page?: number; limit?: number; search?: string; status?: string; userId?: string },
   limit = 10,
   search = "",
-  status?: string
+  status?: string,
+  userId?: string
 ) {
   // Support both old positional params and new object params
   const page = typeof pageOrOptions === 'number' ? pageOrOptions : (pageOrOptions?.page ?? 1)
@@ -82,6 +83,7 @@ export async function getQuotations(
   limit = typeof pageOrOptions === 'number' ? limit : (options?.limit ?? 10)
   search = typeof pageOrOptions === 'number' ? search : (options?.search ?? "")
   status = typeof pageOrOptions === 'number' ? status : (options?.status)
+  const finalUserId = typeof pageOrOptions === 'object' ? options?.userId : userId
 
   const skip = (page - 1) * limit
   
@@ -97,6 +99,10 @@ export async function getQuotations(
   
   if (status && status !== 'all') {
     where.status = status
+  }
+
+  if (finalUserId) {
+    where.user_id = finalUserId
   }
 
   const [items, total] = await Promise.all([
@@ -185,6 +191,26 @@ export async function updateQuotationStatus(id: string, status: any) {
       { id, status: oldQuotation?.status },
       { id, status }
     )
+
+    // NOTIFIKASI SAAT PENAWARAN DIKIRIM (sent)
+    if (status === 'sent') {
+      const currentQuotation = await prisma.quotation.findUnique({
+        where: { id },
+        select: { user_id: true, quotation_number: true }
+      })
+
+      if (currentQuotation?.user_id) {
+        await prisma.notification.create({
+          data: {
+            user_id: currentQuotation.user_id,
+            type: 'system',
+            title: 'Penawaran Harga Baru',
+            message: `Penawaran ${currentQuotation.quotation_number} telah diterbitkan. Silakan periksa dan berikan persetujuan.`,
+            link: `/dashboard/quotations/${id}`
+          }
+        })
+      }
+    }
 
     // WORKFLOW: Jika diterima (accepted), otomatis buat Job Order
     if (status === 'accepted') {
@@ -361,13 +387,19 @@ export async function createQuotation(formData: any) {
     const headersList = await headers()
     const userId = headersList.get('x-user-id') || 'anonymous'
     
-    // Enforce rate limiting
-    enforceRateLimit(userId, 'create_quotation', RATE_LIMITS.CREATE_QUOTATION.limit, RATE_LIMITS.CREATE_QUOTATION.windowMs)
-    
+    // Auto-link to user_id if not provided but email exists
+    let finalUserId = formData.user_id;
+    if (!finalUserId && formData.email) {
+      const profile = await prisma.profile.findFirst({
+        where: { email: { equals: formData.email, mode: 'insensitive' } }
+      });
+      if (profile) finalUserId = profile.id;
+    }
+
     const quotation = await prisma.quotation.create({
       data: {
         quotation_number: formData.quotation_number,
-        user_id: formData.user_id,
+        user_id: finalUserId,
         subtotal: formData.subtotal,
         discount_amount: formData.discount_amount || 0,
         use_tax: formData.use_tax,
@@ -386,16 +418,22 @@ export async function createQuotation(formData: any) {
           create: formData.items.map((item: any) => ({
             service_id: item.service_id || null,
             equipment_id: item.equipment_id || null,
-            qty: item.qty,
-            price_snapshot: item.price,
-            parameter_snapshot: Array.isArray(item.parameters) ? item.parameters.join(", ") : null,
+            qty: Number(item.qty || 1),
+            price_snapshot: Number(item.price || 0),
+            parameter_snapshot: (item.parameters && Array.isArray(item.parameters)) 
+              ? item.parameters.filter(Boolean).join(", ") 
+              : null,
           })),
         },
       },
     })
 
-    // Audit log
-    await audit.createQuotation(quotation)
+    // Audit log (Wrap in try-catch to prevent main action failure)
+    try {
+      await audit.createQuotation(quotation)
+    } catch (auditError) {
+      console.warn('Audit Log failed but quotation created:', auditError)
+    }
 
     revalidatePath('/admin/quotations')
     revalidatePath('/operator/quotations')

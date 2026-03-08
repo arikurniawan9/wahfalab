@@ -115,9 +115,9 @@ export default function OperatorTravelOrderPreviewPage() {
                   profile: {
                     full_name: profile.full_name,
                     company_name: profile.company_name
-                  }
-                }
-              }
+                  },
+                  items: items
+                }              }
             },
             created_at: travelOrder.created_at,
           }}
@@ -274,7 +274,8 @@ export default function OperatorTravelOrderPreviewPage() {
                         profile: {
                           full_name: travelOrder.assignment?.job_order?.quotation?.profile?.full_name,
                           company_name: travelOrder.assignment?.job_order?.quotation?.profile?.company_name
-                        }
+                        },
+                        items: travelOrder.assignment?.job_order?.quotation?.items || []
                       }
                     }
                   },

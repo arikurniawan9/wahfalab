@@ -54,9 +54,13 @@ import { getJobOrders } from "@/lib/actions/jobs";
 import { getProfile } from "@/lib/actions/auth";
 import { getAllServices } from "@/lib/actions/services";
 import { getAllCategories } from "@/lib/actions/categories";
+import { getAuditLogsAction as getAuditLogs } from "@/lib/actions/audit";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+
+import { PremiumPageWrapper, PremiumCard } from "@/components/layout/PremiumPageWrapper";
+import { motion, AnimatePresence } from "framer-motion";
 
 const statusConfig: Record<string, { label: string; color: string; icon: any; progress: number; theme: string }> = {
   scheduled: { label: 'Terjadwal', color: 'text-blue-600', theme: 'bg-blue-50 border-blue-100', icon: Clock, progress: 20 },
@@ -78,13 +82,21 @@ export default function OperatorDashboard() {
   const router = useRouter();
   const [profile, setProfile] = useState<any>(null);
   const [jobs, setJobs] = useState<any[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [selectedJob, setSelectedJob] = useState<any>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [isServicesModalOpen, setIsServicesModalOpen] = useState(false);
+  const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
+  const [isQuotationModalOpen, setIsQuotationModalOpen] = useState(false);
   const [services, setServices] = useState<any[]>([]);
+  const [serviceSearch, setServiceSearch] = useState("");
+  const [servicePage, setServicePage] = useState(1);
+  const SERVICE_PER_PAGE = 5;
+
   const [categories, setCategories] = useState<any[]>([]);
   const [stats, setStats] = useState({
     scheduled: 0,
@@ -92,7 +104,8 @@ export default function OperatorDashboard() {
     analysis: 0,
     reporting: 0,
     completed: 0,
-    total: 0
+    total: 0,
+    stuck: 0
   });
 
   const supabase = createClient();
@@ -102,32 +115,42 @@ export default function OperatorDashboard() {
     else setLoading(true);
 
     try {
-      const [prof, jobsData, servicesData, categoriesData] = await Promise.all([
+      const [prof, jobsData, servicesData, categoriesData, auditData] = await Promise.all([
         getProfile(),
-        getJobOrders(1, 50), // Ambil 50 pekerjaan terbaru
+        getJobOrders(1, 50),
         getAllServices(),
-        getAllCategories()
+        getAllCategories(),
+        getAuditLogs({ page: 1, limit: 5 }) // Ambil 5 riwayat aktivitas terbaru
       ]);
 
       setProfile(prof);
       setJobs(jobsData.items || []);
       setServices(servicesData);
       setCategories(categoriesData);
+      setAuditLogs(auditData.logs || []);
 
       // Calculate stats
       const jobList = jobsData.items || [];
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+      const stuckJobs = jobList.filter((j: any) => 
+        j.status !== 'completed' && new Date(j.created_at) < threeDaysAgo
+      );
+
       setStats({
         scheduled: jobList.filter((j: any) => j.status === 'scheduled').length,
         sampling: jobList.filter((j: any) => j.status === 'sampling').length,
         analysis: jobList.filter((j: any) => j.status === 'analysis').length,
         reporting: jobList.filter((j: any) => j.status === 'reporting').length,
         completed: jobList.filter((j: any) => j.status === 'completed').length,
-        total: jobList.length
+        total: jobList.length,
+        stuck: stuckJobs.length
       });
 
       if (showRefreshToast) {
         toast.success("Dashboard Terkini", {
-          description: "Data pekerjaan dan layanan telah diperbarui."
+          description: "Data pekerjaan dan riwayat aktivitas telah diperbarui."
         });
       }
     } catch (error: any) {
@@ -145,13 +168,10 @@ export default function OperatorDashboard() {
     const channel = supabase
       .channel('job_updates')
       .on('postgres_changes', {
-        event: 'UPDATE',
+        event: '*', // Listen to all changes for better audit visibility
         schema: 'public',
         table: 'job_orders'
       }, (payload) => {
-        toast.info("Update Progres!", {
-          description: `Pekerjaan ${payload.new.tracking_code} berganti status.`
-        });
         loadData();
       })
       .subscribe();
@@ -199,6 +219,12 @@ export default function OperatorDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
+          {stats.stuck > 0 && (
+            <Badge className="bg-rose-500 text-white font-black text-[10px] animate-pulse h-10 px-4 rounded-xl border-none">
+              <AlertCircle className="h-3 w-3 mr-2" />
+              {stats.stuck} PEKERJAAN TERHAMBAT
+            </Badge>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -249,11 +275,11 @@ export default function OperatorDashboard() {
           {/* Search & Mini Filter Bar */}
           <div className="relative group">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
-            <Input
+            <input
               placeholder="Cari kode tracking, klien, atau jenis layanan..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-12 pl-12 pr-4 bg-white border-slate-200 rounded-2xl shadow-sm focus-visible:ring-emerald-500 transition-all text-sm font-medium"
+              className="w-full h-12 pl-12 pr-4 bg-white border-slate-200 rounded-2xl shadow-sm focus-visible:ring-emerald-500 transition-all text-sm font-medium outline-none focus:border-emerald-500 border-2"
             />
           </div>
 
@@ -271,24 +297,37 @@ export default function OperatorDashboard() {
               recentJobs.map((job: any) => {
                 const config = statusConfig[job.status] || statusConfig.scheduled;
                 const StatusIcon = config.icon;
+                const isStuck = job.status !== 'completed' && new Date(job.created_at) < (new Date(Date.now() - 3 * 24 * 60 * 60 * 1000));
+                
                 return (
                   <Card 
                     key={job.id} 
-                    className="group border-none shadow-sm hover:shadow-xl hover:shadow-emerald-900/5 transition-all duration-300 rounded-[1.5rem] overflow-hidden cursor-pointer"
+                    className={cn(
+                      "group border-none shadow-sm hover:shadow-xl hover:shadow-emerald-900/5 transition-all duration-300 rounded-[1.5rem] overflow-hidden cursor-pointer",
+                      isStuck && "ring-2 ring-rose-100 bg-rose-50/10"
+                    )}
                     onClick={() => { setSelectedJob(job); setIsDetailOpen(true); }}
                   >
                     <CardContent className="p-0">
                       <div className="flex flex-col sm:flex-row items-stretch">
                         {/* Status Side Indicator */}
-                        <div className={cn("w-2 shrink-0 transition-all duration-300", config.color.replace('text', 'bg'))} />
+                        <div className={cn("w-2 shrink-0 transition-all duration-300", isStuck ? "bg-rose-500" : config.color.replace('text', 'bg'))} />
                         
                         <div className="p-5 flex-1 space-y-4">
                           <div className="flex justify-between items-start gap-4">
                             <div className="space-y-1">
                               <div className="flex items-center gap-2">
-                                <span className="font-mono text-xs font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded uppercase tracking-tighter">
+                                <span className={cn(
+                                  "font-mono text-xs font-black px-2 py-0.5 rounded uppercase tracking-tighter",
+                                  isStuck ? "text-rose-700 bg-rose-100" : "text-emerald-700 bg-emerald-100"
+                                )}>
                                   {job.tracking_code}
                                 </span>
+                                {isStuck && (
+                                  <Badge className="bg-rose-100 text-rose-600 text-[8px] font-black border-none uppercase h-4">
+                                    Stuck &gt; 3 Hari
+                                  </Badge>
+                                )}
                                 <span className="text-[10px] text-slate-400 font-bold uppercase flex items-center gap-1">
                                   <Calendar className="h-3 w-3" />
                                   {new Date(job.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}
@@ -297,16 +336,28 @@ export default function OperatorDashboard() {
                               <h4 className="font-black text-slate-800 text-base leading-tight">
                                 {job.quotation?.items?.[0]?.service?.name || 'Layanan Laboratorium'}
                               </h4>
-                              <div className="flex items-center gap-3">
+                              
+                              {/* Display Parameters as Tags */}
+                              {job.quotation?.items?.[0]?.parameter_snapshot && (
+                                <div className="flex flex-wrap gap-1.5 mt-2">
+                                  {job.quotation.items[0].parameter_snapshot.split(", ").slice(0, 4).map((p: string, pIdx: number) => (
+                                    <Badge key={pIdx} variant="secondary" className="bg-blue-50 text-blue-600 font-bold text-[8px] uppercase border-blue-100 h-5 px-2 rounded-md shadow-sm">
+                                      {p}
+                                    </Badge>
+                                  ))}
+                                  {job.quotation.items[0].parameter_snapshot.split(", ").length > 4 && (
+                                    <span className="text-[8px] font-black text-slate-400 mt-1">
+                                      +{job.quotation.items[0].parameter_snapshot.split(", ").length - 4} Lainya
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+
+                              <div className="flex items-center gap-3 pt-1">
                                 <p className="text-[11px] text-slate-500 font-bold uppercase tracking-tight flex items-center gap-1.5">
                                   <User className="h-3 w-3 text-emerald-600" />
                                   {job.quotation?.profile?.full_name}
                                 </p>
-                                {job.quotation?.profile?.company_name && (
-                                  <Badge variant="secondary" className="bg-slate-100 text-slate-500 text-[9px] font-black uppercase border-none h-4">
-                                    {job.quotation.profile.company_name}
-                                  </Badge>
-                                )}
                               </div>
                             </div>
                             <div className="flex flex-col items-end gap-2">
@@ -325,20 +376,9 @@ export default function OperatorDashboard() {
                           <div className="relative pt-2">
                             <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
                               <div 
-                                className={cn("h-full transition-all duration-700 ease-out", config.color.replace('text', 'bg'))}
+                                className={cn("h-full transition-all duration-700 ease-out", isStuck ? "bg-rose-400" : config.color.replace('text', 'bg'))}
                                 style={{ width: `${config.progress}%` }}
                               />
-                            </div>
-                            <div className="flex justify-between mt-2">
-                               {progressSteps.map((step, sIdx) => {
-                                 const jobIdx = progressSteps.findIndex(ps => ps.key === job.status);
-                                 return (
-                                   <div key={step.key} className={cn(
-                                     "h-1.5 w-1.5 rounded-full transition-colors",
-                                     sIdx <= jobIdx ? config.color.replace('text', 'bg') : "bg-slate-200"
-                                   )} />
-                                 );
-                               })}
                             </div>
                           </div>
                         </div>
@@ -351,7 +391,7 @@ export default function OperatorDashboard() {
           </div>
         </div>
 
-        {/* Right Sidebar: Master Info */}
+        {/* Right Sidebar: Master Info & Audit Log */}
         <div className="lg:col-span-4 space-y-8">
           {/* Quick Services Tooltip */}
           <div className="bg-emerald-950 rounded-[2rem] p-6 text-white shadow-xl shadow-emerald-900/20 relative overflow-hidden">
@@ -368,7 +408,7 @@ export default function OperatorDashboard() {
               </div>
 
               <div className="space-y-4">
-                <div className="flex justify-between items-center bg-emerald-900/30 p-4 rounded-2xl border border-emerald-800/50 group hover:bg-emerald-900/50 transition-colors">
+                <div className="flex justify-between items-center bg-emerald-900/30 p-4 rounded-2xl border border-emerald-800/50 group hover:bg-emerald-900/50 transition-colors cursor-pointer" onClick={() => setIsServicesModalOpen(true)}>
                   <div className="flex items-center gap-3">
                     <FlaskConical className="h-5 w-5 text-emerald-400" />
                     <div>
@@ -376,14 +416,12 @@ export default function OperatorDashboard() {
                       <p className="text-[10px] text-emerald-500 font-bold">{services.length} Terdaftar</p>
                     </div>
                   </div>
-                  <Link href="/operator/services">
-                    <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg hover:bg-emerald-800 text-emerald-400">
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  </Link>
+                  <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg hover:bg-emerald-800 text-emerald-400">
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
                 </div>
 
-                <div className="flex justify-between items-center bg-emerald-900/30 p-4 rounded-2xl border border-emerald-800/50 group hover:bg-emerald-900/50 transition-colors">
+                <div className="flex justify-between items-center bg-emerald-900/30 p-4 rounded-2xl border border-emerald-800/50 group hover:bg-emerald-900/50 transition-colors cursor-pointer" onClick={() => setIsCategoriesModalOpen(true)}>
                   <div className="flex items-center gap-3">
                     <TrendingUp className="h-5 w-5 text-emerald-400" />
                     <div>
@@ -391,52 +429,94 @@ export default function OperatorDashboard() {
                       <p className="text-[10px] text-emerald-500 font-bold">{categories.length} Bidang</p>
                     </div>
                   </div>
-                  <Link href="/operator/categories">
-                    <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg hover:bg-emerald-800 text-emerald-400">
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  </Link>
+                  <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg hover:bg-emerald-800 text-emerald-400">
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
 
               <div className="bg-emerald-900/50 p-4 rounded-2xl border border-dashed border-emerald-700 text-center">
                  <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-tighter mb-2">Penawaran Cepat?</p>
-                 <Link href="/operator/quotations/create">
-                   <Button className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase h-10 rounded-xl shadow-lg shadow-black/20">
-                     Buat Penawaran
-                   </Button>
-                 </Link>
+                 <Button 
+                   onClick={() => setIsQuotationModalOpen(true)}
+                   className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase h-10 rounded-xl shadow-lg shadow-black/20"
+                 >
+                   Buat Penawaran
+                 </Button>
               </div>
             </div>
           </div>
 
-          {/* Quick Activity Info */}
-          <div className="bg-white rounded-[2rem] border border-slate-200 p-6 shadow-sm">
-             <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest flex items-center gap-2 mb-6">
-               <AlertCircle className="h-4 w-4 text-emerald-600" />
-               Informasi Terkini
-             </h3>
+          {/* Recent Activity Widget (Audit Log) */}
+          <div className="bg-white rounded-[2rem] border border-slate-200 p-6 shadow-sm overflow-hidden relative">
+             <div className="flex items-center justify-between mb-6">
+               <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest flex items-center gap-2">
+                 <ClipboardList className="h-4 w-4 text-emerald-600" />
+                 Aktivitas Terbaru
+               </h3>
+               <Link href="/admin/audit-logs">
+                 <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full hover:bg-slate-50">
+                   <ChevronRight className="h-4 w-4 text-slate-400" />
+                 </Button>
+               </Link>
+             </div>
+             
              <div className="space-y-6">
-                <div className="flex gap-4">
-                   <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
-                      <Clock className="h-5 w-5" />
-                   </div>
-                   <div className="space-y-1">
-                      <p className="text-xs font-bold text-slate-800">Antrean Terjadwal</p>
-                      <p className="text-[10px] text-slate-500 leading-snug">Ada <span className="font-bold text-blue-600">{stats.scheduled} pekerjaan</span> yang menunggu penugasan petugas lapangan hari ini.</p>
-                   </div>
-                </div>
-                <div className="flex gap-4">
-                   <div className="h-10 w-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 border border-purple-100">
-                      <TestTube className="h-5 w-5" />
-                   </div>
-                   <div className="space-y-1">
-                      <p className="text-xs font-bold text-slate-800">Status Analisis Lab</p>
-                      <p className="text-[10px] text-slate-500 leading-snug"><span className="font-bold text-purple-600">{stats.analysis} sampel</span> sedang berada di tahap pengujian laboratorium oleh tim analis.</p>
-                   </div>
-                </div>
+                {auditLogs.length === 0 ? (
+                  <p className="text-[10px] text-slate-400 font-bold text-center py-4">Belum ada riwayat aktivitas.</p>
+                ) : (
+                  auditLogs.map((log) => (
+                    <div key={log.id} className="relative pl-6 pb-6 border-l-2 border-slate-50 last:border-0 last:pb-0">
+                      <div className="absolute left-[-5px] top-0 h-2 w-2 rounded-full bg-emerald-500 ring-4 ring-emerald-50" />
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-start">
+                          <p className="text-[10px] font-black text-emerald-700 uppercase leading-none">
+                            {log.action.replace('_', ' ')}
+                          </p>
+                          <span className="text-[8px] font-bold text-slate-300 uppercase">
+                            {new Date(log.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p className="text-[11px] font-bold text-slate-800 leading-tight">
+                          {log.user_email?.split('@')[0]} mengelola {log.entity_type.replace('_', ' ')}
+                        </p>
+                        {log.metadata?.tracking_code && (
+                           <p className="text-[9px] font-mono font-bold text-slate-400">#{log.metadata.tracking_code}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
              </div>
           </div>
+
+          {/* Quick Info Alerts */}
+          {stats.stuck > 0 && (
+            <div className="bg-rose-50 rounded-[2rem] border border-rose-100 p-6">
+               <div className="flex items-center gap-3 mb-4">
+                  <div className="h-10 w-10 rounded-xl bg-rose-500 text-white flex items-center justify-center shrink-0 shadow-lg shadow-rose-500/20">
+                    <AlertCircle className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-rose-900 uppercase leading-none">Peringatan Operasional</h4>
+                    <p className="text-[10px] font-bold text-rose-600 uppercase mt-1">Stuck &gt; 3 Hari</p>
+                  </div>
+               </div>
+               <p className="text-[11px] text-rose-800/70 font-medium leading-relaxed mb-4">
+                 Ada <span className="font-black text-rose-600">{stats.stuck} pekerjaan</span> yang tidak mengalami perubahan status selama lebih dari 3 hari. Segera lakukan pengecekan di lapangan atau laboratorium.
+               </p>
+               <Button 
+                variant="link" 
+                className="p-0 h-auto text-[10px] font-black text-rose-600 uppercase hover:no-underline"
+                onClick={() => {
+                  setFilterStatus("all");
+                  setSearch(""); // Reset to see all potentially stuck jobs
+                }}
+               >
+                 Tampilkan Semua <ArrowRight className="h-3 w-3 ml-1" />
+               </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -535,6 +615,200 @@ export default function OperatorDashboard() {
             >
               Kelola Progres
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Services List Modal */}
+      <Dialog open={isServicesModalOpen} onOpenChange={setIsServicesModalOpen}>
+        <DialogContent className="sm:max-w-[800px] rounded-[2rem] p-0 overflow-hidden border-none shadow-2xl">
+          <div className="bg-emerald-950 p-6 text-white">
+            <div className="flex items-center gap-3">
+               <div className="h-10 w-10 rounded-xl bg-emerald-800 flex items-center justify-center border border-emerald-700">
+                  <FlaskConical className="h-5 w-5 text-emerald-400" />
+               </div>
+               <div>
+                 <DialogTitle className="text-xl font-black uppercase tracking-tight leading-none">Daftar Layanan</DialogTitle>
+                 <DialogDescription className="text-emerald-500 text-[10px] font-bold uppercase mt-1">Total {services.length} Layanan Terdaftar</DialogDescription>
+               </div>
+            </div>
+          </div>
+          <div className="p-6 bg-white space-y-4">
+             <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input 
+                  placeholder="Cari layanan..." 
+                  className="pl-10 h-10 rounded-xl border-slate-100 bg-slate-50 focus-visible:ring-emerald-500"
+                  value={serviceSearch}
+                  onChange={(e) => {
+                    setServiceSearch(e.target.value);
+                    setServicePage(1); // Reset to page 1 on search
+                  }}
+                />
+             </div>
+             <div className="max-h-[50vh] overflow-y-auto rounded-xl border border-slate-50">
+                <table className="w-full text-left text-xs">
+                   <thead className="bg-slate-50 text-slate-400 font-black uppercase sticky top-0">
+                      <tr>
+                         <th className="px-4 py-3">Nama Layanan</th>
+                         <th className="px-4 py-3 text-right">Harga (IDR)</th>
+                      </tr>
+                   </thead>
+                   <tbody className="divide-y divide-slate-50">
+                      {(() => {
+                        const filtered = services.filter(s => 
+                          s.name.toLowerCase().includes(serviceSearch.toLowerCase()) || 
+                          s.category_ref?.name.toLowerCase().includes(serviceSearch.toLowerCase())
+                        );
+                        const totalPages = Math.ceil(filtered.length / SERVICE_PER_PAGE);
+                        const paginated = filtered.slice((servicePage - 1) * SERVICE_PER_PAGE, servicePage * SERVICE_PER_PAGE);
+
+                        if (paginated.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={2} className="px-4 py-8 text-center text-slate-400 font-bold uppercase tracking-widest">
+                                Tidak ada layanan ditemukan
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return (
+                          <>
+                            {paginated.map((service: any) => (
+                              <tr key={service.id} className="hover:bg-emerald-50/30 transition-colors group">
+                                <td className="px-4 py-3">
+                                    <p className="font-bold text-slate-800">{service.name}</p>
+                                    <p className="text-[9px] text-emerald-600 font-black uppercase mt-0.5">{service.category_ref?.name || 'Umum'}</p>
+                                </td>
+                                <td className="px-4 py-3 text-right font-mono font-bold text-emerald-700">
+                                    {new Intl.NumberFormat('id-ID').format(service.price)}
+                                </td>
+                              </tr>
+                            ))}
+                            {/* Pagination Controls */}
+                            {filtered.length > SERVICE_PER_PAGE && (
+                              <tr className="bg-slate-50/50">
+                                <td colSpan={2} className="px-4 py-2">
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase">
+                                      Halaman {servicePage} dari {totalPages}
+                                    </p>
+                                    <div className="flex gap-2">
+                                      <Button 
+                                        variant="outline" 
+                                        size="sm" 
+                                        className="h-7 px-3 text-[10px] font-black uppercase rounded-lg border-slate-200"
+                                        disabled={servicePage === 1}
+                                        onClick={() => setServicePage(p => Math.max(1, p - 1))}
+                                      >
+                                        Sebelumnya
+                                      </Button>
+                                      <Button 
+                                        variant="outline" 
+                                        size="sm" 
+                                        className="h-7 px-3 text-[10px] font-black uppercase rounded-lg border-slate-200"
+                                        disabled={servicePage === totalPages}
+                                        onClick={() => setServicePage(p => Math.min(totalPages, p + 1))}
+                                      >
+                                        Selanjutnya
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </>
+                        );
+                      })()}
+                   </tbody>
+                </table>
+             </div>
+          </div>
+          <DialogFooter className="p-4 bg-slate-50 border-t">
+             <Button variant="ghost" onClick={() => setIsServicesModalOpen(false)} className="w-full font-black text-[10px] uppercase tracking-widest text-slate-400">Tutup</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Categories List Modal */}
+      <Dialog open={isCategoriesModalOpen} onOpenChange={setIsCategoriesModalOpen}>
+        <DialogContent className="sm:max-w-[500px] rounded-[2rem] p-0 overflow-hidden border-none shadow-2xl">
+          <div className="bg-emerald-950 p-6 text-white">
+            <div className="flex items-center gap-3">
+               <div className="h-10 w-10 rounded-xl bg-emerald-800 flex items-center justify-center border border-emerald-700">
+                  <TrendingUp className="h-5 w-5 text-emerald-400" />
+               </div>
+               <div>
+                 <DialogTitle className="text-xl font-black uppercase tracking-tight leading-none">Kategori Layanan</DialogTitle>
+                 <DialogDescription className="text-emerald-500 text-[10px] font-bold uppercase mt-1">Bidang Analisis WahfaLab</DialogDescription>
+               </div>
+            </div>
+          </div>
+          <div className="p-6 bg-white">
+             <div className="grid grid-cols-1 gap-3">
+                {categories.map((cat: any) => (
+                  <div key={cat.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex justify-between items-center group hover:bg-emerald-50 hover:border-emerald-100 transition-all">
+                     <div>
+                        <p className="font-black text-slate-800 text-sm uppercase tracking-tight">{cat.name}</p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase">{cat._count?.services || 0} Layanan Tersedia</p>
+                     </div>
+                     <div className="h-8 w-8 rounded-lg bg-white border border-slate-100 flex items-center justify-center text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                        <ChevronRight className="h-4 w-4" />
+                     </div>
+                  </div>
+                ))}
+             </div>
+          </div>
+          <DialogFooter className="p-4 bg-slate-50 border-t">
+             <Button variant="ghost" onClick={() => setIsCategoriesModalOpen(false)} className="w-full font-black text-[10px] uppercase tracking-widest text-slate-400">Tutup</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Quotation Modal */}
+      <Dialog open={isQuotationModalOpen} onOpenChange={setIsQuotationModalOpen}>
+        <DialogContent className="sm:max-w-[500px] rounded-[2rem] p-0 overflow-hidden border-none shadow-2xl">
+          <div className="bg-emerald-950 p-8 text-white text-center relative overflow-hidden">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-emerald-800/20 via-transparent to-transparent opacity-50" />
+            <div className="relative z-10 space-y-4">
+               <div className="h-16 w-16 rounded-3xl bg-emerald-600 flex items-center justify-center mx-auto shadow-2xl shadow-emerald-900/40 border-4 border-emerald-800">
+                  <FileText className="h-8 w-8 text-white" />
+               </div>
+               <div>
+                 <DialogTitle className="text-2xl font-black uppercase tracking-tight">Buat Penawaran</DialogTitle>
+                 <p className="text-emerald-500 text-xs font-bold uppercase tracking-widest mt-1">Sistem Penawaran Digital</p>
+               </div>
+            </div>
+          </div>
+          <div className="p-8 bg-white space-y-8">
+             <div className="space-y-4 text-center">
+                <p className="text-slate-500 text-sm leading-relaxed">
+                  Anda akan dialihkan ke sistem pembuatan penawaran lengkap untuk mengisi detail klien, parameter pengujian, dan biaya operasional lapangan.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                   <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                      <p className="text-lg font-black text-emerald-600 leading-none">{services.length}</p>
+                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">Layanan Siap</p>
+                   </div>
+                   <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                      <p className="text-lg font-black text-emerald-600 leading-none">{categories.length}</p>
+                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">Kategori Aktif</p>
+                   </div>
+                </div>
+             </div>
+             <Button 
+                onClick={() => {
+                  setIsQuotationModalOpen(false);
+                  router.push('/operator/quotations/new');
+                }}
+                className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-emerald-900/20 flex items-center justify-center gap-3 group"
+             >
+                Lanjut Pembuatan <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+             </Button>
+          </div>
+          <DialogFooter className="p-4 bg-slate-50 border-t">
+             <Button variant="ghost" onClick={() => setIsQuotationModalOpen(false)} className="w-full font-black text-[10px] uppercase tracking-widest text-slate-400">Batalkan</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

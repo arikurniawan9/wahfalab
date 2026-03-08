@@ -126,9 +126,9 @@ export default function AnalystJobsPage() {
     try {
       const res = await createSampleHandover({
         job_order_id: selectedJob.id,
-        sender_id: selectedJob.sampling_assignment?.field_officer_id || profile.id, // Fallback if no FO
-        receiver_id: profile.id,
-        ...handoverData
+        sample_condition: handoverData.sample_condition,
+        sample_qty: handoverData.sample_qty,
+        notes: handoverData.sample_notes
       });
 
       if (res.success) {

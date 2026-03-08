@@ -51,7 +51,8 @@ export async function createTravelOrder(data: {
                       include: {
                         service: {
                           include: {
-                            category_ref: true
+                            category_ref: true,
+                            regulation_ref: true
                           }
                         },
                         equipment: true
@@ -95,7 +96,8 @@ export async function getTravelOrderById(id: string) {
                       include: {
                         service: {
                           include: {
-                            category_ref: true
+                            category_ref: true,
+                            regulation_ref: true
                           }
                         },
                         equipment: true
@@ -135,7 +137,8 @@ export async function getTravelOrderByAssignmentId(assignmentId: string) {
                       include: {
                         service: {
                           include: {
-                            category_ref: true
+                            category_ref: true,
+                            regulation_ref: true
                           }
                         },
                         equipment: true
