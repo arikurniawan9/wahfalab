@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Card,
   CardContent,
@@ -45,10 +45,10 @@ import {
   ListFilter,
   X,
   ArrowLeft,
-  Table as TableIcon
+  Table as TableIcon,
+  HardDrive
 } from "lucide-react";
-import { LoadingOverlay, LoadingButton } from "@/components/ui";
-import { TableSkeleton } from "@/components/ui/skeleton";
+import { LoadingOverlay, LoadingButton, TableSkeleton, EmptyState } from "@/components/ui";
 import { 
   getSystemStats, 
   exportSystemData, 
@@ -102,14 +102,14 @@ export default function SystemMaintenancePage() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [activePreviewTable, setActivePreviewTable] = useState<string | null>(null);
   const [isRestoreConfirmOpen, setIsRestoreConfirmOpen] = useState(false);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [backupOptions, setBackupOptions] = useState<Record<string, boolean>>({
     users: true, staff: true, quotations: true, jobs: true, finance: true, master: true, system: true,
   });
 
-  const [cleanupOptions, setCleanupOptions] = useState({
-    logs: true, transactions: false, jobs: false, quotations: false, assistants: false, customers: false, staff: false,
+  const [cleanupOptions, setCleanupOptions] = useState<Record<string, boolean>>({
+    logs: true, transactions: false, jobs: false, quotations: false, assistants: false, customers: false, staff: false, master: false
   });
 
   const loadAllData = async () => {
@@ -189,6 +189,7 @@ export default function SystemMaintenancePage() {
     setIsPreviewOpen(false);
     setAdminPassword("");
     setIsProgressOpen(true);
+    setProgress(30);
     setCurrentTask("Menyuntikkan snapshot...");
     
     try {
@@ -229,7 +230,10 @@ export default function SystemMaintenancePage() {
     }
 
     const selected = Object.entries(cleanupOptions).filter(([_, checked]) => checked).map(([k]) => k);
+    let i = 0;
     for (const cat of selected) {
+      i++;
+      setProgress(Math.round((i / selected.length) * 100));
       setCurrentTask(`Cleaning ${cat}...`);
       await cleanupSpecificCategory(cat);
     }
@@ -245,7 +249,7 @@ export default function SystemMaintenancePage() {
   };
 
   const isAllBackupSelected = Object.values(backupOptions).every(v => v);
-  const totalRecs = stats?.total_records || 0;
+  const totalRecs = stats?.total_records || 1;
 
   return (
     <div className="p-4 md:p-8 bg-slate-50/20 font-[family-name:var(--font-geist-sans)] max-w-7xl mx-auto">
@@ -254,10 +258,10 @@ export default function SystemMaintenancePage() {
           <div className="p-2 bg-emerald-100 rounded-lg shadow-inner"><Server className="h-5 w-5 text-emerald-700" /></div>
           <div>
             <h1 className="text-xl font-black text-emerald-950 uppercase tracking-tight leading-none">Infrastruktur</h1>
-            <p className="text-slate-400 text-[8px] font-black uppercase tracking-[0.3em] mt-1">Control Center • v1.2</p>
+            <p className="text-slate-400 text-[8px] font-black uppercase tracking-[0.3em] mt-1">Control Center • v2.0</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" className="rounded-lg font-black text-[9px] uppercase tracking-widest gap-2 h-9 px-4 bg-white" onClick={loadAllData}>
+        <Button variant="outline" size="sm" className="rounded-lg font-black text-[9px] uppercase tracking-widest gap-2 h-9 px-4 bg-white shadow-sm hover:bg-slate-50 transition-all" onClick={loadAllData}>
           <RefreshCw className={cn("h-3.5 w-3.5 text-emerald-600", loading && "animate-spin")} /> Segarkan Status
         </Button>
       </div>
@@ -274,13 +278,14 @@ export default function SystemMaintenancePage() {
                   <div className="bg-blue-500 h-full" style={{ width: `${(stats?.quotations / totalRecs * 100) || 0}%` }} />
                   <div className="bg-amber-500 h-full" style={{ width: `${(stats?.jobs / totalRecs * 100) || 0}%` }} />
                   <div className="bg-emerald-500 h-full" style={{ width: `${(stats?.financialRecords / totalRecs * 100) || 0}%` }} />
+                  <div className="bg-purple-500 h-full" style={{ width: `${(stats?.masterData / totalRecs * 100) || 0}%` }} />
                   <div className="bg-slate-400 h-full" style={{ width: `${(stats?.logs / totalRecs * 100) || 0}%` }} />
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                   <StatMini title="Komersial" value={stats?.quotations} color="bg-blue-500" />
                   <StatMini title="Operasional" value={stats?.jobs} color="bg-amber-500" />
                   <StatMini title="Keuangan" value={stats?.financialRecords} color="bg-emerald-500" />
-                  <StatMini title="Logs" value={stats?.logs} color="bg-slate-400" />
+                  <StatMini title="Master Data" value={stats?.masterData} color="bg-purple-500" />
                 </div>
               </div>
             </CardContent>
@@ -289,7 +294,9 @@ export default function SystemMaintenancePage() {
           <Card className="rounded-2xl border-none shadow-md bg-white border border-slate-100">
             <CardHeader className="p-5 pb-3"><CardTitle className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 flex items-center gap-2"><History className="h-3.5 w-3.5 text-blue-500" /> Maintenance Logs</CardTitle></CardHeader>
             <CardContent className="p-5 pt-0 space-y-4">
-              {recentLogs.map((log) => (
+              {recentLogs.length === 0 ? (
+                <p className="text-[9px] font-bold text-slate-300 uppercase text-center py-4">No recent activity</p>
+              ) : recentLogs.map((log) => (
                 <div key={log.id} className="flex items-start gap-3"><div className="mt-1 w-1 h-1 rounded-full bg-blue-500 shrink-0 shadow-sm" />
                   <div className="min-w-0"><p className="text-[9px] font-black text-slate-700 uppercase truncate leading-none">{log.action.replace(/_/g, ' ')}</p><p className="text-[7px] font-bold text-slate-400 uppercase mt-0.5">{format(new Date(log.created_at), "HH:mm • dd MMM", { locale: id })}</p></div>
                 </div>
@@ -318,6 +325,7 @@ export default function SystemMaintenancePage() {
                   <BackupItem title="Commercial" icon={FileBox} count={stats?.quotations} checked={backupOptions.quotations} onChange={(v: boolean) => setBackupOptions({...backupOptions, quotations: v})} />
                   <BackupItem title="Operational" icon={Layers} count={stats?.jobs} checked={backupOptions.jobs} onChange={(v: boolean) => setBackupOptions({...backupOptions, jobs: v})} />
                   <BackupItem title="Financial" icon={Banknote} count={stats?.financialRecords} checked={backupOptions.finance} onChange={(v: boolean) => setBackupOptions({...backupOptions, finance: v})} />
+                  <BackupItem title="Master Data" icon={HardDrive} count={stats?.masterData} checked={backupOptions.master} onChange={(v: boolean) => setBackupOptions({...backupOptions, master: v})} />
                   <BackupItem title="System Logs" icon={Activity} count={stats?.logs} checked={backupOptions.system} onChange={(v: boolean) => setBackupOptions({...backupOptions, system: v})} />
                 </div>
                 <div className="flex gap-3 pt-4"><Button variant="ghost" onClick={() => toggleAllBackup(!isAllBackupSelected)} className="h-11 rounded-xl font-black uppercase text-[8px] px-6">{isAllBackupSelected ? "Deselect All" : "Select All"}</Button>
@@ -366,9 +374,10 @@ export default function SystemMaintenancePage() {
                 <div className="flex items-center justify-between border-b border-slate-50 pb-4"><div><h3 className="text-lg font-black text-slate-900 uppercase tracking-tight text-rose-900">Purge Zone</h3><p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Penghapusan kategori data secara permanen</p></div><ShieldAlert className="h-6 w-6 text-rose-100" /></div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <CleanupOption title="Audit Logs" icon={Activity} count={stats?.logs} checked={cleanupOptions.logs} onChange={(v) => setCleanupOptions({...cleanupOptions, logs: v})} />
-                  <CleanupOption title="Finance" icon={Banknote} count={stats?.financialRecords} checked={cleanupOptions.transactions} onChange={(v) => setCleanupOptions({...cleanupOptions, transactions: v})} />
+                  <CleanupOption title="Finance Records" icon={Banknote} count={stats?.financialRecords} checked={cleanupOptions.transactions} onChange={(v) => setCleanupOptions({...cleanupOptions, transactions: v})} />
                   <CleanupOption title="Jobs Progress" icon={Layers} count={stats?.jobs} checked={cleanupOptions.jobs} onChange={(v) => setCleanupOptions({...cleanupOptions, jobs: v})} />
                   <CleanupOption title="Quotations" icon={FileBox} count={stats?.quotations} checked={cleanupOptions.quotations} onChange={(v) => setCleanupOptions({...cleanupOptions, quotations: v})} />
+                  <CleanupOption title="Master Data" icon={HardDrive} count={stats?.masterData} checked={cleanupOptions.master} onChange={(v) => setCleanupOptions({...cleanupOptions, master: v})} />
                   <CleanupOption title="Staff Accounts" icon={Contact2} count={stats?.staff} checked={cleanupOptions.staff} onChange={(v) => setCleanupOptions({...cleanupOptions, staff: v})} />
                   <CleanupOption title="Customer DB" icon={UserCheck} count={stats?.customers} checked={cleanupOptions.customers} onChange={(v) => setCleanupOptions({...cleanupOptions, customers: v})} />
                 </div>
@@ -381,7 +390,7 @@ export default function SystemMaintenancePage() {
         </div>
       </div>
 
-      {/* RESTORE PREVIEW DIALOG - IMPROVED WITH DATA VIEW */}
+      {/* RESTORE PREVIEW DIALOG */}
       <Dialog open={isPreviewOpen} onOpenChange={(open) => { setIsPreviewOpen(open); if (!open) setActivePreviewTable(null); }}>
         <DialogContent showCloseButton={false} className={cn(
           "rounded-[2.5rem] border-none p-0 overflow-hidden shadow-2xl bg-white transition-all duration-500",
@@ -553,7 +562,7 @@ export default function SystemMaintenancePage() {
             <AlertDialogTitle className="text-lg font-black text-center text-slate-900 uppercase">Injection Code</AlertDialogTitle>
             <AlertDialogDescription className="text-center text-slate-400 font-bold uppercase text-[9px] mt-2 leading-relaxed">Konfirmasi pemulihan seluruh data sistem.</AlertDialogDescription></AlertDialogHeader><div className="py-6 space-y-4"><div className="relative group"><Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300 group-hover:text-blue-500 transition-colors" /><Input type="password" placeholder="••••••••" value={adminPassword} onChange={(e) => { setAdminPassword(e.target.value); setAdminPasswordError(""); }} className="h-12 pl-12 pr-4 rounded-xl bg-slate-50 border-none font-black tracking-[0.3em] text-center" /></div>{passwordError && <p className="text-[8px] font-black text-rose-600 uppercase text-center animate-bounce">{passwordError}</p>}</div><AlertDialogFooter className="mt-2 gap-3"><AlertDialogCancel className="h-11 rounded-xl font-black text-[9px] uppercase flex-1 border-none bg-slate-100">Batal</AlertDialogCancel><Button onClick={handleRestore} className="h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-[9px] flex-1 shadow-md active:scale-95 transition-all uppercase">Initialize</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>
 
-      <LoadingOverlay isOpen={loading && stats !== null} title="Synchronizing..." />
+      <LoadingOverlay isOpen={loading && stats === null} title="Synchronizing..." />
     </div>
   );
 }
@@ -582,7 +591,7 @@ function BackupItem({ title, icon: Icon, count, checked, onChange }: any) {
           {count || 0} RECORDS
         </span>
       </div>
-      <Checkbox checked={checked} className="h-4 w-4 rounded-md data-[state=checked]:bg-emerald-600 shadow-sm" />
+      <Checkbox checked={checked} onCheckedChange={(v) => onChange(!!v)} className="h-4 w-4 rounded-md data-[state=checked]:bg-emerald-600 shadow-sm" />
     </div>
   );
 }

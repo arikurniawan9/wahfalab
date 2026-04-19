@@ -15,7 +15,6 @@ import {
   MapPin,
   Truck,
   Wrench,
-  Bell,
   UserCheck,
   CreditCard,
   Banknote,
@@ -23,78 +22,73 @@ import {
   User,
   BookOpen,
   Briefcase,
-  Microscope,
-  Map,
-  Utensils,
   Shield,
   Server,
-  ClipboardCheck,
-  TrendingUp,
-  TrendingDown,
+  History,
+  Globe,
+  Database,
+  HardDrive,
+  Receipt,
+  FileBarChart,
+  LayoutGrid,
   Image as ImageIcon,
   Newspaper,
   Mail,
   ListTree,
-  History
+  Activity,
+  UserGroup
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { logout, getProfile } from "@/lib/actions/auth";
 import Image from "next/image";
 
+// Definisi Struktur Menu Admin dengan Warna Ikon yang Berbeda
 export const adminMenuItems = () => [
   {
-    group: "Dashboard",
-    icon: LayoutDashboard,
+    group: "Overview",
     items: [
-      { icon: LayoutDashboard, label: "Beranda", href: "/admin" },
+      { icon: LayoutDashboard, label: "Beranda", href: "/admin", color: "text-sky-400", bgColor: "bg-sky-500/10" },
     ]
   },
   {
-    group: "Penawaran & Order",
-    icon: FileText,
+    group: "Data Master",
     items: [
-      { icon: FileText, label: "Penawaran Harga", href: "/admin/quotations" },
-      { icon: Briefcase, label: "Progress Order", href: "/admin/jobs" },
-      { icon: MapPin, label: "Penugasan", href: "/admin/sampling" },
+      { icon: FlaskConical, label: "Katalog Layanan", href: "/admin/services", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
+      { icon: Tag, label: "Kategori Layanan", href: "/admin/categories", color: "text-teal-400", bgColor: "bg-teal-500/10" },
+      { icon: BookOpen, label: "Regulasi & Baku Mutu", href: "/admin/regulations", color: "text-blue-400", bgColor: "bg-blue-500/10" },
+      { icon: Wrench, label: "Inventaris Alat", href: "/admin/equipment", color: "text-orange-400", bgColor: "bg-orange-500/10" },
+      { icon: UserCheck, label: "Database Customer", href: "/admin/customers", color: "text-indigo-400", bgColor: "bg-indigo-500/10" },
+      { icon: Users, label: "Tim Lapangan", href: "/admin/assistants", color: "text-purple-400", bgColor: "bg-purple-500/10" },
     ]
   },
   {
-    group: "Laboratorium",
-    icon: Microscope,
+    group: "Operasional Lab",
     items: [
-      { icon: FlaskConical, label: "Katalog Layanan", href: "/admin/services" },
-      { icon: Tag, label: "Kategori", href: "/admin/categories" },
-      { icon: BookOpen, label: "Regulasi", href: "/admin/regulations" },
-      { icon: Wrench, label: "Sewa Alat", href: "/admin/equipment" },
+      { icon: FileText, label: "Penawaran Harga", href: "/admin/quotations", color: "text-amber-400", bgColor: "bg-amber-500/10" },
+      { icon: LayoutGrid, label: "Progress Order", href: "/admin/jobs", color: "text-cyan-400", bgColor: "bg-cyan-500/10" },
+      { icon: MapPin, label: "Penugasan Sampling", href: "/admin/sampling", color: "text-rose-400", bgColor: "bg-rose-500/10" },
+      { icon: Truck, label: "Biaya Transport", href: "/admin/transport-costs", color: "text-yellow-400", bgColor: "bg-yellow-500/10" },
+      { icon: UserCheck, label: "Biaya Petugas", href: "/admin/engineer-costs", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
     ]
   },
   {
-    group: "Sampling",
-    icon: Map,
+    group: "Keuangan",
     items: [
-      { icon: Truck, label: "Biaya Transport", href: "/admin/transport-costs" },
-      { icon: UserCheck, label: "Biaya Petugas Sampling", href: "/admin/engineer-costs" },
+      { icon: CreditCard, label: "Verifikasi Bayar", href: "/admin/finance/payments", color: "text-green-400", bgColor: "bg-green-500/10" },
+      { icon: Receipt, label: "Laporan Invoice", href: "/admin/finance/invoices", color: "text-pink-400", bgColor: "bg-pink-500/10" },
+      { icon: FileBarChart, label: "Arus Kas", href: "/admin/finance/cashflow", color: "text-blue-400", bgColor: "bg-blue-500/10" },
     ]
   },
   {
-    group: "Manajemen User",
-    icon: Users,
+    group: "Sistem & Web",
     items: [
-      { icon: Users, label: "Pengguna Staff", href: "/admin/users" },
-      { icon: UserCheck, label: "Data Customer", href: "/admin/customers" },
-      { icon: Users, label: "Asisten Lapangan", href: "/admin/assistants" },
-    ]
-  },
-  {
-    group: "Konfigurasi & Web",
-    icon: Settings,
-    items: [
-      { icon: Building2, label: "Profil Perusahaan", href: "/admin/settings/company" },
-      { icon: LayoutDashboard, label: "Data Home", href: "/admin/content-management" },
-      { icon: Server, label: "Sistem & Maintenance", href: "/admin/settings/system" },
-      { icon: History, label: "Audit Log", href: "/admin/settings/audit-logs" },
-      { icon: User, label: "Akun Saya", href: "/admin/settings/profile" },
+      { icon: Users, label: "Manajemen Staff", href: "/admin/users", color: "text-rose-400", bgColor: "bg-rose-500/10" },
+      { icon: Building2, label: "Profil Perusahaan", href: "/admin/settings/company", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
+      { icon: Globe, label: "Konten Website", href: "/admin/content-management", color: "text-sky-400", bgColor: "bg-sky-500/10" },
+      { icon: HardDrive, label: "Infrastruktur", href: "/admin/settings/system", color: "text-slate-400", bgColor: "bg-slate-500/10" },
+      { icon: History, label: "Audit Log", href: "/admin/settings/audit-logs", color: "text-blue-400", bgColor: "bg-blue-500/10" },
+      { icon: User, label: "Profil Saya", href: "/admin/settings/profile", color: "text-purple-400", bgColor: "bg-purple-500/10" },
     ]
   },
 ];
@@ -102,139 +96,46 @@ export const adminMenuItems = () => [
 export const contentManagerMenuItems = [
   {
     group: "Manajemen Konten",
-    icon: FileText,
     items: [
-      { icon: LayoutDashboard, label: "Beranda", href: "/content-manager" },
-      { icon: FileText, label: "Data Home", href: "/content-manager/home" },
-      { icon: ListTree, label: "Manajemen Menu", href: "/content-manager/menus" },
-      { icon: ImageIcon, label: "Galeri Foto", href: "/content-manager/gallery" },
-      { icon: Newspaper, label: "Manajemen Berita", href: "/content-manager/news" },
-      { icon: Mail, label: "Pesan Masuk", href: "/content-manager/messages" },
-      { icon: User, label: "Profil Saya", href: "/content-manager/profile" },
+      { icon: LayoutDashboard, label: "Beranda", href: "/content-manager", color: "text-sky-400", bgColor: "bg-sky-500/10" },
+      { icon: FileText, label: "Data Home", href: "/content-manager/home", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
+      { icon: ListTree, label: "Manajemen Menu", href: "/content-manager/menus", color: "text-blue-400", bgColor: "bg-blue-500/10" },
+      { icon: ImageIcon, label: "Galeri Foto", href: "/content-manager/gallery", color: "text-pink-400", bgColor: "bg-pink-500/10" },
+      { icon: Newspaper, label: "Manajemen Berita", href: "/content-manager/news", color: "text-orange-400", bgColor: "bg-orange-500/10" },
+      { icon: Mail, label: "Pesan Masuk", href: "/content-manager/messages", color: "text-indigo-400", bgColor: "bg-indigo-500/10" },
+      { icon: User, label: "Profil Saya", href: "/content-manager/profile", color: "text-purple-400", bgColor: "bg-purple-500/10" },
     ]
   },
 ];
 
 export const operatorMenuItems = [
   {
-    group: "Dashboard",
-    icon: LayoutDashboard,
+    group: "Overview",
     items: [
-      { icon: LayoutDashboard, label: "Beranda", href: "/operator" },
+      { icon: LayoutDashboard, label: "Beranda", href: "/operator", color: "text-sky-400", bgColor: "bg-sky-500/10" },
     ]
   },
   {
     group: "Penawaran & Order",
-    icon: FileText,
     items: [
-      { icon: FileText, label: "Penawaran Harga", href: "/operator/quotations" },
-      { icon: Briefcase, label: "Progress Order", href: "/operator/jobs" },
+      { icon: FileText, label: "Penawaran Harga", href: "/operator/quotations", color: "text-amber-400", bgColor: "bg-amber-500/10" },
+      { icon: Briefcase, label: "Progress Order", href: "/operator/jobs", color: "text-cyan-400", bgColor: "bg-cyan-500/10" },
     ]
   },
   {
     group: "Operasional",
-    icon: Truck,
     items: [
-      { icon: Truck, label: "Biaya Transport", href: "/operator/transport-costs" },
-      { icon: UserCheck, label: "Biaya Petugas Sampling", href: "/operator/engineer-costs" },
-    ]
-  },
-  {
-    group: "User",
-    icon: Users,
-    items: [
-      { icon: Users, label: "Asisten Lapangan", href: "/operator/assistants" },
+      { icon: Truck, label: "Biaya Transport", href: "/operator/transport-costs", color: "text-yellow-400", bgColor: "bg-yellow-500/10" },
+      { icon: UserCheck, label: "Biaya Petugas Sampling", href: "/operator/engineer-costs", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
     ]
   },
   {
     group: "Laboratorium",
-    icon: Microscope,
     items: [
-      { icon: FlaskConical, label: "Katalog Layanan", href: "/operator/services" },
-      { icon: Tag, label: "Kategori", href: "/operator/categories" },
-      { icon: Wrench, label: "Sewa Alat", href: "/operator/equipment" },
-    ]
-  },
-];
-
-const clientMenuItems = [
-  {
-    group: "Dashboard",
-    icon: LayoutDashboard,
-    items: [
-      { icon: LayoutDashboard, label: "Beranda", href: "/dashboard" },
-      { icon: FileText, label: "Riwayat Order", href: "/dashboard/orders" },
-      { icon: Settings, label: "Pengaturan", href: "/dashboard/settings" },
-    ]
-  },
-];
-
-const fieldOfficerMenuItems = [
-  {
-    group: "Dashboard",
-    icon: LayoutDashboard,
-    items: [
-      { icon: LayoutDashboard, label: "Beranda", href: "/field" },
-      { icon: MapPin, label: "Tugas Sampling", href: "/field/assignments" },
-      { icon: History, label: "Riwayat", href: "/field/history" },
-    ]
-  },
-];
-
-const analystMenuItems = [
-  {
-    group: "Dashboard",
-    icon: LayoutDashboard,
-    items: [
-      { icon: LayoutDashboard, label: "Beranda", href: "/analyst" },
-      { icon: FlaskConical, label: "Tugas Analisis", href: "/analyst/jobs" },
-      { icon: History, label: "Riwayat Analisis", href: "/analyst/history" },
-    ]
-  },
-];
-
-const reportingMenuItems = [
-  {
-    group: "Dashboard",
-    icon: LayoutDashboard,
-    items: [
-      { icon: LayoutDashboard, label: "Beranda", href: "/reporting" },
-      { icon: FileText, label: "Laporan Hasil Uji", href: "/reporting/jobs" },
-    ]
-  },
-];
-
-const financeMenuItems = [
-  {
-    group: "Dashboard",
-    icon: LayoutDashboard,
-    items: [
-      { icon: LayoutDashboard, label: "Beranda", href: "/finance" },
-    ]
-  },
-  {
-    group: "Manajemen Keuangan",
-    icon: Banknote,
-    items: [
-      { icon: CreditCard, label: "Verifikasi Bayar", href: "/finance/payments" },
-      { icon: TrendingUp, label: "Pemasukan", href: "/finance/income" },
-      { icon: TrendingDown, label: "Pengeluaran", href: "/finance/expense" },
-      { icon: Banknote, label: "Arus Kas / Saldo", href: "/finance/cashflow" },
-    ]
-  },
-  {
-    group: "Laporan",
-    icon: FileText,
-    items: [
-      { icon: FileText, label: "Laporan Invoice", href: "/finance/invoices" },
-      { icon: BookOpen, label: "Riwayat Transaksi", href: "/finance/transactions" },
-    ]
-  },
-  {
-    group: "Pengaturan",
-    icon: Settings,
-    items: [
-      { icon: Building2, label: "Daftar Bank", href: "/finance/settings/banks" },
+      { icon: FlaskConical, label: "Katalog Layanan", href: "/operator/services", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
+      { icon: Tag, label: "Kategori", href: "/operator/categories", color: "text-teal-400", bgColor: "bg-teal-500/10" },
+      { icon: Wrench, label: "Sewa Alat", href: "/operator/equipment", color: "text-orange-400", bgColor: "bg-orange-500/10" },
+      { icon: Users, label: "Asisten Lapangan", href: "/operator/assistants", color: "text-purple-400", bgColor: "bg-purple-500/10" },
     ]
   },
 ];
@@ -276,42 +177,35 @@ export function Sidebar({ className }: { className?: string }) {
       ? contentManagerMenuItems
       : role === 'operator'
         ? operatorMenuItems
-      : role === 'field_officer'
-        ? fieldOfficerMenuItems
-        : role === 'analyst'
-          ? analystMenuItems
-          : role === 'reporting'
-            ? reportingMenuItems
-            : role === 'finance'
-              ? financeMenuItems
-              : role === 'client'
-                ? clientMenuItems
-                : [];
+      : [];
 
   return (
     <aside
       className={cn(
-        "hidden md:flex flex-col bg-emerald-950 text-white transition-all duration-300 border-r border-emerald-900 sticky top-0 h-screen",
-        isCollapsed ? "w-20" : "w-64",
+        "hidden md:flex flex-col bg-emerald-950 !bg-emerald-950 text-white transition-all duration-300 border-r border-emerald-900/50 shadow-2xl sticky top-0 h-screen z-40",
+        isCollapsed ? "w-20" : "w-72",
         className
       )}
     >
       <Button
         variant="ghost"
         size="icon"
-        className="absolute -right-3 top-20 h-6 w-6 rounded-full bg-emerald-600 text-white hover:bg-emerald-500 border border-emerald-900 z-50 shadow-md"
+        className="absolute -right-3 top-24 h-6 w-6 rounded-full bg-emerald-600 text-white hover:bg-emerald-500 border border-emerald-800 z-[100] shadow-lg transition-transform active:scale-90"
         onClick={() => setIsCollapsed(!isCollapsed)}
       >
-        <ChevronLeft className={cn("h-4 w-4 transition-transform", isCollapsed && "rotate-180")} />
+        <ChevronLeft className={cn("h-4 w-4 transition-transform duration-500", isCollapsed && "rotate-180")} />
       </Button>
-      <NavContent 
-        isCollapsed={isCollapsed} 
-        menuItems={menuItems} 
-        pathname={pathname} 
-        companyName={companyName} 
-        logoUrl={logoUrl} 
-        logout={logout} 
-      />
+      
+      <div className="flex-1 h-full overflow-y-auto overflow-x-visible custom-scrollbar bg-emerald-950 !bg-emerald-950">
+        <NavContent 
+          isCollapsed={isCollapsed} 
+          menuItems={menuItems} 
+          pathname={pathname} 
+          companyName={companyName} 
+          logoUrl={logoUrl} 
+          logout={logout} 
+        />
+      </div>
     </aside>
   );
 }
@@ -328,94 +222,117 @@ interface NavContentProps {
 
 export function NavContent({ isCollapsed, menuItems, pathname, companyName, logoUrl, logout, onItemClick }: NavContentProps) {
   return (
-    <div className="flex flex-col h-full py-4">
-      <div className={cn("px-6 mb-8 flex items-center gap-3", isCollapsed && "px-4 justify-center")}>
-        {logoUrl ? (
-          <div className="relative h-10 w-10">
-            <Image
-              src={logoUrl}
-              alt="Logo"
-              fill
-              className="object-contain"
-            />
-          </div>
-        ) : (
-          <img src="/logo-wahfalab.png" alt="Logo" className="h-10 w-auto brightness-0 invert" />
-        )}
+    <div className="flex flex-col min-h-full py-6 bg-emerald-950 !bg-emerald-950">
+      {/* Brand */}
+      <div className={cn("px-6 mb-10 flex items-center gap-4", isCollapsed && "px-4 justify-center")}>
+        <div className="relative h-11 w-11 shrink-0 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10 shadow-inner overflow-hidden group">
+          <Image 
+            src={logoUrl || "/logo-wahfalab.png"} 
+            alt="WahfaLab Logo" 
+            fill 
+            className="object-contain p-1.5 transition-transform group-hover:scale-110" 
+          />
+        </div>
         {!isCollapsed && (
-          <span className="text-xl font-bold tracking-tighter text-white" style={{ fontFamily: 'var(--font-montserrat)' }}>
-            {companyName}
-          </span>
+          <div className="flex flex-col min-w-0">
+            <span className="text-lg font-black tracking-tight text-white truncate uppercase leading-tight" style={{ fontFamily: 'var(--font-montserrat)' }}>
+              {companyName}
+            </span>
+            <span className="text-[9px] font-black text-emerald-500/60 uppercase tracking-[0.3em]">LIMS Control</span>
+          </div>
         )}
       </div>
 
-      <nav className="flex-1 space-y-6 px-3 overflow-y-auto">
+      {/* Nav */}
+      <nav className="flex-1 px-4 space-y-6">
         {menuItems.map((group, groupIndex) => (
-          <div key={groupIndex}>
-            {!isCollapsed && group.group && (
-              <div className="flex items-center gap-2 px-3 mb-2">
-                {group.icon && <group.icon className="h-3 w-3 text-emerald-400" />}
-                <h3 className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
-                  {group.group}
-                </h3>
+          <div key={groupIndex} className="space-y-2">
+            {!isCollapsed && group.group && group.group !== "Overview" && (
+              <div className="px-4 flex items-center gap-2 mb-1">
+                <div className="h-px bg-white/10 flex-1" />
+                <span className="text-[10px] font-black text-emerald-500/40 uppercase tracking-[0.2em]">{group.group}</span>
+                <div className="h-px bg-white/10 flex-1" />
               </div>
             )}
             <div className="space-y-1">
               {group.items.map((item: any) => (
-                <Link
-                  key={`${item.href}-${item.label}`}
-                  href={item.href}
-                  onClick={onItemClick}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group relative",
-                    pathname === item.href
-                      ? "bg-emerald-600 text-white shadow-lg shadow-emerald-900/20"
-                      : "text-emerald-100 hover:bg-emerald-800/50 hover:text-white",
-                    isCollapsed && "justify-center px-0"
-                  )}
-                  title={isCollapsed ? item.label : ""}
-                >
-                  <item.icon className={cn("h-5 w-5 shrink-0", pathname === item.href ? "text-white" : "text-emerald-400 group-hover:text-emerald-200")} />
-                  {!isCollapsed && (
-                    <div className="flex items-center justify-between flex-1">
-                      <span className="font-medium">{item.label}</span>
-                      {item.badge && (
-                        typeof item.badge === 'number' ? (
-                          <span className="ml-2 px-2 py-0.5 text-xs font-bold bg-red-500 text-white rounded-full min-w-[20px] text-center">
-                            {item.badge}
-                          </span>
-                        ) : (
-                          <span className="ml-2 px-2 py-0.5 text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded uppercase">
-                            {item.badge}
-                          </span>
-                        )
-                      )}
-                    </div>
-                  )}
-                  {isCollapsed && item.badge && (
-                    <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
-                  )}
-                </Link>
+                <NavItem 
+                  key={item.href} 
+                  item={item} 
+                  isCollapsed={isCollapsed} 
+                  isActive={pathname === item.href} 
+                  onItemClick={onItemClick} 
+                />
               ))}
             </div>
           </div>
         ))}
       </nav>
 
-      <div className="px-3 mt-auto border-t border-emerald-800 pt-4">
+      {/* Footer */}
+      <div className="px-4 mt-auto pt-6 border-t border-white/10">
         <form action={logout}>
           <Button
             variant="ghost"
+            onClick={onItemClick}
             className={cn(
-              "w-full justify-start text-emerald-100 hover:text-white hover:bg-emerald-800 group",
+              "w-full h-12 rounded-2xl justify-start text-emerald-100/60 hover:text-rose-400 hover:bg-rose-600/10 group transition-all duration-300",
               isCollapsed && "justify-center px-0"
             )}
           >
-            <LogOut className="h-5 w-5 shrink-0 group-hover:translate-x-1 transition-transform" />
-            {!isCollapsed && <span className="ml-3">Keluar</span>}
+            <LogOut className="h-5 w-5 shrink-0 transition-transform group-hover:translate-x-1" />
+            {!isCollapsed && <span className="ml-3 font-bold uppercase text-[10px] tracking-widest">Logout System</span>}
           </Button>
         </form>
       </div>
     </div>
+  );
+}
+
+function NavItem({ item, isCollapsed, isActive, onItemClick }: any) {
+  return (
+    <Link
+      href={item.href}
+      onClick={onItemClick}
+      className={cn(
+        "flex items-center gap-3 px-4 py-2.5 rounded-2xl transition-all duration-300 group relative",
+        isActive
+          ? "bg-emerald-600 text-white shadow-xl shadow-emerald-900/50"
+          : "text-slate-300 hover:bg-white/5 hover:text-white",
+        isCollapsed && "justify-center px-0 h-11 w-11 mx-auto mb-1"
+      )}
+      title={isCollapsed ? item.label : ""}
+    >
+      <div className={cn(
+        "h-9 w-9 rounded-xl flex items-center justify-center transition-all shrink-0 shadow-inner border border-white/5",
+        isActive ? "bg-white/20 border-white/20" : item.bgColor,
+        isActive ? "scale-110" : "group-hover:scale-110"
+      )}>
+        <item.icon className={cn(
+          "h-5 w-5 transition-all duration-300",
+          isActive ? "text-white" : item.color
+        )} />
+      </div>
+      
+      {!isCollapsed && (
+        <div className="flex items-center justify-between flex-1 overflow-hidden">
+          <span className={cn(
+            "font-bold truncate tracking-tight transition-all text-sm",
+            isActive ? "translate-x-1" : "group-hover:translate-x-1"
+          )}>{item.label}</span>
+          {item.badge && (
+            <span className="ml-2 px-1.5 py-0.5 text-[8px] font-black bg-emerald-500 text-white rounded shadow-sm">
+              {item.badge}
+            </span>
+          )}
+        </div>
+      )}
+      {isCollapsed && item.badge && (
+        <span className="absolute top-2 right-2 h-2 w-2 bg-emerald-400 rounded-full shadow-[0_0_8px_rgba(52,211,153,0.6)]"></span>
+      )}
+      {isActive && !isCollapsed && (
+        <div className="absolute left-0 w-1 h-6 bg-white rounded-r-full shadow-[2px_0_10px_rgba(255,255,255,0.4)]" />
+      )}
+    </Link>
   );
 }

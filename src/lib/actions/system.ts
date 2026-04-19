@@ -18,7 +18,11 @@ export async function getSystemStats() {
       financialRecords,
       assistants,
       customers,
-      staff
+      staff,
+      categories,
+      regulations,
+      equipment,
+      operationalCatalogs
     ] = await Promise.all([
       prisma.quotation.count(),
       prisma.jobOrder.count(),
@@ -32,10 +36,15 @@ export async function getSystemStats() {
             in: ['operator', 'analyst', 'field_officer', 'reporting', 'finance', 'content_manager'] 
           } 
         } 
-      })
+      }),
+      prisma.serviceCategory.count(),
+      prisma.regulation.count(),
+      prisma.equipment.count(),
+      prisma.operationalCatalog.count()
     ]);
 
-    const total_records = quotations + jobs + logs + financialRecords + assistants + customers + staff;
+    const masterData = categories + regulations + equipment + operationalCatalogs;
+    const total_records = quotations + jobs + logs + financialRecords + assistants + customers + staff + masterData;
 
     return {
       quotations,
@@ -45,6 +54,7 @@ export async function getSystemStats() {
       assistants,
       customers,
       staff,
+      masterData,
       total_records
     };
   } catch (error) {
@@ -235,6 +245,17 @@ export async function cleanupSpecificCategory(category: string) {
             } 
           }
         });
+        break;
+      case 'master':
+        await prisma.$transaction([
+          prisma.operationalHistory.deleteMany(),
+          prisma.operationalCatalog.deleteMany(),
+          prisma.equipment.deleteMany(),
+          prisma.service.deleteMany(),
+          prisma.serviceCategory.deleteMany(),
+          prisma.regulationParameter.deleteMany(),
+          prisma.regulation.deleteMany(),
+        ]);
         break;
       default:
         throw new Error('Kategori tidak valid');
