@@ -4,29 +4,27 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { ShieldAlert, ArrowLeft, Home, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
 
 export default function AccessDeniedPage() {
   const [role, setRole] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
-  const supabase = createClient();
 
   useEffect(() => {
     const getProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUserId(user.id);
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", user.id)
-          .maybeSingle();
-        
-        if (profile) setRole(profile.role);
+      try {
+        const res = await fetch("/api/auth/session");
+        const session = await res.json();
+        if (session?.user) {
+          setUserId(session.user.id);
+          // Role may be included in the session object depending on auth config
+          if (session.user.role) setRole(session.user.role);
+        }
+      } catch (error) {
+        console.error("Failed to fetch session:", error);
       }
     };
     getProfile();
-  }, [supabase]);
+  }, []);
 
   const getDashboardPath = () => {
     switch (role) {

@@ -3,17 +3,16 @@
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
-import { createClient } from '@/lib/supabase/server'
+import { auth } from '@/lib/auth'
+import { STORAGE_BUCKETS, uploadToSupabaseStorage } from '@/lib/supabase/storage'
 
 /**
  * Get invoice by ID with full details
  */
 export async function getInvoiceById(invoiceId: string) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
+    const session = await auth()
+    if (!session?.user) {
       return { error: 'Unauthorized' }
     }
 
@@ -44,15 +43,15 @@ export async function getInvoiceById(invoiceId: string) {
 
     // Check permissions - only admin, finance, or related field officer can view
     const profile = await prisma.profile.findUnique({
-      where: { id: user.id },
-      select: { role: true }
+      where: { email: session.user.email! },
+      select: { role: true, id: true }
     })
 
     if (profile?.role !== 'admin' && profile?.role !== 'finance') {
       // Field officer can only view invoices from their assignments
       const assignment = await prisma.samplingAssignment.findFirst({
         where: {
-          field_officer_id: user.id,
+          field_officer_id: profile.id,
           job_order_id: invoice.job_order_id
         }
       })
@@ -74,12 +73,12 @@ export async function getInvoiceById(invoiceId: string) {
  */
 export async function getAllInvoices(page = 1, limit = 10, status?: string, search?: string) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return { error: 'Unauthorized' }
-    }
+    const session = await auth()
+    if (!session?.user) return { error: 'Unauthorized' }
+    const profile = await prisma.profile.findUnique({
+      where: { email: session.user.email! },
+      select: { id: true, role: true }
+    })
 
     const skip = (page - 1) * limit
     const where: any = {}
@@ -129,12 +128,12 @@ export async function getAllInvoices(page = 1, limit = 10, status?: string, sear
  */
 export async function getInvoicesByCustomerId(customerId: string, page = 1, limit = 10) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return { error: 'Unauthorized' }
-    }
+    const session = await auth()
+    if (!session?.user) return { error: 'Unauthorized' }
+    const profile = await prisma.profile.findUnique({
+      where: { email: session.user.email! },
+      select: { id: true, role: true }
+    })
 
     const skip = (page - 1) * limit
 
@@ -189,12 +188,12 @@ export async function getInvoicesByCustomerId(customerId: string, page = 1, limi
  */
 export async function updateInvoiceStatus(invoiceId: string, status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled') {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return { error: 'Unauthorized' }
-    }
+    const session = await auth()
+    if (!session?.user) return { error: 'Unauthorized' }
+    const profile = await prisma.profile.findUnique({
+      where: { email: session.user.email! },
+      select: { id: true, role: true }
+    })
 
     const invoice = await prisma.invoice.update({
       where: { id: invoiceId },
@@ -231,12 +230,12 @@ export async function updateInvoiceStatus(invoiceId: string, status: 'draft' | '
  */
 export async function sendInvoiceToCustomer(invoiceId: string, customerEmail: string) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return { error: 'Unauthorized' }
-    }
+    const session = await auth()
+    if (!session?.user) return { error: 'Unauthorized' }
+    const profile = await prisma.profile.findUnique({
+      where: { email: session.user.email! },
+      select: { id: true, role: true }
+    })
 
     // Update invoice status to sent
     const invoice = await prisma.invoice.update({
@@ -295,10 +294,12 @@ export async function sendInvoiceToCustomer(invoiceId: string, customerEmail: st
  */
 export async function submitPaymentProof(invoiceId: string, proofUrl: string, reference: string) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) return { error: 'Unauthorized' }
+    const session = await auth()
+    if (!session?.user) return { error: 'Unauthorized' }
+    const profile = await prisma.profile.findUnique({
+      where: { email: session.user.email! },
+      select: { id: true, role: true }
+    })
 
     const invoice = await prisma.invoice.findUnique({
       where: { id: invoiceId },
@@ -342,7 +343,7 @@ export async function submitPaymentProof(invoiceId: string, proofUrl: string, re
       select: { id: true }
     })
 
-    const notifications = adminsAndFinance.map(staff => ({
+    const notifications = adminsAndFinance.map((staff: any) => ({
       user_id: staff.id,
       type: 'payment_received' as any,
       title: 'Bukti Transfer Baru',
@@ -363,15 +364,53 @@ export async function submitPaymentProof(invoiceId: string, proofUrl: string, re
   }
 }
 
+export async function uploadPaymentProofFile(invoiceId: string, file: File) {
+  try {
+    const session = await auth()
+    if (!session?.user?.email) return { error: 'Unauthorized' }
+
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { invoice_number: true }
+    })
+
+    if (!invoice) {
+      return { error: 'Invoice tidak ditemukan' }
+    }
+
+    const fileExt = file.name.split('.').pop() || 'bin'
+    const renamedFile = new File(
+      [await file.arrayBuffer()],
+      `proof-${invoice.invoice_number.replace(/\//g, '-')}.${fileExt}`,
+      { type: file.type }
+    )
+
+    const { publicUrl } = await uploadToSupabaseStorage({
+      bucket: STORAGE_BUCKETS.paymentProofs,
+      folder: `invoice/${invoiceId}`,
+      file: renamedFile,
+      allowedMimeTypes: ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'application/pdf'],
+      maxSizeBytes: 10 * 1024 * 1024,
+    })
+
+    return { success: true, url: publicUrl }
+  } catch (error: any) {
+    console.error('Upload payment proof error:', error)
+    return { error: error.message }
+  }
+}
+
 /**
  * Verify Payment (Finance Action)
  */
 export async function verifyPayment(paymentId: string, isApproved: boolean, bankAccountId?: string, notes?: string) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) return { error: 'Unauthorized' }
+    const session = await auth()
+    if (!session?.user) return { error: 'Unauthorized' }
+    const profile = await prisma.profile.findUnique({
+      where: { email: session.user.email! },
+      select: { id: true, role: true }
+    })
 
     const payment = await prisma.payment.findUnique({
       where: { id: paymentId },
@@ -396,10 +435,10 @@ export async function verifyPayment(paymentId: string, isApproved: boolean, bank
       // 1. Update Payment Status
       await prisma.payment.update({
         where: { id: paymentId },
-        data: { 
+        data: {
           payment_status: 'paid',
           paid_at: new Date(),
-          handled_by: user.id,
+          handled_by: profile?.id,
           bank_account_id: bankAccountId
         }
       })
@@ -418,7 +457,7 @@ export async function verifyPayment(paymentId: string, isApproved: boolean, bank
           amount: payment.amount,
           description: `Pemasukan Lab: Invoice ${payment.invoice_number}`,
           reference_id: payment.invoice_id,
-          recorded_by: user.id,
+          recorded_by: profile?.id,
           bank_account_id: bankAccountId,
           transaction_date: new Date()
         }
@@ -475,12 +514,12 @@ export async function verifyPayment(paymentId: string, isApproved: boolean, bank
  */
 export async function getInvoiceStats() {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return { error: 'Unauthorized' }
-    }
+    const session = await auth()
+    if (!session?.user) return { error: 'Unauthorized' }
+    const profile = await prisma.profile.findUnique({
+      where: { email: session.user.email! },
+      select: { id: true, role: true }
+    })
 
     const [total, draft, sent, paid, overdue] = await Promise.all([
       prisma.invoice.count(),

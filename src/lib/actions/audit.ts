@@ -2,40 +2,18 @@
 
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
+import { auth } from "@/lib/auth";
 import { serializeData } from "@/lib/utils/serialize";
 
 /**
  * Get current user profile and role
  */
 async function getProfile() {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) return null;
+  const session = await auth();
+  if (!session?.user?.email) return null;
 
   return await prisma.profile.findUnique({
-    where: { email: session.user.email! },
+    where: { email: session.user.email },
   });
 }
 
@@ -127,8 +105,8 @@ export async function getAuditFilterValues() {
 
     return {
       success: true,
-      entityTypes: entityTypes.map(e => e.entity_type),
-      actions: actions.map(a => a.action),
+      entityTypes: entityTypes.map((e: any) => e.entity_type),
+      actions: actions.map((a: any) => a.action),
     };
   } catch (error) {
     return { success: false, entityTypes: [], actions: [] };

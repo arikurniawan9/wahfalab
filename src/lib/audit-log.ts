@@ -1,9 +1,9 @@
 /**
  * Audit Logging Utility for WahfaLab
- * 
+ *
  * Tracks all important actions in the system for security,
  * compliance, and debugging purposes.
- * 
+ *
  * Usage:
  * ```typescript
  * await logAudit({
@@ -18,7 +18,7 @@
 
 import prisma from '@/lib/prisma'
 import { headers } from 'next/headers'
-import { createServerClient } from '@supabase/ssr'
+import { auth } from '@/lib/auth'
 
 interface AuditLogInput {
   action: string
@@ -52,52 +52,28 @@ function getUserAgent(headersList: Headers): string | undefined {
 }
 
 /**
- * Get current user info from Supabase session
+ * Get current user info from NextAuth session
  */
 async function getCurrentUser() {
   try {
-    const headersList = await headers()
+    const session = await auth();
     
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            // Convert Headers to cookie format
-            const cookies: { name: string; value: string }[] = []
-            headersList.forEach((value, name) => {
-              if (name.startsWith('sb-')) {
-                cookies.push({ name, value })
-              }
-            })
-            return cookies
-          },
-          setAll() {
-            // No-op for server-side
-          }
-        }
-      }
-    )
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) return null
-    
+    if (!session?.user?.email) return null;
+
     // Get user profile with role
     const profile = await prisma.profile.findUnique({
-      where: { id: user.id },
+      where: { email: session.user.email },
       select: {
         id: true,
         email: true,
         full_name: true,
         role: true
       }
-    })
-    
-    return profile
+    });
+
+    return profile;
   } catch (error) {
-    console.error('Get user for audit error:', error)
+    console.error('Get user for audit error:', error);
     return null
   }
 }

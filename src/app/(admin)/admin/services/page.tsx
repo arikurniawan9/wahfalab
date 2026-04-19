@@ -314,7 +314,7 @@ export default function ServicesPage() {
 
   const handleExport = () => {
     const headers = ["Kategori", "Nama Layanan", "Harga", "Unit", "Regulasi"];
-    const csvData = data.items.map((item: any) => [
+    const csvData = (data?.items || []).map((item: any) => [
       item.category_ref?.name || item.category,
       item.name,
       item.price,

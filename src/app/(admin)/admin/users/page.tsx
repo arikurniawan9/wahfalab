@@ -46,7 +46,8 @@ import { LoadingOverlay, LoadingButton, TableSkeleton } from "@/components/ui";
 import { getUsers, createOrUpdateUser, deleteUser, deleteManyUsers } from "@/lib/actions/users";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
+// TODO: Replace Cloud Storage uploads with API endpoints/file upload utility
+// import { createClient } from "@/lib/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -100,7 +101,17 @@ export default function UserManagementPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filterRole, setFilterRole] = useState<string>("all");
 
-  const supabase = createClient();
+  // TODO: Replace with API call or server action for session user
+  const getCurrentUser = async () => {
+    try {
+      const res = await fetch("/api/auth/session");
+      const session = await res.json();
+      return session?.user || null;
+    } catch {
+      return null;
+    }
+  };
+
   const { register, handleSubmit, reset, setValue: setRegValue } = useForm({
     defaultValues: {
       full_name: "",
@@ -115,14 +126,14 @@ export default function UserManagementPage() {
   const loadUsers = async () => {
     setLoading(true);
     try {
-      const [result, { data: { user } }] = await Promise.all([
+      const [result, user] = await Promise.all([
         getUsers(page, limit, search, filterRole, 'client'),
-        supabase.auth.getUser()
+        getCurrentUser()
       ]);
       setData(result);
       setCurrentUser(user);
       setSelectedIds([]);
-    } catch (error: any) { toast.error("Gagal memuat data"); } 
+    } catch (error: any) { toast.error("Gagal memuat data"); }
     finally { setLoading(false); }
   };
 

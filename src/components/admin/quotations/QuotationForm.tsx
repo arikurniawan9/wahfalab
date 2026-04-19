@@ -26,6 +26,7 @@ import { toast } from "sonner";
 
 const quotationSchema = z.object({
   quotation_number: z.string().min(1, "Nomor penawaran wajib diisi"),
+  title: z.string().optional().nullable(),
   user_id: z.string().min(1, "Pilih klien terlebih dahulu"),
   use_tax: z.boolean().default(true),
   discount_amount: z.coerce.number().default(0),
@@ -83,6 +84,7 @@ export function QuotationForm({
     mode: 'onChange',
     defaultValues: {
       quotation_number: nextQuotationNumber,
+      title: "",
       user_id: "",
       use_tax: true,
       discount_amount: 0,
@@ -232,6 +234,10 @@ export function QuotationForm({
                       <ShortcutLabel>Alt+K</ShortcutLabel>
                     </div>
                   </div>
+                </div>
+                <div className="md:col-span-2 space-y-2 sm:space-y-3">
+                  <label className="text-[10px] sm:text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Judul Pengujian / Perihal</label>
+                  <Input {...register("title")} placeholder="Contoh: Pengujian air di sumur ke 9" className="h-11 sm:h-12 border-slate-100 bg-white rounded-xl font-bold text-xs sm:text-sm px-4 sm:px-5" />
                 </div>
               </div>
             </section>

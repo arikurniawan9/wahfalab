@@ -1,16 +1,6 @@
-// ============================================================================
-// OPTIMIZED CATEGORIES PAGE - v2.0
-// Fitur Optimasi:
-// 1. ✅ Loading Modal saat menyimpan
-// 2. ✅ AlertDialog untuk konfirmasi hapus
-// 3. ✅ Export/Import CSV
-// 4. ✅ Empty state yang lebih menarik
-// 5. ✅ UX improvements
-// ============================================================================
-
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Table,
   TableBody,
@@ -21,15 +11,34 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-  DialogDescription
-} from "@/components/ui/dialog";
+  Plus,
+  Pencil,
+  Trash2,
+  Search,
+  Tag,
+  Download,
+  Upload,
+  ChevronLeft,
+  ChevronRight,
+  RotateCcw,
+  Save,
+  Info,
+  Layers,
+  FlaskConical,
+  X,
+  FileText
+} from "lucide-react";
+import { ChemicalLoader, LoadingOverlay, LoadingButton, TableSkeleton, EmptyState } from "@/components/ui";
+import { 
+  getCategories, 
+  createCategory, 
+  updateCategory, 
+  deleteCategory, 
+  deleteManyCategories 
+} from "@/lib/actions/categories";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,11 +49,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Search, Tag, Download, Upload } from "lucide-react";
-import { ChemicalLoader, LoadingOverlay, LoadingButton } from "@/components/ui";
-import { getCategories, createOrUpdateCategory, deleteCategory, deleteManyCategories } from "@/lib/actions/categories";
-import { useForm } from "react-hook-form";
-import { toast } from "sonner";
 import {
   Select,
   SelectContent,
@@ -52,7 +56,8 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 export default function CategoriesPage() {
@@ -61,22 +66,22 @@ export default function CategoriesPage() {
   const [limit, setLimit] = useState(10);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
-  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
-  const [importData, setImportData] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLDivElement>(null);
 
-  const { register, handleSubmit, reset, setValue } = useForm();
+  // Form State
+  const [formData, setFormData] = useState({
+    name: ""
+  });
 
   const loadData = async () => {
     setLoading(true);
     try {
       const result = await getCategories(page, limit, search);
       setData(result);
-      setSelectedIds([]);
     } catch (error: any) {
       toast.error("Gagal memuat data kategori", {
         description: error?.message || "Silakan refresh halaman"
@@ -93,30 +98,114 @@ export default function CategoriesPage() {
     return () => clearTimeout(timer);
   }, [page, limit, search]);
 
-  const onSubmit = async (formData: any) => {
+  const handleEdit = (item: any) => {
+    setEditingItem(item);
+    setFormData({
+      name: item.name
+    });
+    
+    // Scroll to form on mobile
+    if (window.innerWidth < 1024) {
+      formRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const handleReset = () => {
+    setEditingItem(null);
+    setFormData({
+      name: ""
+    });
+  };
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name.trim()) {
+      toast.error("Nama kategori wajib diisi");
+      return;
+    }
+
     setSubmitting(true);
     try {
-      await createOrUpdateCategory(formData, editingItem?.id);
-      setIsDialogOpen(false);
-      reset();
-      setEditingItem(null);
-      loadData();
-      toast.success(editingItem ? "Kategori diperbarui" : "Kategori baru ditambahkan", {
-        description: `${formData.name} berhasil ${editingItem ? 'diperbarui' : 'ditambahkan'}`
-      });
+      const result = editingItem 
+        ? await updateCategory(editingItem.id, formData)
+        : await createCategory(formData);
+      
+      if (result.success) {
+        handleReset();
+        loadData();
+        toast.success(editingItem ? "Kategori diperbarui" : "Kategori ditambahkan");
+      } else {
+        toast.error(result.error || "Gagal menyimpan data");
+      }
     } catch (error: any) {
-      toast.error("Gagal menyimpan data kategori", {
-        description: error?.message || "Silakan coba lagi"
-      });
+      toast.error(error.message || "Terjadi kesalahan sistem");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleEdit = (item: any) => {
-    setEditingItem(item);
-    setValue("name", item.name);
-    setIsDialogOpen(true);
+  const handleExport = () => {
+    const headers = ["Name", "Services Count", "Created At"];
+    const csvData = (data?.items || []).map((item: any) => [
+      item.name,
+      item._count?.services || 0,
+      new Date(item.created_at).toISOString()
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...csvData.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `wahfalab-categories-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("Data kategori berhasil diekspor");
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setSubmitting(true);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        const rows = text.split("\n").filter(r => r.trim() !== "");
+        if (rows.length < 2) {
+          toast.error("File CSV kosong atau tidak valid");
+          return;
+        }
+
+        let successCount = 0;
+        let errorCount = 0;
+
+        // Simple sequential import for categories
+        for (let i = 1; i < rows.length; i++) {
+          const name = rows[i].split(",")[0].trim().replace(/^"|"$/g, "");
+          if (name) {
+            const res = await createCategory({ name });
+            if (res.success) successCount++; else errorCount++;
+          }
+        }
+
+        toast.success(`Impor Selesai: ${successCount} berhasil, ${errorCount} gagal.`);
+        loadData();
+      } catch (error: any) {
+        toast.error("Format file tidak valid: " + error.message);
+      } finally {
+        setSubmitting(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    };
+    reader.readAsText(file);
   };
 
   const handleDelete = (id: string) => {
@@ -126,487 +215,319 @@ export default function CategoriesPage() {
   const confirmDelete = async () => {
     if (!deleteItemId) return;
     try {
-      await deleteCategory(deleteItemId);
-      loadData();
-      toast.success("Kategori dihapus", {
-        description: "Data telah dihapus permanen"
-      });
-      setDeleteItemId(null);
-    } catch (error: any) {
-      toast.error("Gagal menghapus kategori", {
-        description: error?.message || "Silakan coba lagi"
-      });
-    }
-  };
-
-  const handleBulkDelete = () => {
-    setDeleteItemId("bulk");
-  };
-
-  const confirmBulkDelete = async () => {
-    try {
-      await deleteManyCategories(selectedIds);
-      loadData();
-      toast.success(`${selectedIds.length} kategori berhasil dihapus`);
-      setDeleteItemId(null);
-    } catch (error: any) {
-      toast.error("Gagal menghapus kategori", {
-        description: error?.message || "Silakan coba lagi"
-      });
-    }
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedIds.length === data.items.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(data.items.map((i: any) => i.id));
-    }
-  };
-
-  const toggleSelect = (id: string) => {
-    if (selectedIds.includes(id)) {
-      setSelectedIds(selectedIds.filter(i => i !== id));
-    } else {
-      setSelectedIds([...selectedIds, id]);
-    }
-  };
-
-  // Export CSV
-  const handleExport = () => {
-    const headers = ["Nama Kategori", "Jumlah Layanan", "Tanggal Dibuat"];
-    const csvData = data.items.map((item: any) => [
-      item.name,
-      item._count.services,
-      new Date(item.created_at).toISOString().split('T')[0]
-    ]);
-    
-    const csv = [
-      headers.join(","),
-      ...csvData.map((row: string[]) => row.map(cell => `"${cell}"`).join(","))
-    ].join("\n");
-    
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `categories-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    
-    toast.success("Data berhasil diexport", {
-      description: "File CSV telah diunduh"
-    });
-  };
-
-  // Import CSV
-  const handleImport = async () => {
-    try {
-      const lines = importData.trim().split("\n");
-      
-      for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(",").map(v => v.trim().replace(/"/g, ""));
-        await createOrUpdateCategory({ name: values[0] });
+      const result = await deleteCategory(deleteItemId);
+      if (result.success) {
+        loadData();
+        toast.success("Kategori berhasil dihapus");
+      } else {
+        toast.error(result.error || "Gagal menghapus kategori");
       }
-      
-      toast.success("Import berhasil", {
-        description: `${lines.length - 1} kategori berhasil diimport`
-      });
-      setIsImportDialogOpen(false);
-      setImportData("");
-      loadData();
+      setDeleteItemId(null);
     } catch (error: any) {
-      toast.error("Gagal import data", {
-        description: error?.message || "Format CSV tidak valid"
-      });
+      toast.error("Gagal menghapus kategori");
     }
   };
 
   return (
-    <div className="p-4 md:p-10 pb-24 md:pb-10">
-      {/* Header */}
-      <div className="mb-10">
-        <h1 className="text-3xl font-bold text-emerald-900 tracking-tight">Kategori Layanan</h1>
-        <p className="text-slate-500 text-sm mt-1">Kelola pengelompokan layanan laboratorium.</p>
-      </div>
-
-      {/* Filters & Actions Bar */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6 shadow-sm flex flex-col md:flex-row gap-4 items-center">
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-500" />
-          <Input
-            placeholder="Cari kategori..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            className="pl-10 h-11 focus-visible:ring-emerald-500 rounded-lg"
-          />
-        </div>
-        <div className="flex gap-2 w-full md:w-auto">
-          {selectedIds.length > 0 && (
-            <Button variant="destructive" onClick={handleBulkDelete} className="h-11 animate-in fade-in zoom-in duration-200 cursor-pointer flex-1 md:flex-none">
-              <Trash2 className="mr-2 h-4 w-4" /> Hapus ({selectedIds.length})
-            </Button>
-          )}
-          <Button variant="outline" onClick={handleExport} className="cursor-pointer h-11 flex-1 md:flex-none">
-            <Download className="mr-2 h-4 w-4" /> Export
-          </Button>
-          <Button variant="outline" onClick={() => setIsImportDialogOpen(true)} className="cursor-pointer h-11 flex-1 md:flex-none">
-            <Upload className="mr-2 h-4 w-4" /> Import
-          </Button>
-          <Button 
-            onClick={() => {
-              reset();
-              setEditingItem(null);
-              setIsDialogOpen(true);
-            }} 
-            size="icon"
-            className="bg-emerald-600 hover:bg-emerald-700 shadow-lg cursor-pointer h-11 w-11 shrink-0"
-            title="Tambah Kategori"
-          >
-            <Plus className="h-5 w-5" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="bg-white rounded-3xl shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
-        <div className="p-5 border-b bg-emerald-50/10 flex items-center justify-between gap-4">
-          <div className="text-sm font-medium text-slate-600">
-            Daftar Kategori Layanan
-          </div>
-          <div className="text-sm text-slate-500">
-            {data.items.length} dari {data.total} kategori
-          </div>
-        </div>
-
-        {/* Desktop View */}
-        <div className="hidden md:block">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-slate-50/50">
-                <TableHead className="w-12 px-6">
-                  <Checkbox
-                    checked={data.items.length > 0 && selectedIds.length === data.items.length}
-                    onCheckedChange={toggleSelectAll}
-                  />
-                </TableHead>
-                <TableHead className="font-bold text-emerald-900 px-4">Nama Kategori</TableHead>
-                <TableHead className="font-bold text-emerald-900 px-4">Jumlah Layanan</TableHead>
-                <TableHead className="font-bold text-emerald-900 px-4">Tanggal Dibuat</TableHead>
-                <TableHead className="text-center font-bold text-emerald-900 px-6">Aksi</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-20">
-                    <div className="flex justify-center">
-                      <ChemicalLoader />
-                    </div>
-                    <p className="mt-4 text-sm text-slate-500">Memuat data...</p>
-                  </TableCell>
-                </TableRow>
-              ) : data.items.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-20">
-                    <div className="flex flex-col items-center gap-4">
-                      <div className="h-20 w-20 rounded-full bg-emerald-50 flex items-center justify-center">
-                        <Tag className="h-10 w-10 text-emerald-300" />
-                      </div>
-                      <div className="text-center">
-                        <p className="text-lg font-semibold text-slate-700">Belum ada kategori</p>
-                        <p className="text-sm text-slate-500 mt-1">Mulai dengan menambahkan kategori layanan pertama Anda</p>
-                      </div>
-                      <Button
-                        onClick={() => setIsDialogOpen(true)}
-                        className="bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
-                      >
-                        <Plus className="mr-2 h-4 w-4" /> Tambah Kategori
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                data.items.map((item: any) => (
-                  <TableRow key={item.id} className="hover:bg-emerald-50/10 transition-colors">
-                    <TableCell className="px-6">
-                      <Checkbox checked={selectedIds.includes(item.id)} onCheckedChange={() => toggleSelect(item.id)} />
-                    </TableCell>
-                    <TableCell className="px-4">
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
-                          <Tag className="h-4 w-4" />
-                        </div>
-                        <span className="font-bold text-slate-800">{item.name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-4">
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center justify-center h-6 w-6 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
-                          {item._count.services}
-                        </div>
-                        <span className="text-xs text-slate-500">layanan</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-slate-500 text-sm px-4">
-                      {new Date(item.created_at).toLocaleDateString("id-ID", {
-                        day: 'numeric',
-                        month: 'long',
-                        year: 'numeric'
-                      })}
-                    </TableCell>
-                    <TableCell className="text-center px-6">
-                      <div className="flex justify-center gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 cursor-pointer" onClick={() => handleEdit(item)}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50 cursor-pointer" onClick={() => handleDelete(item.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-
-        {/* Mobile View */}
-        <div className="md:hidden divide-y divide-slate-100">
-          {loading ? (
-            <div className="p-10 text-center flex flex-col items-center justify-center">
-              <div className="flex justify-center mb-4">
-                <ChemicalLoader />
-              </div>
-            </div>
-          ) : data.items.length === 0 ? (
-            <div className="p-10 text-center flex flex-col items-center gap-4">
-              <div className="h-16 w-16 rounded-full bg-emerald-50 flex items-center justify-center">
-                <Tag className="h-8 w-8 text-emerald-300" />
+    <div className="p-4 md:p-8 lg:p-10 pb-24 md:pb-10">
+      {/* Compact Header Section with Contrast Green Theme */}
+      <div className="mb-6 overflow-hidden rounded-3xl bg-emerald-900 shadow-xl border border-emerald-700/50">
+        <div className="bg-gradient-to-br from-emerald-950 via-emerald-800 to-emerald-500 p-4 md:p-5 text-white relative overflow-hidden">
+          {/* Light Green Decorative Glows */}
+          <div className="absolute -top-12 -right-12 w-64 h-64 bg-emerald-400/20 rounded-full blur-[60px]" />
+          
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-inner shrink-0">
+                <Layers className="h-5 w-5 text-emerald-200" />
               </div>
               <div>
-                <p className="text-base font-semibold text-slate-700">Belum ada kategori</p>
-                <p className="text-xs text-slate-500 mt-1">Mulai dengan menambahkan kategori</p>
+                <h1 className="text-lg md:text-xl font-black tracking-tight text-white leading-none">
+                  Manajemen Kategori
+                </h1>
+                <p className="text-emerald-100/60 text-[10px] md:text-xs font-medium mt-1">
+                  Pengelompokan jenis layanan laboratorium WahfaLab.
+                </p>
               </div>
-              <Button
-                onClick={() => setIsDialogOpen(true)}
-                className="bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
+            </div>
+
+            <div className="flex items-center gap-3 self-end sm:self-auto">
+              <div className="hidden lg:block text-right border-r border-white/10 pr-4">
+                <p className="text-emerald-300 text-[8px] font-bold uppercase tracking-widest mb-0.5">Total Data</p>
+                <p className="text-lg font-black text-white leading-none">{data.total} <span className="text-emerald-300 text-[10px] font-bold uppercase tracking-normal">Kategori</span></p>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="bg-white/10 border-white/20 hover:bg-white/20 text-white rounded-xl h-9 px-4 backdrop-blur-md transition-all text-xs font-bold"
+                onClick={() => loadData()}
               >
-                <Plus className="mr-2 h-4 w-4" /> Tambah Kategori
+                <RotateCcw className={cn("h-3.5 w-3.5 mr-2", loading && "animate-spin")} />
+                Refresh
               </Button>
             </div>
-          ) : (
-            data.items.map((item: any) => {
-              const isSelected = selectedIds.includes(item.id);
-              return (
-                <div
-                  key={item.id}
-                  className={cn("p-4 space-y-3 transition-colors", isSelected ? 'bg-emerald-50/50' : 'bg-white active:bg-slate-50')}
-                  onClick={() => toggleSelect(item.id)}
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="flex gap-3">
-                      <Checkbox
-                        checked={isSelected}
-                        onCheckedChange={() => toggleSelect(item.id)}
-                        className="mt-1"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
-                          <Tag className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-slate-900">{item.name}</h4>
-                          <p className="text-[10px] text-slate-400">
-                            Dibuat: {new Date(item.created_at).toLocaleDateString("id-ID")}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <div className="h-5 w-5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold flex items-center justify-center">
-                          {item._count.services}
-                        </div>
-                      </div>
-                      <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Layanan</p>
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-1 pt-2" onClick={(e) => e.stopPropagation()}>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 cursor-pointer" onClick={() => handleEdit(item)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50 cursor-pointer" onClick={() => handleDelete(item.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* Pagination */}
-        <div className="p-4 border-t flex flex-col md:flex-row items-center justify-between bg-slate-50/50 gap-4">
-          <div className="flex items-center gap-4">
-            <p className="text-xs text-slate-500 font-medium">Total {data.total} kategori</p>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 font-medium">Tampil:</span>
-              <Select value={limit.toString()} onValueChange={(val) => {
-                setLimit(parseInt(val));
-                setPage(1);
-              }}>
-                <SelectTrigger className="h-8 w-[70px] bg-white text-xs cursor-pointer">
-                  <SelectValue placeholder={limit.toString()} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="10" className="cursor-pointer">10</SelectItem>
-                  <SelectItem value="30" className="cursor-pointer">30</SelectItem>
-                  <SelectItem value="50" className="cursor-pointer">50</SelectItem>
-                  <SelectItem value="100" className="cursor-pointer">100</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="h-8 rounded-lg cursor-pointer" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div className="flex items-center px-4 text-xs font-bold bg-white border border-slate-200 rounded-lg shadow-sm">
-              {page} / {data.pages}
-            </div>
-            <Button variant="outline" size="sm" className="h-8 rounded-lg cursor-pointer" disabled={page === data.pages} onClick={() => setPage(p => p + 1)}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
           </div>
         </div>
       </div>
 
-      {/* Add/Edit Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={(open) => {
-        setIsDialogOpen(open);
-        if (!open) {
-          reset();
-          setEditingItem(null);
-        }
-      }}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle className="text-emerald-900 flex items-center gap-2">
-              <Tag className="h-5 w-5" />
-              {editingItem ? "Edit Kategori" : "Tambah Kategori Baru"}
-            </DialogTitle>
-            <DialogDescription>
-              Masukkan nama kategori layanan di bawah ini.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-semibold">Nama Kategori</label>
-              <Input {...register("name")} placeholder="Contoh: Udara Ambien, Air Limbah" required className="focus-visible:ring-emerald-500" />
-            </div>
-            <DialogFooter className="pt-4">
-              <LoadingButton type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 cursor-pointer" loading={submitting} loadingText="Menyimpan...">
-                {editingItem ? "Simpan Perubahan" : "Buat Kategori"}
-              </LoadingButton>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        {/* LEFT COLUMN: FORM */}
+        <div ref={formRef} className="lg:col-span-1 space-y-6">
+          <Card className="rounded-3xl border-none shadow-xl shadow-emerald-900/5 overflow-hidden sticky top-24">
+            <CardContent className="p-6">
+              <form onSubmit={onSubmit} className="space-y-6">
+                {/* Mode Indicator */}
+                <div className={cn(
+                  "flex items-center gap-2 p-3 rounded-2xl text-xs font-bold uppercase tracking-wider mb-2",
+                  editingItem ? "bg-blue-50 text-blue-600 border border-blue-100" : "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                )}>
+                  {editingItem ? <RotateCcw className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                  {editingItem ? "Perbarui Kategori" : "Tambah Kategori Baru"}
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Nama Kategori *</Label>
+                  <Input
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="Misal: Udara Ambien, Air Bersih"
+                    className="h-12 rounded-xl focus:ring-emerald-500 border-slate-200 shadow-sm"
+                    required
+                  />
+                </div>
+
+                <div className="pt-4 flex gap-3">
+                  {editingItem && (
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={handleReset} 
+                      className="h-12 rounded-xl flex-1 font-bold text-slate-500 border-slate-200 hover:bg-slate-50 transition-all"
+                    >
+                      Batal
+                    </Button>
+                  )}
+                  <LoadingButton 
+                    type="submit" 
+                    className={cn(
+                      "h-12 rounded-xl font-bold shadow-lg flex-[2] transition-all duration-300",
+                      editingItem 
+                        ? "bg-blue-600 hover:bg-blue-700 shadow-blue-200" 
+                        : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200"
+                    )}
+                    loading={submitting}
+                    loadingText={editingItem ? "Memperbarui..." : "Menyimpan..."}
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    {editingItem ? "Update Kategori" : "Simpan Kategori"}
+                  </LoadingButton>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* RIGHT COLUMN: TABLE */}
+        <div className="lg:col-span-2 space-y-6">
+          <Card className="rounded-[2rem] border-none shadow-xl shadow-emerald-900/5 overflow-hidden">
+            <CardHeader className="bg-white border-b border-slate-100 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex-1">
+                <CardTitle className="text-lg font-bold text-slate-800">Daftar Kategori Layanan</CardTitle>
+                <CardDescription className="text-[11px] font-medium text-slate-400">Menampilkan {data.items.length} kategori saat ini.</CardDescription>
+              </div>
+              
+              <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
+                <div className="relative w-full md:w-64 group">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
+                  <Input
+                    placeholder="Cari nama kategori..."
+                    value={search}
+                    onChange={(e) => {
+                      setSearch(e.target.value);
+                      setPage(1);
+                    }}
+                    className="pl-9 h-11 rounded-xl bg-slate-50 border-none focus-visible:ring-emerald-500 transition-all"
+                  />
+                </div>
+
+                <div className="flex gap-2 w-full md:w-auto">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    ref={fileInputRef}
+                    onChange={handleImport}
+                  />
+                  
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="h-10 w-10 rounded-xl cursor-pointer shadow-sm border-slate-200 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
+                    title="Impor CSV"
+                  >
+                    <Upload className="h-4 w-4" />
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={handleExport}
+                    className="h-10 w-10 rounded-xl cursor-pointer shadow-sm border-slate-200 text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-all"
+                    title="Ekspor CSV"
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {/* Table */}
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50/50 hover:bg-slate-50/50 border-none">
+                      <TableHead className="font-black text-slate-400 h-14 px-6 text-[10px] uppercase tracking-wider">Nama Kategori</TableHead>
+                      <TableHead className="font-black text-slate-400 h-14 px-4 text-center text-[10px] uppercase tracking-wider">Jumlah Layanan</TableHead>
+                      <TableHead className="font-black text-slate-400 h-14 px-6 text-center text-[10px] uppercase tracking-wider">Aksi</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      <TableRow><TableCell colSpan={3} className="py-20"><TableSkeleton rows={5} /></TableCell></TableRow>
+                    ) : data.items.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={3} className="py-20 text-center">
+                          <EmptyState title="Kategori Kosong" description="Tidak ada kategori yang ditemukan." />
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      data.items.map((item: any) => (
+                        <TableRow key={item.id} className={cn(
+                          "transition-all duration-300 border-b border-slate-50",
+                          editingItem?.id === item.id ? "bg-blue-50/40" : "hover:bg-slate-50/30"
+                        )}>
+                          <TableCell className="px-6 py-5">
+                            <div className="flex items-center gap-3">
+                              <div className="h-9 w-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-sm border border-emerald-100">
+                                <Tag className="h-4 w-4" />
+                              </div>
+                              <span className="font-bold text-slate-800 text-sm">{item.name}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center px-4">
+                            <div className="flex flex-col items-center justify-center">
+                              <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center mb-1">
+                                <FlaskConical className="h-4 w-4 text-slate-400" />
+                              </div>
+                              <span className="text-xs font-black text-slate-600">{item._count?.services || 0}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center px-6">
+                            <div className="flex justify-center gap-2">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-10 w-10 text-blue-600 hover:bg-blue-100 rounded-xl transition-all"
+                                onClick={() => handleEdit(item)}
+                                title="Edit"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-10 w-10 text-red-500 hover:bg-red-100 rounded-xl transition-all"
+                                onClick={() => handleDelete(item.id)}
+                                title="Hapus"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Pagination */}
+              <div className="p-6 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-4 bg-slate-50/30">
+                <div className="flex items-center gap-2">
+                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Tampilkan</p>
+                  <Select value={limit.toString()} onValueChange={(v) => { setLimit(Number(v)); setPage(1); }}>
+                    <SelectTrigger className="h-9 w-20 text-xs rounded-xl border-slate-200 bg-white shadow-sm font-bold">
+                      <SelectValue placeholder={limit.toString()} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10" className="font-bold">10</SelectItem>
+                      <SelectItem value="25" className="font-bold">25</SelectItem>
+                      <SelectItem value="50" className="font-bold">50</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="h-10 px-4 rounded-xl border-slate-200 bg-white shadow-sm font-bold text-slate-500"
+                    disabled={page === 1} 
+                    onClick={() => setPage(p => p - 1)}
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-1" />
+                    Prev
+                  </Button>
+                  <div className="text-xs font-black px-5 py-2 bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-200">
+                    {page} <span className="opacity-60 mx-1">/</span> {data.totalPages || 1}
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="h-10 px-4 rounded-xl border-slate-200 bg-white shadow-sm font-bold text-slate-500"
+                    disabled={page === data.totalPages} 
+                    onClick={() => setPage(p => p + 1)}
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
 
       {/* Delete Confirmation AlertDialog */}
       <AlertDialog open={deleteItemId !== null} onOpenChange={(open) => !open && setDeleteItemId(null)}>
-        <AlertDialogContent className="sm:max-w-[425px]">
+        <AlertDialogContent className="rounded-[2rem] border-none shadow-2xl p-8">
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
-              <Trash2 className="h-5 w-5" />
-              Konfirmasi Hapus
+            <div className="h-16 w-16 rounded-3xl bg-red-50 text-red-500 flex items-center justify-center mb-6 border border-red-100 shadow-inner">
+              <Trash2 className="h-8 w-8" />
+            </div>
+            <AlertDialogTitle className="text-2xl font-black text-slate-800 leading-tight">
+              Hapus Kategori?
             </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="pt-4 text-sm text-muted-foreground">
-                {deleteItemId === "bulk" ? (
-                  <>
-                    <p>Apakah Anda yakin ingin menghapus <strong className="text-slate-900">{selectedIds.length} kategori</strong> terpilih?</p>
-                    <p className="mt-2 text-sm text-amber-600 font-medium">⚠️ Tindakan ini tidak dapat dibatalkan.</p>
-                  </>
-                ) : (
-                  <>
-                    <p>Apakah Anda yakin ingin menghapus kategori ini?</p>
-                    <p className="mt-2 text-sm text-amber-600 font-medium">⚠️ Data akan dihapus permanen.</p>
-                  </>
-                )}
-              </div>
+            <AlertDialogDescription className="text-slate-500 pt-2 text-sm leading-relaxed">
+              Tindakan ini tidak dapat dibatalkan. Pastikan kategori ini tidak memiliki layanan aktif.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2">
-            <AlertDialogCancel className="cursor-pointer">Batal</AlertDialogCancel>
+          <AlertDialogFooter className="gap-3 pt-8">
+            <AlertDialogCancel className="rounded-2xl h-14 border-slate-200 text-slate-500 font-bold px-6">Batal</AlertDialogCancel>
             <AlertDialogAction
-              onClick={deleteItemId === "bulk" ? confirmBulkDelete : confirmDelete}
-              className="bg-red-600 hover:bg-red-700 cursor-pointer"
+              onClick={confirmDelete}
+              className="bg-red-600 hover:bg-red-700 rounded-2xl h-14 px-8 font-black shadow-xl shadow-red-200 transition-all active:scale-95"
             >
-              <Trash2 className="mr-2 h-4 w-4" /> Hapus
+              YA, HAPUS
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Import Dialog */}
-      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Upload className="h-5 w-5" />
-              Import Data CSV
-            </DialogTitle>
-            <DialogDescription>
-              Paste data CSV dengan format: Nama Kategori
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="bg-slate-50 p-3 rounded-lg text-xs font-mono">
-              <p className="font-semibold mb-1">Format:</p>
-              <p>Nama Kategori</p>
-              <p className="text-slate-500">Udara Ambien</p>
-              <p className="text-slate-500">Air Limbah</p>
-              <p className="text-slate-500">Makanan Minuman</p>
-            </div>
-            <textarea
-              className="w-full h-40 p-3 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-              placeholder="Paste CSV data here..."
-              value={importData}
-              onChange={(e) => setImportData(e.target.value)}
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsImportDialogOpen(false)}
-              className="cursor-pointer"
-            >
-              Batal
-            </Button>
-            <Button
-              onClick={handleImport}
-              className="bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
-            >
-              <Upload className="mr-2 h-4 w-4" /> Import
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Loading Overlay */}
-      <LoadingOverlay
-        isOpen={submitting}
-        title="Menyimpan Data..."
-        description="Kategori sedang disimpan"
-        variant="default"
-      />
+      {/* Full Page Overlay for initial loading if needed */}
+      {submitting && <LoadingOverlay isOpen={submitting} title="Sinkronisasi Data..." description="Sedang menyimpan perubahan kategori." />}
     </div>
   );
 }

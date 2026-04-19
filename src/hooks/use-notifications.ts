@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 
 export interface Notification {
@@ -26,19 +25,36 @@ export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [stats, setStats] = useState<NotificationStats>({ unreadCount: 0, totalCount: 0, readCount: 0 })
   const [loading, setLoading] = useState(true)
+  const [fetching, setFetching] = useState(false)
   const [page, setPage] = useState(1)
   const limit = 20
 
-  const supabase = createClient()
-
   // Fetch notifications
   const fetchNotifications = useCallback(async (unreadOnly = false) => {
+    if (fetching) return
+    
     try {
+      setFetching(true)
       const response = await fetch(`/api/notifications?page=${page}&limit=${limit}&unreadOnly=${unreadOnly}`)
+      
+      // Handle unauthorized or forbidden silently (session expired or glitch)
+      if (response.status === 401 || response.status === 403) {
+        setLoading(false)
+        setFetching(false)
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const data = await response.json()
 
       if (data.error) {
-        console.error('Error fetching notifications:', data.error)
+        // Only log serious errors, ignore common connection glitches in development/polling
+        if (!data.error.includes('connection')) {
+          console.error('Error fetching notifications:', data.error)
+        }
         return
       }
 
@@ -48,148 +64,100 @@ export function useNotifications() {
         totalCount: data.total || 0,
         readCount: (data.total || 0) - (data.unreadCount || 0)
       })
-    } catch (error) {
-      console.error('Error fetching notifications:', error)
+    } catch (error: any) {
+      // Quietly handle connection errors during polling
+      if (!error?.message?.includes('connection') && !error?.message?.includes('fetch')) {
+        console.error('Error fetching notifications:', error)
+      }
     } finally {
+      setFetching(false)
       setLoading(false)
     }
-  }, [page])
+  }, [page, limit, fetching])
 
-  // Fetch stats only
-  const fetchStats = useCallback(async () => {
+  // Mark as read
+  const markAsRead = useCallback(async (id: string) => {
     try {
-      const response = await fetch('/api/notifications', { method: 'OPTIONS' })
-      const data = await response.json()
-
-      if (!data.error) {
-        setStats(data)
-      }
-    } catch (error) {
-      console.error('Error fetching stats:', error)
-    }
-  }, [])
-
-  // Mark notification as read
-  const markAsRead = useCallback(async (notificationId: string) => {
-    try {
-      const response = await fetch('/api/notifications', {
+      await fetch('/api/notifications/mark-read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'markAsRead', notificationId })
+        body: JSON.stringify({ id }),
       })
 
-      if (response.ok) {
-        setNotifications(prev =>
-          prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n)
-        )
-        fetchStats()
-      }
+      setNotifications(prev =>
+        prev.map(n => n.id === id ? { ...n, is_read: true } : n)
+      )
+      setStats(prev => ({
+        ...prev,
+        unreadCount: prev.unreadCount - 1,
+        readCount: prev.readCount + 1
+      }))
     } catch (error) {
       console.error('Error marking notification as read:', error)
+      toast.error('Gagal menandai sudah dibaca')
     }
-  }, [fetchStats])
+  }, [])
 
   // Mark all as read
   const markAllAsRead = useCallback(async () => {
     try {
-      const response = await fetch('/api/notifications', {
+      await fetch('/api/notifications/mark-all-read', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'markAllAsRead' })
       })
 
-      if (response.ok) {
-        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
-        setStats(prev => ({ ...prev, unreadCount: 0 }))
-        toast.success('Semua notifikasi ditandai sebagai dibaca')
-      }
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
+      setStats(prev => ({ ...prev, unreadCount: 0, readCount: prev.totalCount }))
+      toast.success('Semua notifikasi ditandai sudah dibaca')
     } catch (error) {
       console.error('Error marking all as read:', error)
+      toast.error('Gagal menandai semua sudah dibaca')
     }
   }, [])
 
   // Delete notification
-  const deleteNotification = useCallback(async (notificationId: string) => {
+  const deleteNotification = useCallback(async (id: string) => {
     try {
-      const response = await fetch(`/api/notifications?id=${notificationId}`, {
-        method: 'DELETE'
+      await fetch('/api/notifications', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
       })
 
-      if (response.ok) {
-        setNotifications(prev => prev.filter(n => n.id !== notificationId))
-        fetchStats()
-        toast.success('Notifikasi dihapus')
-      }
+      setNotifications(prev => prev.filter(n => n.id !== id))
+      setStats(prev => ({
+        ...prev,
+        totalCount: prev.totalCount - 1,
+        unreadCount: prev.unreadCount - (notifications.find(n => n.id === id)?.is_read ? 0 : 1)
+      }))
     } catch (error) {
       console.error('Error deleting notification:', error)
+      toast.error('Gagal menghapus notifikasi')
     }
-  }, [fetchStats])
-
-  // Setup realtime subscription
-  useEffect(() => {
-    const channel = supabase
-      .channel('notifications')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'notifications'
-      }, (payload) => {
-        const newNotification = payload.new as Notification
-
-        // Add to notifications list
-        setNotifications(prev => [newNotification, ...prev])
-
-        // Update stats
-        setStats(prev => ({
-          ...prev,
-          unreadCount: prev.unreadCount + 1,
-          totalCount: prev.totalCount + 1
-        }))
-
-        // Play notification sound
-        playNotificationSound()
-
-        // Show toast notification
-        toast.info(newNotification.title, {
-          description: newNotification.message,
-          action: newNotification.link ? {
-            label: 'Buka',
-            onClick: () => window.location.href = newNotification.link!
-          } : undefined
-        })
-      })
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [supabase])
+  }, [notifications])
 
   // Initial load
   useEffect(() => {
     fetchNotifications()
-    fetchStats()
-  }, [fetchNotifications, fetchStats])
+  }, [fetchNotifications])
+
+  // Polling for new notifications (every 30 seconds)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchNotifications(true)
+    }, 30000)
+
+    return () => clearInterval(interval)
+  }, [fetchNotifications])
 
   return {
     notifications,
     stats,
     loading,
+    page,
+    setPage,
+    fetchNotifications,
     markAsRead,
     markAllAsRead,
-    deleteNotification,
-    refresh: fetchNotifications,
-    refreshStats: fetchStats
-  }
-}
-
-// Play notification sound
-function playNotificationSound() {
-  try {
-    const audio = new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU')
-    audio.volume = 0.2
-    audio.play().catch(() => {}) // Silent fail if autoplay blocked
-  } catch (error) {
-    // Ignore sound errors
+    deleteNotification
   }
 }

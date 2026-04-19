@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
 import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { headers } from 'next/headers'
-import { createClient } from '@/lib/supabase/server'
+import { auth } from '@/lib/auth'
 
 export async function getJobOrders(
   page = 1, 
@@ -348,25 +348,9 @@ export async function deleteJobOrderWithPhotos(jobOrderId: string) {
     if (!jobOrder) {
       return { error: 'Job Order tidak ditemukan' }
     }
-    
-    // Delete photos from Supabase Storage
-    const supabase = await createClient()
-    const photosRaw: any = jobOrder.sampling_assignment?.photos
-    const photos: any[] = Array.isArray(photosRaw) ? photosRaw : []
-    
-    if (photos.length > 0) {
-      const fileNames = photos.map((p: { url: string; name: string } | string) => {
-        const url = typeof p === 'string' ? p : p.url
-        return url.split('/').pop()?.split('?')[0] || ''
-      }).filter(Boolean)
-      
-      if (fileNames.length > 0) {
-        await supabase.storage
-          .from('sampling-photos')
-          .remove(fileNames)
-      }
-    }
-    
+
+    // TODO: Delete photos from Cloud Storage via API route
+
     // Delete sampling assignment (will cascade delete photos reference)
     if (jobOrder.sampling_assignment) {
       await prisma.samplingAssignment.delete({

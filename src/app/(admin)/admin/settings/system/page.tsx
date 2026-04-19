@@ -57,7 +57,7 @@ import {
   restoreSystemData,
   getRecentMaintenanceLogs
 } from "@/lib/actions/system";
-import { verifyPassword } from "@/lib/actions/auth";
+import { verifyPasswordAction } from "@/lib/actions/auth";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -182,7 +182,7 @@ export default function SystemMaintenancePage() {
 
   const handleRestore = async () => {
     if (!adminPassword) return setAdminPasswordError("Password wajib diisi");
-    const vResult = await verifyPassword(adminPassword);
+    const vResult = await verifyPasswordAction(adminPassword);
     if (vResult.error) return setAdminPasswordError(vResult.error);
 
     setIsRestoreConfirmOpen(false);
@@ -209,7 +209,7 @@ export default function SystemMaintenancePage() {
 
   const handleCleanup = async () => {
     if (!adminPassword) return setAdminPasswordError("Password wajib diisi");
-    const vResult = await verifyPassword(adminPassword);
+    const vResult = await verifyPasswordAction(adminPassword);
     if (vResult.error) return setAdminPasswordError(vResult.error);
 
     setIsDeleteDialogOpen(false);

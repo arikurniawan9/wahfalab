@@ -5,8 +5,8 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("POSTGRES_PRISMA_URL")
-  directUrl = env("POSTGRES_URL_NON_POOLING")
+  url  	    = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum UserRole {
@@ -128,6 +128,91 @@ enum JobStatus {
   paid
 }
 
+// Regulasi dan Standar Baku Mutu
+model Regulation {
+  id          String                @id @default(uuid())
+  name        String                @unique // Nama Peraturan (Contoh: Permen LHK No. 5 Tahun 2014)
+  description String?               @db.Text
+  category    String?               // Udara, Air, Tanah, dll
+  status      String                @default("active") // active, inactive
+  parameters  RegulationParameter[]
+  services    Service[]             // Relasi ke layanan lab yang menggunakan regulasi ini
+  lab_reports LabReport[]           // Relasi ke laporan yang menggunakan regulasi ini
+  created_at  DateTime              @default(now())
+  updated_at  DateTime              @updatedAt
+
+  @@map("regulations")
+  @@index([name])
+}
+
+model RegulationParameter {
+  id            String     @id @default(uuid())
+  regulation_id String
+  regulation    Regulation @relation(fields: [regulation_id], references: [id], onDelete: Cascade)
+  parameter     String     // Nama Parameter (Contoh: pH, COD, BOD)
+  unit          String?    // Satuan (Contoh: mg/L)
+  standard_value String?    // Nilai Baku Mutu (Contoh: 100, 6.0-9.0, < 0.01)
+  method        String?    // Metode Analisis (Contoh: SNI 6989.2:2009)
+  sequence      Int        @default(0)
+  
+  @@map("regulation_parameters")
+  @@index([regulation_id])
+}
+
+model LabReport {
+  id              String          @id @default(uuid())
+  report_number   String          @unique // No. LHU (Contoh: 123/LHU/WHL/III/2026)
+  date            DateTime        @default(now())
+  sampling_date   DateTime?       // Tanggal Sampling
+  received_date   DateTime?       // Tanggal Terima Sampel
+  analysis_date   DateTime?       // Tanggal Analisis
+  
+  // Data Klien (Manual/Linked)
+  client_name     String?
+  company_name    String?
+  address         String?         @db.Text
+  
+  // Data Sampel
+  sample_type     String?         // Jenis Sampel (Air Limbah, Air Bersih, dll)
+  sample_origin   String?         // Titik Sampling / Lokasi
+  sample_code     String?         // Kode Internal Sampel
+  
+  // Regulasi yang digunakan sebagai acuan baku mutu
+  regulation_id   String?
+  regulation      Regulation?     @relation(fields: [regulation_id], references: [id])
+  
+  status          String          @default("draft") // draft, reviewed, final
+  created_by      String?         // User ID yang membuat
+  
+  items           LabReportItem[]
+  job_order_id    String?         @unique // Opsional, jika berasal dari flow Job Order
+  job_order       JobOrder?       @relation(fields: [job_order_id], references: [id])
+  
+  created_at      DateTime        @default(now())
+  updated_at      DateTime        @updatedAt
+
+  @@map("lab_reports")
+  @@index([regulation_id])
+  @@index([report_number])
+}
+
+model LabReportItem {
+  id            String    @id @default(uuid())
+  report_id     String
+  report        LabReport @relation(fields: [report_id], references: [id], onDelete: Cascade)
+  
+  parameter     String    // Nama Parameter
+  unit          String?   // Satuan
+  standard_value String?  // Nilai Baku Mutu (diambil dari regulasi atau input manual)
+  result_value  String    // Hasil Pengujian
+  method        String?   // Metode Analisis
+  is_qualified  Boolean?  // Apakah memenuhi baku mutu?
+  sequence      Int       @default(0)
+  
+  @@map("lab_report_items")
+  @@index([report_id])
+}
+
 enum QuotationStatus {
   draft
   sent
@@ -192,6 +277,7 @@ model OperationalHistory {
 model Profile {
   id                   String              @id @default(uuid())
   email                String?             @unique
+  password             String?
   full_name            String?
   role                 UserRole            @default(client)
   company_name         String?
@@ -309,6 +395,7 @@ model Service {
 model Quotation {
   id               String          @id @default(uuid())
   quotation_number String          @unique
+  title            String?         // Judul Pengujian
   user_id          String
   profile          Profile         @relation(fields: [user_id], references: [id])
   date             DateTime        @default(now())
@@ -378,6 +465,7 @@ model JobOrder {
   sample_handover     SampleHandover?     // Berita Acara Serah Terima (BAST)
   payment             Payment?
   invoice             Invoice?
+  lab_report          LabReport?          // Laporan Hasil Uji (LHU)
 
   @@map("job_orders")
   @@index([quotation_id])
@@ -526,46 +614,6 @@ model LabAnalysis {
   @@index([analyst_id])
 }
 
-// Regulasi dan Standar Layanan
-model Regulation {
-  id                  String   @id @default(uuid())
-  name                String   @unique  // Nama regulasi (SNI, ISO, dll)
-  code                String?  // Kode regulasi
-  parameters_list     String[] @default([]) // List parameter utama (tags)
-  status              String   @default("active")  // active, inactive, draft
-  parameters          RegulationParameter[]
-  services            Service[]
-  created_at          DateTime @default(now())
-  updated_at          DateTime @default(now())
-
-  @@map("regulations")
-  @@index([name])
-  @@index([status])
-}
-
-// Parameter dalam Regulasi
-model RegulationParameter {
-  id                  String   @id @default(uuid())
-  regulation_id       String
-  regulation          Regulation @relation(fields: [regulation_id], references: [id], onDelete: Cascade)
-  parameter_name      String   // Nama parameter uji
-  method              String?  // Metode uji
-  unit                String?  // Satuan
-  limit_min           String?  // Batas minimum
-  limit_max           String?  // Batas maksimum
-  limit_value         String?  // Nilai batas (untuk single value)
-  requirements        String?  // Persyaratan
-  sequence            Int      @default(0)  // Urutan parameter
-  is_mandatory        Boolean  @default(true)  // Wajib atau tidak
-  notes               String?  // Catatan
-  created_at          DateTime @default(now())
-  updated_at          DateTime @default(now())
-
-  @@map("regulation_parameters")
-  @@index([regulation_id])
-  @@index([parameter_name])
-}
-
 model Equipment {
   id                String   @id @default(uuid())
   name              String
@@ -711,7 +759,7 @@ model Payment {
   bank_account      BankAccount?  @relation(fields: [bank_account_id], references: [id])
   payment_status    PaymentStatus @default(pending)
   transfer_reference String?      // Nomor referensi transfer
-  payment_proof_url  String?      // URL bukti transfer (Supabase Storage)
+  payment_proof_url  String?      // URL bukti transfer (Cloud Storage)
   paid_at           DateTime?
   handled_by        String?       // Finance user who processed
   handler           Profile?      @relation("FinanceHandler", fields: [handled_by], references: [id])
@@ -724,4 +772,4 @@ model Payment {
   @@index([payment_status])
   @@index([handled_by])
   @@index([bank_account_id])
-}
+  }

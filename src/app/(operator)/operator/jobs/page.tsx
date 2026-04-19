@@ -25,7 +25,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from "@/components/ui/dialog";
 import { ChemicalLoader, LoadingOverlay, LoadingButton } from "@/components/ui";
-import { createClient } from '@/lib/supabase/client';
+// TODO: Remove supabase client import - replaced with polling for real-time updates
+// import { createClient } from '@/lib/supabase/client';
 import { getJobOrders, getJobStats, getFieldOfficers } from "@/lib/actions/jobs";
 import { getFieldAssistants } from "@/lib/actions/field-assistant";
 import { createSamplingAssignment } from "@/lib/actions/sampling";
@@ -118,7 +119,7 @@ export default function OperatorJobProgressPage() {
     scheduled_date: "", scheduled_time: "08:00", location: "", notes: ""
   });
 
-  const supabase = createClient();
+  // TODO: Supabase client removed - using polling instead of real-time subscriptions
 
   const loadData = useCallback(async (showRefreshToast = false) => {
     if (showRefreshToast) setRefreshing(true);
@@ -138,9 +139,10 @@ export default function OperatorJobProgressPage() {
 
   useEffect(() => {
     loadData();
-    const channel = supabase.channel('job_updates').on('postgres_changes', { event: '*', schema: 'public', table: 'job_orders' }, () => loadData()).subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [loadData, supabase]);
+    // Replaced supabase real-time subscription with polling every 60 seconds
+    const interval = setInterval(() => loadData(), 60000);
+    return () => { clearInterval(interval); };
+  }, [loadData]);
 
   const openAssignDialog = (job: any) => {
     setSelectedJob(job);

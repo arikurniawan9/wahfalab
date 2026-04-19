@@ -1,1 +1,0 @@
-UPDATE company_profiles SET leader_name = 'Drs. Wahfa Lab, M.Si', updated_at = NOW() WHERE id = 'default-company-id';

@@ -19,11 +19,11 @@ import {
   Home,
   Heart
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
-import { 
-  getCachedLandingPageConfig, 
-  getCachedCompanyProfile, 
-  getCachedProfile 
+import { auth } from "@/lib/auth";
+import prisma from "@/lib/prisma";
+import {
+  getCachedLandingPageConfig,
+  getCachedCompanyProfile
 } from "@/lib/cache";
 import { AuthNav } from "./auth-nav";
 import { HeroSlider } from "@/components/layout/HeroSlider";
@@ -54,13 +54,15 @@ const ICON_MAP: Record<string, any> = {
 };
 
 export default async function LandingPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  
+  const session = await auth();
+  const user = session?.user || null;
+
   let role: string | null = null;
-  if (user) {
-    const profileApi = await getCachedProfile();
-    const profile = await profileApi.getProfileByUserId(user.id);
+  if (user?.email) {
+    const profile = await prisma.profile.findUnique({
+      where: { email: user.email },
+      select: { role: true }
+    });
     role = profile?.role || null;
   }
 

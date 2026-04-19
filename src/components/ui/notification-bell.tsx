@@ -17,7 +17,7 @@ import { id } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 
 export function NotificationBell() {
-  const { notifications, stats, loading, markAsRead, markAllAsRead, deleteNotification, refresh } = useNotifications()
+  const { notifications, stats, loading, markAsRead, markAllAsRead, deleteNotification, fetchNotifications } = useNotifications()
   const [open, setOpen] = useState(false)
   const router = useRouter()
 
@@ -91,7 +91,7 @@ export function NotificationBell() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={(e) => { e.stopPropagation(); refresh(); }}
+              onClick={(e) => { e.stopPropagation(); fetchNotifications(); }}
               className="h-8 cursor-pointer"
             >
               Refresh

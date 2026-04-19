@@ -29,7 +29,8 @@ import Link from "next/link";
 import { getAssignmentById } from "@/lib/actions/sampling";
 import { deleteJobOrderWithPhotos } from "@/lib/actions/jobs";
 import { cn } from "@/lib/utils";
-import { createClient } from '@/lib/supabase/client';
+// TODO: Replace supabase storage uploads with API endpoints/file upload utility
+// import { createClient } from '@/lib/supabase/client';
 import {
   Dialog,
   DialogContent,
@@ -106,33 +107,35 @@ export default function AdminSamplingDetailPage() {
 
     setIsProcessing(true);
     try {
-      const supabase = createClient();
-      const fileName = photoToDelete.url.split('/').pop()?.split('?')[0];
-      
-      // Delete from storage
-      if (fileName) {
-        await supabase.storage
-          .from('sampling-photos')
-          .remove([fileName]);
-      }
-      
+      // TODO: Replace supabase storage uploads with API endpoints/file upload utility
+      // const supabase = createClient();
+      // const fileName = photoToDelete.url.split('/').pop()?.split('?')[0];
+      // if (fileName) {
+      //   await supabase.storage
+      //     .from('sampling-photos')
+      //     .remove([fileName]);
+      // }
+
+      const { deleteSamplingPhoto } = await import('@/lib/actions/sampling');
+      await deleteSamplingPhoto(photoToDelete.url);
+
       // Delete from database
       const existingPhotos = assignment.photos || [];
       const updatedPhotos = existingPhotos.filter((p: { url: string; name: string } | string) => {
         const url = typeof p === 'string' ? p : p.url;
         return url !== photoToDelete.url;
       });
-      
+
       // Update UI immediately
       setAssignment({
         ...assignment,
         photos: updatedPhotos
       });
-      
+
       // Save to database in background
       const { saveSamplingPhotosWithNames } = await import('@/lib/actions/sampling');
       await saveSamplingPhotosWithNames(params.id as string, updatedPhotos as { url: string; name: string }[]);
-      
+
       toast.success('Foto berhasil dihapus');
       setDeletePhotoModalOpen(false);
       setPhotoToDelete(null);

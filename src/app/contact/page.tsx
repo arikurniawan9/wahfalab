@@ -1,30 +1,32 @@
 import React from "react";
-import { 
-  getCachedLandingPageConfig, 
-  getCachedCompanyProfile, 
-  getCachedProfile 
+import {
+  getCachedLandingPageConfig,
+  getCachedCompanyProfile,
 } from "@/lib/cache";
-import { 
-  Phone, 
-  Mail, 
-  MapPin, 
+import prisma from "@/lib/prisma";
+import {
+  Phone,
+  Mail,
+  MapPin,
   Instagram,
   Facebook,
   Twitter,
   Globe
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
 import { ContactForm } from "@/components/layout/ContactForm";
 import { LandingHeader } from "@/components/layout/LandingHeader";
 
 export default async function ContactPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  
+  const session = await auth();
+  const user = session?.user || null;
+
   let role: string | null = null;
-  if (user) {
-    const profileApi = await getCachedProfile();
-    const profile = await profileApi.getProfileByUserId(user.id);
+  if (user?.email) {
+    const profile = await prisma.profile.findUnique({
+      where: { email: user.email },
+      select: { role: true }
+    });
     role = profile?.role || null;
   }
 

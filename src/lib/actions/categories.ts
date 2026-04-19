@@ -191,7 +191,7 @@ export async function deleteManyCategories(ids: string[]) {
       include: { _count: { select: { services: true } } }
     })
 
-    const withServices = categories.filter(c => c._count.services > 0)
+    const withServices = categories.filter((c: any) => c._count.services > 0)
     if (withServices.length > 0) {
       throw new Error(
         `${withServices.length} kategori tidak dapat dihapus karena masih memiliki layanan`

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import prisma from "@/lib/prisma";
 import { getProfile } from "./auth";
+import { Prisma } from "@prisma/client";
 
 /**
  * Server Actions untuk Regulasi
@@ -11,24 +12,18 @@ import { getProfile } from "./auth";
 
 // Types
 export interface RegulationParameterInput {
-  parameter_name: string;
-  method?: string;
+  parameter: string;
   unit?: string;
-  limit_min?: string;
-  limit_max?: string;
-  limit_value?: string;
-  requirements?: string;
+  standard_value?: string;
+  method?: string;
   sequence?: number;
-  is_mandatory?: boolean;
-  notes?: string;
 }
 
 export interface RegulationInput {
   name: string;
-  code?: string;
-  parameters_list?: string[];
+  description?: string;
   status?: string;
-  parameters?: RegulationParameterInput[];
+  parameter_tags?: string[];
 }
 
 /**
@@ -57,10 +52,11 @@ export async function getRegulations(
     if (search) {
       where.OR = [
         { name: { contains: search, mode: "insensitive" as const } },
-        { code: { contains: search, mode: "insensitive" as const } },
         { 
-          parameters_list: { 
-            hasSome: [search] 
+          parameters: { 
+            some: { 
+              parameter: { contains: search, mode: "insensitive" as const } 
+            } 
           } 
         },
       ];
@@ -110,47 +106,6 @@ export async function getRegulations(
 }
 
 /**
- * Get regulasi by ID dengan parameters
- */
-export async function getRegulationById(id: string) {
-  try {
-    const profile = await getProfile();
-    
-    if (!profile) {
-      throw new Error("Unauthorized");
-    }
-
-    const regulation = await prisma.regulation.findUnique({
-      where: { id },
-      include: {
-        parameters: {
-          orderBy: { sequence: "asc" },
-        },
-        services: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-    });
-
-    if (!regulation) {
-      throw new Error("Regulation not found");
-    }
-
-    return { regulation, success: true };
-  } catch (error: any) {
-    console.error("Error getting regulation:", error);
-    return {
-      regulation: null,
-      success: false,
-      error: error.message,
-    };
-  }
-}
-
-/**
  * Create atau update regulasi
  */
 export async function createOrUpdateRegulation(data: RegulationInput, id?: string) {
@@ -163,15 +118,33 @@ export async function createOrUpdateRegulation(data: RegulationInput, id?: strin
 
     if (id) {
       // Update existing
-      const regulation = await prisma.regulation.update({
-        where: { id },
-        data: {
-          name: data.name,
-          code: data.code,
-          parameters_list: data.parameters_list || [],
-          status: data.status || "active",
-          updated_at: new Date(),
-        },
+      const regulation = await prisma.$transaction(async (tx) => {
+        const updated = await tx.regulation.update({
+          where: { id },
+          data: {
+            name: data.name,
+            description: data.description || null,
+            status: data.status || "active",
+            updated_at: new Date(),
+          },
+        });
+
+        if (data.parameter_tags) {
+          // Sync parameters: delete and recreate
+          await tx.regulationParameter.deleteMany({
+            where: { regulation_id: id }
+          });
+
+          await tx.regulationParameter.createMany({
+            data: data.parameter_tags.map((p, idx) => ({
+              regulation_id: id,
+              parameter: p,
+              sequence: idx
+            }))
+          });
+        }
+
+        return updated;
       });
 
       revalidatePath("/admin/regulations");
@@ -181,9 +154,14 @@ export async function createOrUpdateRegulation(data: RegulationInput, id?: strin
       const regulation = await prisma.regulation.create({
         data: {
           name: data.name,
-          code: data.code,
-          parameters_list: data.parameters_list || [],
+          description: data.description || null,
           status: data.status || "active",
+          parameters: {
+            create: (data.parameter_tags || []).map((p, idx) => ({
+              parameter: p,
+              sequence: idx
+            }))
+          }
         },
       });
 
@@ -192,45 +170,25 @@ export async function createOrUpdateRegulation(data: RegulationInput, id?: strin
     }
   } catch (error: any) {
     console.error("Error creating/updating regulation:", error);
-    return {
-      success: false,
-      error: error.message || "Gagal menyimpan regulasi",
-    };
-  }
-}
 
-/**
- * Update hanya daftar parameter (quick edit)
- */
-export async function updateParametersList(id: string, parameters: string[]) {
-  try {
-    const profile = await getProfile();
-    
-    if (!profile || !["admin", "operator"].includes(profile.role)) {
-      throw new Error("Unauthorized");
+    // Robust error handling for Unique Constraint (Duplicate Name)
+    // Checks both instanceof and common error properties for compatibility
+    if (error.code === 'P2002' || (error?.message && error.message.includes('Unique constraint failed'))) {
+      return {
+        success: false,
+        error: "Nama regulasi sudah terdaftar. Silakan gunakan nama lain agar data tetap unik.",
+      };
     }
 
-    const regulation = await prisma.regulation.update({
-      where: { id },
-      data: {
-        parameters_list: parameters,
-        updated_at: new Date(),
-      },
-    });
-
-    revalidatePath("/admin/regulations");
-    return { success: true, regulation };
-  } catch (error: any) {
-    console.error("Error updating parameters list:", error);
     return {
       success: false,
-      error: error.message || "Gagal memperbarui parameter",
+      error: error.message || "Terjadi kesalahan saat menyimpan regulasi",
     };
   }
 }
 
 /**
- * Create atau update parameter regulasi
+ * Create atau update parameter regulasi secara mendetail
  */
 export async function createOrUpdateRegulationParameter(
   regulationId: string,
@@ -245,79 +203,34 @@ export async function createOrUpdateRegulationParameter(
     }
 
     if (parameterId) {
-      // Update existing parameter
       const parameter = await prisma.regulationParameter.update({
         where: { id: parameterId },
         data: {
-          parameter_name: data.parameter_name,
+          parameter: data.parameter,
           method: data.method,
           unit: data.unit,
-          limit_min: data.limit_min,
-          limit_max: data.limit_max,
-          limit_value: data.limit_value,
-          requirements: data.requirements,
+          standard_value: data.standard_value,
           sequence: data.sequence || 0,
-          is_mandatory: data.is_mandatory,
-          notes: data.notes,
-          updated_at: new Date(),
         },
       });
-
       revalidatePath("/admin/regulations");
       return { success: true, parameter };
     } else {
-      // Create new parameter
       const parameter = await prisma.regulationParameter.create({
         data: {
           regulation_id: regulationId,
-          parameter_name: data.parameter_name,
+          parameter: data.parameter,
           method: data.method,
           unit: data.unit,
-          limit_min: data.limit_min,
-          limit_max: data.limit_max,
-          limit_value: data.limit_value,
-          requirements: data.requirements,
+          standard_value: data.standard_value,
           sequence: data.sequence || 0,
-          is_mandatory: data.is_mandatory !== false,
-          notes: data.notes,
         },
       });
-
       revalidatePath("/admin/regulations");
       return { success: true, parameter };
     }
   } catch (error: any) {
-    console.error("Error creating/updating parameter:", error);
-    return {
-      success: false,
-      error: error.message || "Gagal menyimpan parameter",
-    };
-  }
-}
-
-/**
- * Delete parameter regulasi
- */
-export async function deleteRegulationParameter(parameterId: string) {
-  try {
-    const profile = await getProfile();
-    
-    if (!profile || !["admin", "operator"].includes(profile.role)) {
-      throw new Error("Unauthorized");
-    }
-
-    await prisma.regulationParameter.delete({
-      where: { id: parameterId },
-    });
-
-    revalidatePath("/admin/regulations");
-    return { success: true };
-  } catch (error: any) {
-    console.error("Error deleting parameter:", error);
-    return {
-      success: false,
-      error: error.message || "Gagal menghapus parameter",
-    };
+    return { success: false, error: error.message || "Gagal menyimpan parameter" };
   }
 }
 
@@ -332,7 +245,6 @@ export async function deleteRegulation(id: string) {
       throw new Error("Unauthorized");
     }
 
-    // Check if regulation is used by services
     const servicesCount = await prisma.service.count({
       where: { regulation_id: id },
     });
@@ -360,7 +272,53 @@ export async function deleteRegulation(id: string) {
 }
 
 /**
- * Get semua regulasi untuk dropdown (tanpa pagination)
+ * Import regulations from JSON data (parsed from CSV)
+ */
+export async function importRegulations(items: any[]) {
+  try {
+    const profile = await getProfile();
+    if (!profile || !["admin", "operator"].includes(profile.role)) {
+      throw new Error("Unauthorized");
+    }
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const item of items) {
+      try {
+        const name = item.name || item.Name;
+        if (!name) continue;
+
+        const description = item.description || item.Description || "";
+        const status = (item.status || item.Status || "active").toLowerCase();
+        
+        // Extract parameters from string (comma separated)
+        const paramStr = item.parameters || item.Parameters || "";
+        const parameter_tags = paramStr ? paramStr.split(',').map((p: string) => p.trim()).filter((p: string) => p !== "") : [];
+
+        await createOrUpdateRegulation({
+          name,
+          description,
+          status,
+          parameter_tags
+        });
+        
+        successCount++;
+      } catch (err) {
+        console.error("Error importing item:", err);
+        errorCount++;
+      }
+    }
+
+    revalidatePath("/admin/regulations");
+    return { success: true, successCount, errorCount };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Get semua regulasi untuk dropdown
  */
 export async function getAllRegulationsForDropdown() {
   try {
@@ -369,59 +327,12 @@ export async function getAllRegulationsForDropdown() {
       select: {
         id: true,
         name: true,
-        code: true,
-        parameters_list: true,
       },
       orderBy: { name: "asc" },
     });
 
     return { regulations, success: true };
   } catch (error: any) {
-    console.error("Error getting regulations for dropdown:", error);
-    return {
-      regulations: [],
-      success: false,
-      error: error.message,
-    };
-  }
-}
-
-/**
- * Get regulasi dengan parameters by ID untuk dropdown
- */
-export async function getRegulationWithParameters(id: string) {
-  try {
-    const regulation = await prisma.regulation.findUnique({
-      where: { id },
-      include: {
-        parameters: {
-          orderBy: { sequence: "asc" },
-          select: {
-            id: true,
-            parameter_name: true,
-            method: true,
-            unit: true,
-            limit_min: true,
-            limit_max: true,
-            limit_value: true,
-            requirements: true,
-            is_mandatory: true,
-          },
-        },
-      },
-    });
-
-    if (!regulation) {
-      throw new Error("Regulation not found");
-    }
-
-    return { regulation, success: true };
-  } catch (error: any) {
-    console.error("Error getting regulation with parameters:", error);
-    return {
-      regulation: null,
-      success: false,
-      error: error.message,
-    };
+    return { regulations: [], success: false, error: error.message };
   }
 }

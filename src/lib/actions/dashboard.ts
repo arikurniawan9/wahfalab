@@ -54,7 +54,7 @@ export async function getAdminDashboardStats() {
 
   return {
     quotationTrend: monthlyQuotations.reverse(),
-    jobStatus: jobStatusDistribution.map((item) => ({
+    jobStatus: jobStatusDistribution.map((item: any) => ({
       name: item.status.replace(/_/g, " "),
       value: item._count.id,
     })),

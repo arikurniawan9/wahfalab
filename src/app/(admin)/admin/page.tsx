@@ -10,7 +10,7 @@
 // 7. ✅ Mobile optimized layout
 // ============================================================================
 
-import { createClient } from '@/lib/supabase/server'
+import { auth } from "@/lib/auth"
 import { redirect } from 'next/navigation'
 import prisma from '@/lib/prisma'
 import { 
@@ -57,8 +57,8 @@ const statCardIcons = {
 export const dynamic = 'force-dynamic'
 
 export default async function PremiumAdminDashboard() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const session = await auth()
+  const user = session?.user
 
   if (!user) redirect('/login')
 

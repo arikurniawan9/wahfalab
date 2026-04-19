@@ -3,19 +3,15 @@
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
-import { createClient } from '@/lib/supabase/server'
+import { auth } from '@/lib/auth'
 import { generateInvoice } from '@/lib/actions/payment'
 import { notifySamplingCompleted, notifyInvoiceGenerated, notifyJobAssigned } from '@/lib/actions/notifications'
-
-import fs from 'fs'
-import path from 'path'
+import { STORAGE_BUCKETS, deleteFromSupabaseStorage, uploadToSupabaseStorage } from '@/lib/supabase/storage'
 
 export async function uploadSamplingPdf(assignmentId: string, file: File) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
+    const session = await auth()
+    if (!session?.user) {
       return { error: 'Unauthorized' }
     }
 
@@ -24,19 +20,13 @@ export async function uploadSamplingPdf(assignmentId: string, file: File) {
       return { error: 'Hanya file PDF yang diizinkan' }
     }
 
-    const fileName = `sampling-${assignmentId}-${Date.now()}.pdf`
-    const uploadDir = path.join(process.cwd(), 'public', 'surat-tugas')
-    
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true })
-    }
-
-    const filePath = path.join(uploadDir, fileName)
-    const arrayBuffer = await file.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
-    
-    fs.writeFileSync(filePath, buffer)
-    const publicUrl = `/surat-tugas/${fileName}`
+    const { publicUrl } = await uploadToSupabaseStorage({
+      bucket: STORAGE_BUCKETS.travelOrders,
+      folder: `sampling-documents/${assignmentId}`,
+      file,
+      allowedMimeTypes: ['application/pdf'],
+      maxSizeBytes: 10 * 1024 * 1024,
+    })
 
     await prisma.samplingAssignment.update({
       where: { id: assignmentId },
@@ -61,10 +51,7 @@ export async function deleteSamplingPdf(assignmentId: string) {
     })
 
     if (assignment?.signed_travel_order_url) {
-      const filePath = path.join(process.cwd(), 'public', assignment.signed_travel_order_url)
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath)
-      }
+      await deleteFromSupabaseStorage(STORAGE_BUCKETS.travelOrders, assignment.signed_travel_order_url)
 
       await prisma.samplingAssignment.update({
         where: { id: assignmentId },
@@ -75,6 +62,71 @@ export async function deleteSamplingPdf(assignmentId: string) {
     revalidatePath(`/field/assignments/${assignmentId}`)
     return { success: true }
   } catch (error: any) {
+    return { error: error.message }
+  }
+}
+
+export async function uploadSamplingPhotos(assignmentId: string, formData: FormData) {
+  try {
+    const session = await auth()
+    if (!session?.user?.email) {
+      return { error: 'Unauthorized' }
+    }
+
+    const profile = await prisma.profile.findUnique({
+      where: { email: session.user.email },
+      select: { id: true, role: true },
+    })
+
+    const assignment = await prisma.samplingAssignment.findUnique({
+      where: { id: assignmentId },
+      select: { field_officer_id: true, assistants: { select: { id: true } } }
+    })
+
+    const isOwner =
+      assignment?.field_officer_id === profile?.id ||
+      assignment?.assistants.some((assistant: any) => assistant.id === profile?.id) ||
+      ['admin', 'operator'].includes(profile?.role || '')
+
+    if (!assignment || !isOwner) {
+      return { error: 'Forbidden' }
+    }
+
+    const files = formData.getAll('files').filter((entry): entry is File => entry instanceof File)
+    if (files.length === 0) {
+      return { error: 'Tidak ada file yang diunggah' }
+    }
+
+    const uploaded = await Promise.all(
+      files.map(async (file) => {
+        const { publicUrl } = await uploadToSupabaseStorage({
+          bucket: STORAGE_BUCKETS.samplingPhotos,
+          folder: `assignments/${assignmentId}`,
+          file,
+          allowedMimeTypes: ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'],
+          maxSizeBytes: 10 * 1024 * 1024,
+        })
+
+        return {
+          url: publicUrl,
+          name: file.name.replace(/\.[^/.]+$/, ''),
+        }
+      })
+    )
+
+    return { success: true, photos: uploaded }
+  } catch (error: any) {
+    console.error('Error uploading sampling photos:', error)
+    return { error: error.message }
+  }
+}
+
+export async function deleteSamplingPhoto(photoUrl: string) {
+  try {
+    await deleteFromSupabaseStorage(STORAGE_BUCKETS.samplingPhotos, photoUrl)
+    return { success: true }
+  } catch (error: any) {
+    console.error('Error deleting sampling photo:', error)
     return { error: error.message }
   }
 }
@@ -107,18 +159,18 @@ export async function getSamplingAssignments(fieldOfficerId: string) {
 }
 
 export async function getMySamplingAssignments(page = 1, limit = 10, status?: string) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
-    return { error: 'Unauthorized' }
-  }
+  const session = await auth()
+  if (!session?.user) return { error: 'Unauthorized' }
+  const profile = await prisma.profile.findUnique({
+    where: { email: session.user.email! },
+    select: { id: true, role: true }
+  })
 
   const skip = (page - 1) * limit
   const where: any = {
     OR: [
-      { field_officer_id: user.id },
-      { assistants: { some: { id: user.id } } }
+      { field_officer_id: profile?.id },
+      { assistants: { some: { id: profile?.id } } }
     ]
   }
 
@@ -168,14 +220,14 @@ export async function completeSamplingAssignment(
   notes?: string
 ) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const session = await auth()
+    if (!session?.user) return { error: 'Unauthorized' }
+    const profile = await prisma.profile.findUnique({
+      where: { email: session.user.email! },
+      select: { id: true, role: true }
+    })
 
-    if (!user) {
-      return { error: 'Unauthorized' }
-    }
-
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       // 1. Update sampling assignment status
       const assignment = await tx.samplingAssignment.update({
         where: { id: assignmentId },
@@ -214,7 +266,7 @@ export async function completeSamplingAssignment(
       // 3. Auto-generate Invoice (Draft)
       const quotation = assignment.job_order.quotation
       const invoiceNumber = `INV-${Date.now()}`
-      
+
       const invoice = await tx.invoice.create({
         data: {
           invoice_number: invoiceNumber,
@@ -223,7 +275,7 @@ export async function completeSamplingAssignment(
           amount: quotation.total_amount,
           status: 'draft',
           due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days
-          created_by: user.id
+          created_by: profile?.id
         }
       })
 
@@ -261,10 +313,12 @@ export async function completeSamplingAssignment(
 }
 
 export async function rejectSamplingAssignment(assignmentId: string, reason: string) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) return { error: 'Unauthorized' }
+  const session = await auth()
+  if (!session?.user) return { error: 'Unauthorized' }
+  const profile = await prisma.profile.findUnique({
+    where: { email: session.user.email! },
+    select: { id: true, role: true }
+  })
 
   try {
     const assignment = await prisma.samplingAssignment.findUnique({
@@ -272,7 +326,7 @@ export async function rejectSamplingAssignment(assignmentId: string, reason: str
       include: { job_order: true }
     })
 
-    if (!assignment || assignment.field_officer_id !== user.id) {
+    if (!assignment || assignment.field_officer_id !== profile?.id) {
       return { error: 'Forbidden' }
     }
 
@@ -303,12 +357,12 @@ export async function rejectSamplingAssignment(assignmentId: string, reason: str
 }
 
 export async function updateSamplingStatus(assignmentId: string, status: any, notes?: string) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
-    return { error: 'Unauthorized' }
-  }
+  const session = await auth()
+  if (!session?.user) return { error: 'Unauthorized' }
+  const profile = await prisma.profile.findUnique({
+    where: { email: session.user.email! },
+    select: { id: true, role: true }
+  })
 
   // Verifikasi bahwa assignment ini milik field officer yang login
   const assignment = await prisma.samplingAssignment.findUnique({
@@ -316,7 +370,7 @@ export async function updateSamplingStatus(assignmentId: string, status: any, no
     select: { field_officer_id: true, job_order_id: true }
   })
 
-  if (!assignment || assignment.field_officer_id !== user.id) {
+  if (!assignment || assignment.field_officer_id !== profile?.id) {
     return { error: 'Forbidden' }
   }
 
@@ -348,7 +402,7 @@ export async function updateSamplingStatus(assignmentId: string, status: any, no
       where: { id: assignment.job_order_id },
       data: {
         status: 'analysis_ready',
-        notes: `Sampling completed by ${user.email || 'field officer'} - ${notes || ''}`
+        notes: `Sampling completed by ${session.user.email || 'field officer'} - ${notes || ''}`
       },
       include: {
         quotation: {
@@ -374,7 +428,7 @@ export async function updateSamplingStatus(assignmentId: string, status: any, no
           amount: quotation.total_amount,
           status: 'sent',
           due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-          created_by: user.id
+          created_by: profile?.id
         }
       })
 
@@ -397,7 +451,7 @@ export async function updateSamplingStatus(assignmentId: string, status: any, no
       where: { id: assignment.job_order_id },
       data: {
         status: 'sampling',
-        notes: `Tugas diterima oleh ${user.email || 'field officer'}`
+        notes: `Tugas diterima oleh ${session.user.email || 'field officer'}`
       }
     })
   } else if (status === 'pending') {
@@ -421,12 +475,12 @@ export async function updateSamplingStatus(assignmentId: string, status: any, no
 }
 
 export async function updateSamplingPhotos(assignmentId: string, photoUrls: string[]) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
-    return { error: 'Unauthorized' }
-  }
+  const session = await auth()
+  if (!session?.user) return { error: 'Unauthorized' }
+  const profile = await prisma.profile.findUnique({
+    where: { email: session.user.email! },
+    select: { id: true, role: true }
+  })
 
   // Verifikasi ownership
   const assignment = await prisma.samplingAssignment.findUnique({
@@ -434,7 +488,7 @@ export async function updateSamplingPhotos(assignmentId: string, photoUrls: stri
     select: { field_officer_id: true, photos: true }
   })
 
-  if (!assignment || assignment.field_officer_id !== user.id) {
+  if (!assignment || assignment.field_officer_id !== profile?.id) {
     return { error: 'Forbidden' }
   }
 
@@ -456,12 +510,12 @@ export async function updateSamplingPhotos(assignmentId: string, photoUrls: stri
 }
 
 export async function saveSamplingPhotosWithNames(assignmentId: string, photos: { url: string; name: string }[]) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
-    return { error: 'Unauthorized' }
-  }
+  const session = await auth()
+  if (!session?.user) return { error: 'Unauthorized' }
+  const profile = await prisma.profile.findUnique({
+    where: { email: session.user.email! },
+    select: { id: true, role: true }
+  })
 
   // Verifikasi ownership
   const assignment = await prisma.samplingAssignment.findUnique({
@@ -469,7 +523,7 @@ export async function saveSamplingPhotosWithNames(assignmentId: string, photos: 
     select: { field_officer_id: true }
   })
 
-  if (!assignment || assignment.field_officer_id !== user.id) {
+  if (!assignment || assignment.field_officer_id !== profile?.id) {
     return { error: 'Forbidden' }
   }
 
@@ -489,12 +543,12 @@ export async function saveSamplingPhotosWithNames(assignmentId: string, photos: 
 }
 
 export async function getAssignmentById(assignmentId: string) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
-    return null
-  }
+  const session = await auth()
+  if (!session?.user) return null
+  const profile = await prisma.profile.findUnique({
+    where: { email: session.user.email! },
+    select: { id: true, role: true }
+  })
 
   // Cari berdasarkan ID Assignment atau Job Order ID
   const assignment = await prisma.samplingAssignment.findFirst({
@@ -539,17 +593,12 @@ export async function getAssignmentById(assignmentId: string) {
   }
 
   // Admin bisa akses semua assignment
-  const profile = await prisma.profile.findUnique({
-    where: { id: user.id },
-    select: { role: true }
-  })
-
   if (profile?.role === 'admin' || profile?.role === 'operator') {
     return serializeData(assignment)
   }
 
   // Field officer atau assistant hanya bisa akses assignment mereka sendiri
-  if (assignment.field_officer_id !== user.id && !assignment.assistants.some((a: any) => a.id === user.id)) {
+  if (assignment.field_officer_id !== profile?.id && !assignment.assistants.some((a: any) => a.id === profile?.id)) {
     return null
   }
 

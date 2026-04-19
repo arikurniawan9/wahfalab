@@ -34,8 +34,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from '@/components/ui/badge';
-import { createClient } from "@/lib/supabase/client";
-import { getProfile, updateProfile } from "@/lib/actions/auth";
+import { getProfile, updateProfile, updatePasswordAction } from "@/lib/actions/auth";
 import { toast } from "sonner";
 import { ChemicalLoader } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -63,8 +62,6 @@ export default function ClientSettingsPage() {
     newPassword: "",
     confirmPassword: ""
   });
-
-  const supabase = createClient();
 
   useEffect(() => {
     loadProfile();
@@ -129,13 +126,14 @@ export default function ClientSettingsPage() {
     setSaving(true);
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: passwordData.newPassword
+      const result = await updatePasswordAction({
+        current_password: passwordData.currentPassword,
+        new_password: passwordData.newPassword
       });
 
-      if (error) {
+      if (result.error) {
         toast.error("Gagal ubah password", {
-          description: error.message
+          description: result.error
         });
       } else {
         toast.success("✅ Password berhasil diubah");

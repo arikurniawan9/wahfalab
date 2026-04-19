@@ -26,10 +26,13 @@ import {
   updateSamplingStatus, 
   saveSamplingPhotosWithNames,
   uploadSamplingPdf,
-  deleteSamplingPdf
+  deleteSamplingPdf,
+  uploadSamplingPhotos,
+  deleteSamplingPhoto
 } from "@/lib/actions/sampling";
 import { getTravelOrderByAssignmentId } from "@/lib/actions/travel-order";
-import { createClient } from "@/lib/supabase/client";
+// TODO: Implement file upload API route for sampling photos
+// import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { pdf } from "@react-pdf/renderer";
 import { TravelOrderPDF } from "@/components/pdf/TravelOrderPDF";
@@ -57,7 +60,8 @@ export default function AssignmentDetailPage() {
   const [removedPhotoUrls, setRemovedPhotoUrls] = useState<string[]>([]);
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const pdfInputRef = React.useRef<HTMLInputElement>(null);
-  const supabase = createClient();
+  // TODO: Use supabase client alternative for storage - implement via API routes
+  // const supabase = createClient();
 
   const loadData = useCallback(async () => {
     try {
@@ -129,20 +133,21 @@ export default function AssignmentDetailPage() {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     toast.info("Sedang mengunggah foto...");
+    try {
+      const formData = new FormData();
+      Array.from(files).forEach((file) => formData.append("files", file));
 
-    const uploadPromises = Array.from(files).map(async (file) => {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${params.id}-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const { data, error } = await supabase.storage.from('sampling-photos').upload(fileName, file);
-      if (error) return null;
-      const { data: { publicUrl } } = supabase.storage.from('sampling-photos').getPublicUrl(fileName);
-      return { url: publicUrl, name: file.name.replace(/\.[^/.]+$/, '') };
-    });
+      const result = await uploadSamplingPhotos(params.id as string, formData);
+      if (result.error || !result.photos) {
+        throw new Error(result.error || "Gagal upload foto");
+      }
 
-    const results = (await Promise.all(uploadPromises)).filter(Boolean) as { url: string; name: string }[];
-    if (results.length > 0) {
-      setPhotos([...photos, ...results]);
-      toast.success(`${results.length} foto siap disimpan`);
+      setPhotos([...photos, ...result.photos]);
+      toast.success(`${result.photos.length} foto berhasil diunggah`);
+    } catch (error: any) {
+      toast.error(error.message || "Gagal upload foto");
+    } finally {
+      if (e.target) e.target.value = "";
     }
   };
 
@@ -153,6 +158,10 @@ export default function AssignmentDetailPage() {
 
   const handleSaveAllData = async () => {
     try {
+      if (removedPhotoUrls.length > 0) {
+        await Promise.all(removedPhotoUrls.map((url) => deleteSamplingPhoto(url)));
+      }
+
       // Sinkronkan foto yang sudah ada dan yang baru, filter yang ditandai hapus
       const allPhotos = [...(assignment.photos || []), ...photos]
         .filter((p: any) => {

@@ -159,6 +159,11 @@ export default function QuotationDetailPage() {
                 <statusCfg.icon className="h-3 w-3 mr-2" /> {statusCfg.label}
               </Badge>
             </div>
+            {quotation.title && (
+              <p className="text-emerald-700 text-sm font-black uppercase tracking-tight mb-1 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-100 w-fit">
+                {quotation.title}
+              </p>
+            )}
             <p className="text-slate-400 text-[11px] font-bold uppercase tracking-widest flex items-center gap-2">
               <Calendar className="h-3.5 w-3.5" /> Diterbitkan: {new Date(quotation.date).toLocaleDateString("id-ID", { day: 'numeric', month: 'long', year: 'numeric' })}
             </p>

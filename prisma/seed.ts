@@ -1,20 +1,10 @@
-import { createClient } from '@supabase/supabase-js'
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient } from '../src/generated/prisma'
 import * as dotenv from 'dotenv'
+import bcrypt from 'bcryptjs'
 
 dotenv.config({ path: '.env.local' })
 
 const prisma = new PrismaClient()
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-})
 
 async function main() {
   const adminEmail = 'admin@wahfalab.com'
@@ -23,53 +13,30 @@ async function main() {
 
   console.log('🚀 Memulai seeding admin...')
 
-  // 1. Create user in Supabase Auth
-  const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
-    email: adminEmail,
-    password: adminPassword,
-    email_confirm: true,
-    user_metadata: { full_name: adminName }
+  // Hash password
+  const hashedPassword = await bcrypt.hash(adminPassword, 12)
+
+  // Create or update admin profile
+  const admin = await prisma.profile.upsert({
+    where: { email: adminEmail },
+    update: {
+      role: 'admin',
+      full_name: adminName,
+      password: hashedPassword
+    },
+    create: {
+      full_name: adminName,
+      role: 'admin',
+      email: adminEmail,
+      password: hashedPassword
+    }
   })
 
-  if (authError) {
-    if (authError.message.includes('already registered')) {
-      console.log('ℹ️ User admin sudah terdaftar di Supabase Auth.')
-    } else {
-      console.error('❌ Gagal membuat user auth:', authError.message)
-      // Don't return, try to find the existing user instead
-    }
-  }
+  console.log(`✅ Admin berhasil disiapkan!`)
+  console.log(`📧 Email: ${adminEmail}`)
+  console.log(`🔑 Password: ${adminPassword}`)
 
-  // 2. Get user ID (either newly created or existing)
-  let userId = authUser?.user?.id
-
-  if (!userId) {
-    const { data: existingUsers } = await supabase.auth.admin.listUsers()
-    userId = existingUsers.users.find(u => u.email === adminEmail)?.id
-  }
-
-  if (userId) {
-    // 3. Create or Update Profile in Prisma
-    await prisma.profile.upsert({
-      where: { id: userId },
-      update: {
-        role: 'admin',
-        full_name: adminName,
-        email: adminEmail
-      },
-      create: {
-        id: userId,
-        full_name: adminName,
-        role: 'admin',
-        email: adminEmail
-      }
-    })
-    console.log(`✅ Admin berhasil disiapkan!`)
-    console.log(`📧 Email: ${adminEmail}`)
-    console.log(`🔑 Password: ${adminPassword}`)
-  }
-
-  // 4. Create Default Company Profile
+  // Create Default Company Profile
   console.log('🏢 Menyiapkan data perusahaan...')
   await prisma.companyProfile.upsert({
     where: { id: 'default-company-id' },
@@ -88,7 +55,7 @@ async function main() {
   })
   console.log('✅ Pengaturan perusahaan berhasil disiapkan!')
 
-  // 5. Create Services
+  // Create Services
   console.log('🧪 Seeding layanan laboratorium...')
   const category = await prisma.serviceCategory.upsert({
     where: { name: 'Kualitas Udara' },
@@ -98,38 +65,23 @@ async function main() {
 
   await prisma.service.createMany({
     data: [
-      { category_id: category.id, name: 'Pengujian Udara Ambien (24 Jam)', price: 1500000 },
-      { category_id: category.id, name: 'Pengujian Emisi Sumber Tidak Bergerak', price: 2500000 },
-      { category_id: category.id, name: 'Kebisingan Lingkungan', price: 500000 },
+      {
+        name: 'Uji Emisi Sumber Tidak Bergerak',
+        price: 5000000,
+        category: category.name,
+        unit: 'titik sampling'
+      },
+      {
+        name: 'Uji Kualitas Udara Ambient',
+        price: 3000000,
+        category: category.name,
+        unit: 'parameter'
+      }
     ],
     skipDuplicates: true
   })
 
-  // 6. Create Equipment
-  console.log('🔧 Seeding peralatan...')
-  await prisma.equipment.createMany({
-    data: [
-      { name: 'High Volume Air Sampler (HVAS)', price: 500000, specification: 'Tisch Environmental', unit: 'hari' },
-      { name: 'Gas Analyzer', price: 750000, specification: 'Testo 350', unit: 'hari' },
-      { name: 'Sound Level Meter', price: 250000, specification: 'Extech', unit: 'hari' },
-    ],
-    skipDuplicates: true
-  })
-
-  // 7. Create Operational Catalog
-  console.log('🚗 Seeding katalog operasional...')
-  await prisma.operationalCatalog.createMany({
-    data: [
-      { category: 'perdiem', name: 'Uang Harian Dalam Kota', price: 150000, location: 'Dalam Kota' },
-      { category: 'perdiem', name: 'Uang Harian Luar Kota', price: 250000, location: 'Luar Kota' },
-      { category: 'transport', name: 'Sewa Kendaraan Operasional', price: 600000, unit: 'hari' },
-      { category: 'transport', name: 'Biaya BBM & Tol (Lumpsum)', price: 300000, unit: 'trip' },
-      { category: 'transport', name: 'Tiket Pesawat (Estimasi)', price: 2000000, unit: 'pax' },
-    ],
-    skipDuplicates: true
-  })
-  
-  console.log('✨ Seeding selesai!')
+  console.log('✅ Layanan laboratorium berhasil di-seed!')
 }
 
 main()

@@ -1,7 +1,7 @@
 import { Sidebar } from "@/components/layout/Sidebar";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { Header } from "@/components/layout/Header";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 
@@ -10,8 +10,8 @@ export default async function FinanceLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const session = await auth();
+  const user = session?.user || null;
 
   if (!user) {
     redirect("/login");
@@ -19,12 +19,12 @@ export default async function FinanceLayout({
 
   // Double Check Role di level Server Component (Absolute Security)
   const profile = await prisma.profile.findUnique({
-    where: { id: user.id },
+    where: { email: user.email! },
     select: { role: true, full_name: true, email: true }
   });
 
   if (!profile || (profile.role !== "finance" && profile.role !== "admin")) {
-    console.log("Layout Security - Access Denied for ID:", user.id, "Role:", profile?.role);
+    console.log("Layout Security - Access Denied for Email:", user.email, "Role:", profile?.role);
     redirect("/access-denied");
   }
 

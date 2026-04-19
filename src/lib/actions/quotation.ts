@@ -19,6 +19,7 @@ export async function getQuotationById(id: string) {
       select: {
         id: true,
         quotation_number: true,
+        title: true,
         date: true,
         status: true,
         subtotal: true,
@@ -113,6 +114,7 @@ export async function getQuotations(
       select: {
         id: true,
         quotation_number: true,
+        title: true,
         date: true,
         status: true,
         subtotal: true,
@@ -289,7 +291,7 @@ export async function deleteQuotation(id: string, requesterId?: string, requeste
     // Admin/Operator can delete directly
     // 1. Hapus penugasan sampling terkait jika ada (melalui JobOrder)
     const jobOrders = await prisma.jobOrder.findMany({ where: { quotation_id: id } });
-    const jobIds = jobOrders.map(j => j.id);
+    const jobIds = jobOrders.map((j: any) => j.id);
 
     if (jobIds.length > 0) {
       await prisma.samplingAssignment.deleteMany({ where: { job_order_id: { in: jobIds } } });
@@ -315,9 +317,9 @@ export async function deleteQuotation(id: string, requesterId?: string, requeste
 export async function deleteManyQuotations(ids: string[]) {
   try {
     // Gunakan transaksi untuk memastikan semua terhapus atau tidak sama sekali
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: any) => {
       const jobOrders = await tx.jobOrder.findMany({ where: { quotation_id: { in: ids } } });
-      const jobIds = jobOrders.map(j => j.id);
+      const jobIds = jobOrders.map((j: any) => j.id);
 
       if (jobIds.length > 0) {
         await tx.samplingAssignment.deleteMany({ where: { job_order_id: { in: jobIds } } });
@@ -350,6 +352,7 @@ export async function cloneQuotation(id: string) {
     const cloned = await prisma.quotation.create({
       data: {
         quotation_number: nextNumber,
+        title: source.title,
         user_id: source.user_id,
         subtotal: source.subtotal,
         discount_amount: source.discount_amount,
@@ -399,6 +402,7 @@ export async function createQuotation(formData: any) {
     const quotation = await prisma.quotation.create({
       data: {
         quotation_number: formData.quotation_number,
+        title: formData.title || null,
         user_id: finalUserId,
         subtotal: formData.subtotal,
         discount_amount: formData.discount_amount || 0,
@@ -463,7 +467,7 @@ export async function updateQuotation(id: string, formData: any) {
     }
     
     // Update quotation with transaction to handle items
-    const quotation = await prisma.$transaction(async (tx) => {
+    const quotation = await prisma.$transaction(async (tx: any) => {
       // Delete existing items
       await tx.quotationItem.deleteMany({
         where: { quotation_id: id }
@@ -474,8 +478,8 @@ export async function updateQuotation(id: string, formData: any) {
         where: { id },
         data: {
           quotation_number: formData.quotation_number,
-          subtotal: formData.subtotal,
-          discount_amount: formData.discount_amount || 0,
+          title: formData.title || null,
+          subtotal: formData.subtotal,          discount_amount: formData.discount_amount || 0,
           use_tax: formData.use_tax,
           tax_amount: formData.tax_amount,
   

@@ -1,15 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { logAudit } from "@/lib/audit-log";
 import { cache } from "react";
 import { createNotifications } from "@/lib/actions/notifications";
 import { serializeData } from "@/lib/utils/serialize";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
+import { STORAGE_BUCKETS, uploadToSupabaseStorage } from "@/lib/supabase/storage";
 
 /**
  * Server Actions untuk Analyst (Analis Laboratorium)
@@ -37,34 +35,14 @@ export interface AnalysisData {
  * Get profile user yang sedang login
  */
 async function getCurrentUser() {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
+  const session = await auth();
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
+  if (!session?.user?.email) {
     throw new Error("Unauthorized");
   }
 
   const profile = await prisma.profile.findUnique({
-    where: { email: session.user.email! },
+    where: { email: session.user.email },
   });
 
   if (!profile) {
@@ -253,7 +231,7 @@ export async function saveAnalysisResults(
 }
 
 /**
- * Upload Laporan Hasil Lab (PDF) ke folder lokal public/hasil-uji
+ * Upload Laporan Hasil Lab (PDF) ke Supabase Storage
  */
 export async function uploadAnalysisPDF(
   jobOrderId: string,
@@ -280,22 +258,17 @@ export async function uploadAnalysisPDF(
 
     if (!jobOrder) throw new Error("Job Order not found");
 
-    // Prepare Directory
-    const uploadDir = path.join(process.cwd(), "public", "hasil-uji");
-    try {
-      await mkdir(uploadDir, { recursive: true });
-    } catch (e) {}
-
-    const fileExt = file.name.split(".").pop();
     const invoicePart = jobOrder.invoice?.invoice_number?.replace(/\//g, "-") || jobOrder.tracking_code;
-    const fileName = `LAPORAN-${invoicePart}-${Date.now()}.${fileExt}`;
-    const filePath = path.join(uploadDir, fileName);
-    
-    // Save locally
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(filePath, buffer);
-
-    const publicUrl = `/hasil-uji/${fileName}`;
+    const renamedFile = new File([await file.arrayBuffer()], `LAPORAN-${invoicePart}.${file.name.split(".").pop()}`, {
+      type: file.type,
+    });
+    const { publicUrl } = await uploadToSupabaseStorage({
+      bucket: STORAGE_BUCKETS.labResults,
+      folder: `analysis-pdf/${jobOrderId}`,
+      file: renamedFile,
+      allowedMimeTypes: ['application/pdf'],
+      maxSizeBytes: 15 * 1024 * 1024,
+    });
 
     // Update lab analysis
     const labAnalysis = await prisma.labAnalysis.upsert({
@@ -312,13 +285,13 @@ export async function uploadAnalysisPDF(
     });
 
     await logAudit({
-      action: "analysis_pdf_uploaded_local",
+      action: "analysis_pdf_uploaded_supabase",
       entity_type: "lab_analysis",
       entity_id: labAnalysis.id,
       user_id: profile.id!,
       user_email: profile.email!,
       user_role: profile.role,
-      new_data: { result_pdf_url: publicUrl, storage: "local" },
+      new_data: { result_pdf_url: publicUrl, storage: "supabase" },
     });
 
     revalidatePath("/analyst");
@@ -335,7 +308,7 @@ export async function uploadAnalysisPDF(
 }
 
 /**
- * Upload data mentah (foto, dll) ke folder lokal public/hasil-uji
+ * Upload data mentah (foto, dll) ke Supabase Storage
  */
 export async function uploadRawData(
   jobOrderId: string,
@@ -362,22 +335,24 @@ export async function uploadRawData(
 
     if (!jobOrder) throw new Error("Job Order not found");
 
-    // Prepare Directory
-    const uploadDir = path.join(process.cwd(), "public", "hasil-uji");
-    try {
-      await mkdir(uploadDir, { recursive: true });
-    } catch (e) {}
-
-    const fileExt = file.name.split(".").pop();
     const invoicePart = jobOrder.invoice?.invoice_number?.replace(/\//g, "-") || jobOrder.tracking_code;
-    const fileName = `RAW-${invoicePart}-${Date.now()}.${fileExt}`;
-    const filePath = path.join(uploadDir, fileName);
-
-    // Save locally
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(filePath, buffer);
-
-    const publicUrl = `/hasil-uji/${fileName}`;
+    const renamedFile = new File([await file.arrayBuffer()], `RAW-${invoicePart}.${file.name.split(".").pop()}`, {
+      type: file.type,
+    });
+    const { publicUrl } = await uploadToSupabaseStorage({
+      bucket: STORAGE_BUCKETS.labResults,
+      folder: `raw-data/${jobOrderId}`,
+      file: renamedFile,
+      allowedMimeTypes: [
+        'application/pdf',
+        'image/png',
+        'image/jpeg',
+        'image/jpg',
+        'image/webp',
+        'image/gif',
+      ],
+      maxSizeBytes: 20 * 1024 * 1024,
+    });
 
     // Update lab analysis
     const labAnalysis = await prisma.labAnalysis.upsert({
@@ -394,13 +369,13 @@ export async function uploadRawData(
     });
 
     await logAudit({
-      action: "raw_data_uploaded_local",
+      action: "raw_data_uploaded_supabase",
       entity_type: "lab_analysis",
       entity_id: labAnalysis.id,
       user_id: profile.id!,
       user_email: profile.email!,
       user_role: profile.role,
-      new_data: { raw_data_url: publicUrl, storage: "local" },
+      new_data: { raw_data_url: publicUrl, storage: "supabase" },
     });
 
     revalidatePath("/analyst");
@@ -422,7 +397,7 @@ export async function uploadRawData(
  */
 export async function completeAnalysis(jobOrderId: string) {
   try {
-    const { profile } = await getCurrent_User(); // Helper function to get current user
+    const { profile } = await getCurrentUser();
 
     if (profile.role !== "analyst") {
       throw new Error("Only analyst can complete analysis");
@@ -476,7 +451,7 @@ export async function completeAnalysis(jobOrderId: string) {
 
     // Send notifications to reporting team
     if (reportingStaff.length > 0) {
-      const notifications = reportingStaff.map(staff => ({
+      const notifications = reportingStaff.map((staff: any) => ({
         user_id: staff.id!,
         type: 'analysis_completed' as any,
         title: 'Analisis Selesai - Siap Reporting',
@@ -772,41 +747,3 @@ export const getAnalysisJobById = cache(async (jobOrderId: string) => {
     };
   }
 });
-
-async function getCurrent_User() {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    throw new Error("Unauthorized");
-  }
-
-  const profile = await prisma.profile.findUnique({
-    where: { email: session.user.email! },
-  });
-
-  if (!profile) {
-    throw new Error("Profile not found");
-  }
-
-  return { session, profile };
-}

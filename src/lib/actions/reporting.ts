@@ -1,1135 +1,473 @@
-"use server";
+'use server'
 
-import { revalidatePath } from "next/cache";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
-import prisma from "@/lib/prisma";
-import { logAudit } from "@/lib/audit-log";
-import { cache } from "react";
-import { createNotification } from "@/lib/actions/notifications";
-import { serializeData } from "@/lib/utils/serialize";
+import prisma from '@/lib/prisma'
+import { revalidatePath } from 'next/cache'
+import { serializeData } from '@/lib/utils/serialize'
+import { STORAGE_BUCKETS, uploadToSupabaseStorage } from '@/lib/supabase/storage'
 
-/**
- * Server Actions untuk Reporting Staff
- * Mengelola penerbitan Laporan Hasil Uji (LHU)
- */
+// --- REGULATION & BAKU MUTU ACTIONS ---
 
-/**
- * Klaim/Terima job order oleh staff reporting
- */
-export async function claimReportingJob(jobOrderId: string) {
+export async function getRegulations() {
   try {
-    const { profile } = await getCurrentUser();
+    const items = await prisma.regulation.findMany({
+      include: { _count: { select: { parameters: true } } },
+      orderBy: { name: 'asc' }
+    })
+    return serializeData(items)
+  } catch (error) {
+    console.error('Get Regulations Error:', error)
+    return []
+  }
+}
 
-    if (profile.role !== "reporting") {
-      throw new Error("Hanya staff reporting yang dapat mengambil tugas");
-    }
+export async function getRegulationDetail(id: string) {
+  try {
+    const item = await prisma.regulation.findUnique({
+      where: { id },
+      include: { parameters: { orderBy: { sequence: 'asc' } } }
+    })
+    return serializeData(item)
+  } catch (error) {
+    console.error('Get Regulation Detail Error:', error)
+    return null
+  }
+}
 
-    const jobOrder = await prisma.jobOrder.findUnique({
-      where: { id: jobOrderId },
-    });
-
-    if (!jobOrder) throw new Error("Job order tidak ditemukan");
-    
-    if (jobOrder.reporting_id) {
-      if (jobOrder.reporting_id === profile.id) {
-        return { success: true, message: "Job sudah Anda ambil sebelumnya" };
+export async function createRegulation(data: any) {
+  try {
+    const item = await prisma.regulation.create({
+      data: {
+        name: data.name,
+        description: data.description,
+        category: data.category,
+        parameters: {
+          create: data.parameters?.map((p: any, idx: number) => ({
+            parameter: p.parameter,
+            unit: p.unit,
+            standard_value: p.standard_value,
+            method: p.method,
+            sequence: idx
+          }))
+        }
       }
-      throw new Error("Job sudah diambil oleh staff reporting lain");
-    }
-
-    const updated = await prisma.jobOrder.update({
-      where: { id: jobOrderId },
-      data: {
-        reporting_id: profile.id,
-        status: "reporting", // Pastikan status berubah ke reporting saat diklaim
-      }
-    });
-
-    await logAudit({
-      action: "job_claimed_by_reporting",
-      entity_type: "job_order",
-      entity_id: jobOrderId,
-      user_id: profile.id!,
-      user_email: profile.email!,
-      user_role: profile.role,
-      new_data: { reporting_id: profile.id },
-    });
-
-    revalidatePath("/reporting");
-    revalidatePath(`/reporting/jobs/${jobOrderId}`);
-
-    return { success: true, jobOrder: updated };
-  } catch (error: any) {
-    console.error("Error claiming reporting job:", error);
-    return {
-      success: false,
-      error: error.message || "Gagal mengambil tugas",
-    };
-  }
-}
-
-/**
- * Simpan hasil analisis (Input oleh Reporting Staff)
- */
-export async function saveReportingResults(
-  jobOrderId: string,
-  data: {
-    test_results?: any[];
-    analysis_notes?: string;
-  }
-) {
-  try {
-    const { profile } = await getCurrentUser();
-
-    if (profile.role !== "reporting") {
-      throw new Error("Only reporting staff can save results");
-    }
-
-    const jobOrder = await prisma.jobOrder.findUnique({
-      where: { id: jobOrderId },
-    });
-
-    if (!jobOrder) {
-      throw new Error("Job order not found");
-    }
-
-    // Upsert lab analysis
-    const labAnalysis = await prisma.labAnalysis.upsert({
-      where: { job_order_id: jobOrderId },
-      create: {
-        job_order_id: jobOrderId,
-        analyst_id: jobOrder.analyst_id || profile.id!, // Gunakan ID analis asli jika ada
-        test_results: data.test_results as any,
-        analysis_notes: data.analysis_notes,
-      },
-      update: {
-        test_results: data.test_results as any,
-        analysis_notes: data.analysis_notes,
-        updated_at: new Date(),
-      },
-    });
-
-    await logAudit({
-      action: "reporting_results_saved",
-      entity_type: "lab_analysis",
-      entity_id: labAnalysis.id,
-      user_id: profile.id!,
-      user_email: profile.email!,
-      user_role: profile.role,
-      new_data: data,
-    });
-
-    revalidatePath("/reporting");
-    revalidatePath(`/reporting/jobs/${jobOrderId}`);
-
-    return { success: true, labAnalysis };
+    })
+    revalidatePath('/reporting/regulations')
+    return { success: true, id: item.id }
   } catch (error) {
-    console.error("Error saving reporting results:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to save results",
-    };
+    console.error('Create Regulation Error:', error)
+    return { success: false, message: 'Gagal membuat regulasi' }
   }
 }
 
-/**
- * Auto-generate LHU dengan data dari job order
- */
-export async function generateLHU(jobOrderId: string) {
+export async function updateRegulation(id: string, data: any) {
   try {
-    const { profile } = await getCurrentUser();
-
-    if (profile.role !== "reporting") {
-      throw new Error("Only reporting staff can generate LHU");
-    }
-
-    const jobOrder = await prisma.jobOrder.findUnique({
-      where: { id: jobOrderId },
-      include: {
-        quotation: {
-          include: {
-            profile: true,
-            items: {
-              include: {
-                service: true,
-              },
-            },
-          },
-        },
-        lab_analysis: {
-          include: {
-            analyst: true,
-          },
-        },
-        sampling_assignment: {
-          include: {
-            field_officer: true,
-          },
-        },
-      },
-    });
-
-    if (!jobOrder) {
-      throw new Error("Job order not found");
-    }
-
-    if (jobOrder.status !== "analysis_done" && jobOrder.status !== "reporting") {
-      throw new Error("Job order not ready for LHU generation");
-    }
-
-    // Generate LHU number
-    const lhuNumber = await generateLHUNumber();
-
-    // Prepare LHU data
-    const lhuData = {
-      lhu_number: lhuNumber,
-      tracking_code: jobOrder.tracking_code,
-      quotation_number: jobOrder.quotation?.quotation_number || '-',
-      issue_date: new Date(),
-      customer: {
-        full_name: jobOrder.quotation?.profile?.full_name || '-',
-        company_name: jobOrder.quotation?.profile?.company_name,
-        address: jobOrder.quotation?.profile?.address,
-        phone: jobOrder.quotation?.profile?.phone,
-        email: jobOrder.quotation?.profile?.email,
-      },
-      sampling: {
-        location: jobOrder.sampling_assignment?.location || '-',
-        date: jobOrder.sampling_assignment?.scheduled_date || jobOrder.created_at,
-        field_officer: jobOrder.sampling_assignment?.field_officer?.full_name || '-',
-      },
-      analysis: {
-        analyst_name: jobOrder.lab_analysis?.analyst?.full_name || jobOrder.analyst_id || '-',
-        start_date: jobOrder.analysis_started_at || jobOrder.created_at,
-        end_date: jobOrder.analysis_done_at || new Date(),
-        test_results: Array.isArray(jobOrder.lab_analysis?.test_results) 
-          ? jobOrder.lab_analysis.test_results 
-          : [],
-        equipment_used: Array.isArray(jobOrder.lab_analysis?.equipment_used) 
-          ? jobOrder.lab_analysis.equipment_used 
-          : [],
-        sample_condition: jobOrder.lab_analysis?.sample_condition || '-',
-        notes: jobOrder.lab_analysis?.analysis_notes || '',
-      },
-      company: {
-        company_name: 'WahfaLab',
-        address: 'Jl. Laboratorium No. 123, Jakarta',
-        phone: '+62 812-3456-7890',
-        email: 'info@wahfalab.com',
-        logo_url: '/logo-wahfalab.png',
-        npwp: '01.234.567.8-901.000',
-      },
-    };
-
-    return {
-      success: true,
-      lhuNumber,
-      lhuData: serializeData(lhuData),
-      message: "LHU berhasil di-generate. Silakan preview dan terbitkan."
-    };
-  } catch (error: any) {
-    console.error("Error generating LHU:", error);
-    return {
-      success: false,
-      error: error.message || "Gagal generate LHU",
-    };
-  }
-}
-
-/**
- * Get profile user yang sedang login
- */
-async function getCurrentUser() {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    throw new Error("Unauthorized");
-  }
-
-  const profile = await prisma.profile.findUnique({
-    where: { email: session.user.email! },
-  });
-
-  if (!profile) {
-    throw new Error("Profile not found");
-  }
-
-  return { session, profile };
-}
-
-/**
- * Generate nomor LHU otomatis
- * Format: LHU/YYYY/MM/NNNN
- */
-async function generateLHUNumber(): Promise<string> {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-
-  // Get last LHU number for this month
-  const lastLHU = await prisma.jobOrder.findFirst({
-    where: {
-      reporting_done_at: {
-        gte: new Date(`${year}-${month}-01`),
-        lt: new Date(`${year}-${String(Number(month) + 1).padStart(2, "0")}-01`),
-      },
-      certificate_url: {
-        not: null,
-      },
-    },
-    orderBy: {
-      reporting_done_at: "desc",
-    },
-  });
-
-  let sequence = 1;
-  if (lastLHU && lastLHU.certificate_url) {
-    // Extract sequence from existing LHU number
-    const match = lastLHU.certificate_url.match(/LHU\/\d+\/\d+\/(\d+)/);
-    if (match) {
-      sequence = Number(match[1]) + 1;
-    }
-  }
-
-  return `LHU/${year}/${month}/${String(sequence).padStart(4, "0")}`;
-}
-
-/**
- * Assign staff reporting ke job order
- * Hanya bisa dilakukan oleh admin/operator
- */
-export async function assignReportingToJob(
-  jobOrderId: string,
-  reportingId: string
-) {
-  try {
-    const { profile } = await getCurrentUser();
-
-    if (!["admin", "operator"].includes(profile.role)) {
-      throw new Error("Only admin/operator can assign reporting staff");
-    }
-
-    const jobOrder = await prisma.jobOrder.findUnique({
-      where: { id: jobOrderId },
-    });
-
-    if (!jobOrder) {
-      throw new Error("Job order not found");
-    }
-
-    if (jobOrder.status !== "analysis_done") {
-      throw new Error("Job order must be in analysis_done status");
-    }
-
-    const updated = await prisma.jobOrder.update({
-      where: { id: jobOrderId },
-      data: {
-        reporting_id: reportingId,
-        status: "reporting",
-      },
-    });
-
-    await logAudit({
-      action: "reporting_assigned",
-      entity_type: "job_order",
-      entity_id: jobOrderId,
-      user_id: profile.id!,
-      user_email: profile.email!,
-      user_role: profile.role,
-      new_data: { reporting_id: reportingId, status: "reporting" },
-    });
-
-    revalidatePath("/operator/jobs");
-    revalidatePath("/reporting");
-
-    return { success: true, jobOrder: updated };
-  } catch (error) {
-    console.error("Error assigning reporting:", error);
-    return {
-      success: false,
-      error:
-        error instanceof Error ? error.message : "Failed to assign reporting staff",
-    };
-  }
-}
-
-/**
- * Mulai pekerjaan reporting untuk job order
- */
-export async function startReporting(jobOrderId: string) {
-  try {
-    const { profile } = await getCurrentUser();
-
-    if (profile.role !== "reporting") {
-      throw new Error("Only reporting staff can start reporting");
-    }
-
-    const jobOrder = await prisma.jobOrder.findUnique({
-      where: { id: jobOrderId },
-    });
-
-    if (!jobOrder) {
-      throw new Error("Job order not found");
-    }
-
-    if (jobOrder.reporting_id !== profile.id) {
-      throw new Error("You are not assigned to this job order");
-    }
-
-    const updated = await prisma.jobOrder.update({
-      where: { id: jobOrderId },
-      data: {
-        status: "reporting",
-      },
-    });
-
-    await logAudit({
-      action: "reporting_started",
-      entity_type: "job_order",
-      entity_id: jobOrderId,
-      user_id: profile.id!,
-      user_email: profile.email!,
-      user_role: profile.role,
-      new_data: { status: "reporting" },
-    });
-
-    revalidatePath("/reporting");
-    revalidatePath(`/reporting/jobs/${jobOrderId}`);
-
-    return { success: true, jobOrder: updated };
-  } catch (error) {
-    console.error("Error starting reporting:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to start reporting",
-    };
-  }
-}
-
-/**
- * Generate Laporan Hasil Uji (LHU) PDF
- */
-export async function generateLabReport(jobOrderId: string) {
-  try {
-    const { profile } = await getCurrentUser();
-
-    if (!["admin", "operator", "reporting"].includes(profile.role)) {
-      throw new Error("Unauthorized");
-    }
-
-    const jobOrder = await prisma.jobOrder.findUnique({
-      where: { id: jobOrderId },
-      include: {
-        quotation: {
-          include: {
-            profile: true,
-            items: {
-              include: {
-                service: true,
-              },
-            },
-          },
-        },
-        lab_analysis: {
-          include: {
-            analyst: true,
-          },
-        },
-        sampling_assignment: true,
-      },
-    });
-
-    if (!jobOrder) {
-      throw new Error("Job order not found");
-    }
-
-    if (!jobOrder.lab_analysis) {
-      throw new Error("Lab analysis not found");
-    }
-
-    if (jobOrder.status !== "reporting" && jobOrder.status !== "analysis_done") {
-      throw new Error("Job order must be in reporting or analysis_done status");
-    }
-
-    // Generate LHU number
-    const lhuNumber = await generateLHUNumber();
-
-    // TODO: Generate PDF using @react-pdf/renderer
-    // For now, we'll just return the data
-    const reportData = {
-      lhuNumber,
-      jobOrder,
-      generatedAt: new Date(),
-      generatedBy: profile,
-    };
-
-    return { success: true, report: reportData };
-  } catch (error) {
-    console.error("Error generating lab report:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to generate lab report",
-    };
-  }
-}
-
-/**
- * Upload LHU PDF ke Supabase Storage
- */
-export async function uploadLHUPDF(jobOrderId: string, formData: FormData) {
-  try {
-    const { profile } = await getCurrentUser();
-
-    if (!["admin", "operator", "reporting"].includes(profile.role)) {
-      throw new Error("Unauthorized");
-    }
-
-    const file = formData.get("file") as File;
-    if (!file) {
-      throw new Error("No file provided");
-    }
-
-    // Validate file
-    if (!file.type.includes("pdf")) {
-      throw new Error("File must be a PDF");
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      throw new Error("File size must be less than 10MB");
-    }
-
-    // Generate LHU number
-    const lhuNumber = await generateLHUNumber();
-
-    // Upload to Supabase Storage
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll();
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
-          },
-        },
-      }
-    );
-    const fileExt = file.name.split(".").pop();
-    const fileName = `LHU-${lhuNumber.replace(/\//g, "-")}.${fileExt}`;
-    const { data: uploadData, error: uploadError } =
-      await supabase.storage.from("lab-reports").upload(fileName, file, {
-        cacheControl: "3600",
-        upsert: true,
-      });
-
-    if (uploadError) {
-      throw uploadError;
-    }
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("lab-reports").getPublicUrl(uploadData.path);
-
-    // Update job order
-    const updated = await prisma.jobOrder.update({
-      where: { id: jobOrderId },
-      data: {
-        certificate_url: publicUrl,
-      },
-    });
-
-    await logAudit({
-      action: "lhu_pdf_uploaded",
-      entity_type: "job_order",
-      entity_id: jobOrderId,
-      user_id: profile.id!,
-      user_email: profile.email!,
-      user_role: profile.role,
-      new_data: { certificate_url: publicUrl, lhu_number: lhuNumber },
-    });
-
-    revalidatePath("/reporting");
-    revalidatePath(`/reporting/jobs/${jobOrderId}`);
-    revalidatePath("/operator/jobs");
-
-    return { success: true, url: publicUrl, lhuNumber };
-  } catch (error) {
-    console.error("Error uploading LHU PDF:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to upload LHU PDF",
-    };
-  }
-}
-
-/**
- * Terbitkan LHU dan selesaikan job order
- */
-export async function publishLabReport(jobOrderId: string) {
-  try {
-    const { profile } = await getCurrentUser();
-
-    if (!["admin", "operator", "reporting"].includes(profile.role)) {
-      throw new Error("Unauthorized");
-    }
-
-    const jobOrder = await prisma.jobOrder.findUnique({
-      where: { id: jobOrderId },
-      include: {
-        lab_analysis: true,
-      },
-    });
-
-    if (!jobOrder) {
-      throw new Error("Job order not found");
-    }
-
-    if (!jobOrder.certificate_url) {
-      throw new Error("LHU PDF must be uploaded before publishing");
-    }
-
-    // Generate LHU number for record
-    const lhuNumber = await generateLHUNumber();
-
-    // Update job order status
-    const updated = await prisma.jobOrder.update({
-      where: { id: jobOrderId },
-      data: {
-        status: "completed",
-        reporting_done_at: new Date(),
-        notes: `LHU Published: ${lhuNumber}`,
-      },
-    });
-
-    await logAudit({
-      action: "lhu_published",
-      entity_type: "job_order",
-      entity_id: jobOrderId,
-      user_id: profile.id!,
-      user_email: profile.email!,
-      user_role: profile.role,
-      new_data: {
-        status: "completed",
-        reporting_done_at: new Date(),
-        lhu_number: lhuNumber,
-      },
-    });
-
-    // TODO: Send notification to operator and client
-    // await notifyOperator(jobOrderId);
-    // await notifyClient(jobOrderId);
-
-    revalidatePath("/reporting");
-    revalidatePath("/operator/jobs");
-    revalidatePath("/client/orders");
-
-    return { success: true, jobOrder: updated, lhuNumber };
-  } catch (error) {
-    console.error("Error publishing lab report:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to publish lab report",
-    };
-  }
-}
-
-/**
- * Publish LHU dengan URL dan nomor LHU yang sudah di-generate
- */
-export async function publishLabReportWithLHU(
-  jobOrderId: string,
-  certificateUrl: string,
-  lhuNumber: string
-) {
-  try {
-    const { profile } = await getCurrentUser();
-
-    if (!["admin", "operator", "reporting"].includes(profile.role)) {
-      throw new Error("Unauthorized");
-    }
-
-    const jobOrder = await prisma.jobOrder.findUnique({
-      where: { id: jobOrderId },
-      include: {
-        quotation: {
-          include: {
-            profile: true
+    await prisma.$transaction(async (tx: any) => {
+      // 1. Hapus parameter lama
+      await tx.regulationParameter.deleteMany({
+        where: { regulation_id: id }
+      })
+
+      // 2. Update data regulasi dan masukkan parameter baru
+      await tx.regulation.update({
+        where: { id },
+        data: {
+          name: data.name,
+          description: data.description,
+          category: data.category,
+          parameters: {
+            create: data.parameters?.map((p: any, idx: number) => ({
+              parameter: p.parameter,
+              unit: p.unit,
+              standard_value: p.standard_value,
+              method: p.method,
+              sequence: idx
+            }))
           }
         }
-      },
-    });
+      })
+    })
 
-    if (!jobOrder) {
-      throw new Error("Job order not found");
-    }
-
-    // Update job order status
-    const updated = await prisma.jobOrder.update({
-      where: { id: jobOrderId },
-      data: {
-        status: "completed",
-        reporting_done_at: new Date(),
-        certificate_url: certificateUrl,
-        notes: `LHU Published: ${lhuNumber}`,
-      },
-    });
-
-    await logAudit({
-      action: "lhu_published",
-      entity_type: "job_order",
-      entity_id: jobOrderId,
-      user_id: profile.id!,
-      user_email: profile.email!,
-      user_role: profile.role,
-      new_data: {
-        status: "completed",
-        reporting_done_at: new Date(),
-        lhu_number: lhuNumber,
-      },
-    });
-
-    // Send notification to operator
-    const operatorStaff = await prisma.profile.findFirst({
-      where: { role: 'operator' }
-    });
-
-    if (operatorStaff) {
-      await createNotification({
-        user_id: operatorStaff.id!,
-        type: 'reporting_completed',
-        title: 'LHU Telah Diterbitkan',
-        message: `Job Order ${jobOrder.tracking_code} telah selesai. LHU ${lhuNumber} telah diterbitkan.`,
-        link: `/operator/jobs/${jobOrderId}`,
-        metadata: {
-          job_order_id: jobOrderId,
-          tracking_code: jobOrder.tracking_code,
-          lhu_number: lhuNumber,
-          customer_name: jobOrder.quotation?.profile?.full_name
-        }
-      });
-    }
-
-    revalidatePath("/reporting");
-    revalidatePath("/operator/jobs");
-
-    return { success: true, jobOrder: updated, lhuNumber };
+    revalidatePath('/reporting/regulations')
+    revalidatePath(`/reporting/regulations/${id}`)
+    return { success: true }
   } catch (error) {
-    console.error("Error publishing lab report:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to publish lab report",
-    };
+    console.error('Update Regulation Error:', error)
+    return { success: false, message: 'Gagal memperbarui regulasi' }
   }
 }
 
-/**
- * Get semua job orders untuk reporting yang sedang login
- */
-export async function getMyReportingJobs(
-  page = 1,
-  limit = 10,
-  status?: string
-) {
+// --- LAB REPORT (LHU) ACTIONS ---
+
+export async function getLabReports(options: { page?: number, limit?: number, search?: string } = {}) {
+  const { page = 1, limit = 10, search = '' } = options
+  const skip = (page - 1) * limit
+
+  const where: any = {}
+  if (search) {
+    where.OR = [
+      { report_number: { contains: search, mode: 'insensitive' } },
+      { client_name: { contains: search, mode: 'insensitive' } },
+      { company_name: { contains: search, mode: 'insensitive' } },
+    ]
+  }
+
   try {
-    const { profile } = await getCurrentUser();
-
-    if (profile.role !== "reporting") {
-      throw new Error("Only reporting staff can access this");
-    }
-
-    const skip = (page - 1) * limit;
-
-    const where: any = {
-      reporting_id: profile.id,
-    };
-
-    if (status) {
-      where.status = status;
-    }
-
-    const [jobOrders, total] = await Promise.all([
-      prisma.jobOrder.findMany({
+    const [items, total] = await Promise.all([
+      prisma.labReport.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { created_at: "desc" },
-        include: {
-          quotation: {
-            select: {
-              quotation_number: true,
-              profile: {
-                select: {
-                  full_name: true,
-                  company_name: true,
-                },
-              },
-            },
-          },
-          lab_analysis: {
-            select: {
-              id: true,
-              analyst: {
-                select: {
-                  full_name: true,
-                  email: true,
-                },
-              },
-              analysis_completed_at: true,
-              result_pdf_url: true,
-            },
-          },
-        },
+        include: { regulation: { select: { name: true } } },
+        orderBy: { created_at: 'desc' }
       }),
-      prisma.jobOrder.count({ where }),
-    ]);
+      prisma.labReport.count({ where })
+    ])
 
     return serializeData({
-      jobOrders,
+      items,
       total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    });
+      pages: Math.ceil(total / limit)
+    })
   } catch (error) {
-    console.error("Error getting reporting jobs:", error);
-    return {
-      jobOrders: [],
-      total: 0,
-      page,
-      limit,
-      totalPages: 0,
-      error: error instanceof Error ? error.message : "Failed to get jobs",
-    };
+    console.error('Get Lab Reports Error:', error)
+    return { items: [], total: 0, pages: 0 }
   }
 }
 
-/**
- * Get job orders yang ready untuk reporting (status: analysis_done)
- */
-export async function getJobsReadyForReporting(
-  page = 1,
-  limit = 10
-) {
+export async function getLabReportById(id: string) {
   try {
-    const { profile } = await getCurrentUser();
-
-    // Allow admin, operator, and reporting staff to see available jobs
-    if (!["admin", "operator", "reporting"].includes(profile.role)) {
-      throw new Error("Unauthorized access to job queue");
-    }
-
-    const skip = (page - 1) * limit;
-
-    const [jobOrders, total] = await Promise.all([
-      prisma.jobOrder.findMany({
-        where: {
-          status: "analysis_done",
-          reporting_id: null, // Only show jobs that haven't been claimed/assigned yet
-        },
-        skip,
-        take: limit,
-        orderBy: { analysis_done_at: "desc" },
-        include: {
-          quotation: {
-            select: {
-              quotation_number: true,
-              profile: {
-                select: {
-                  full_name: true,
-                  company_name: true,
-                },
-              },
-            },
-          },
-          lab_analysis: {
-            select: {
-              id: true,
-              analyst: {
-                select: {
-                  full_name: true,
-                  email: true,
-                },
-              },
-              analysis_completed_at: true,
-            },
-          },
-          sampling_assignment: {
-            select: {
-              field_officer: {
-                select: {
-                  full_name: true,
-                },
-              },
-            },
-          },
-        },
-      }),
-      prisma.jobOrder.count({
-        where: {
-          status: "analysis_done",
-          reporting_id: null,
-        },
-      }),
-    ]);
-
-    return serializeData({
-      jobOrders,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    });
-  } catch (error) {
-    console.error("Error getting jobs ready for reporting:", error);
-    return {
-      jobOrders: [],
-      total: 0,
-      page,
-      limit,
-      totalPages: 0,
-      error: error instanceof Error ? error.message : "Failed to get jobs",
-    };
-  }
-}
-
-/**
- * Get detail job order untuk reporting
- */
-export const getReportingJobById = cache(async (jobOrderId: string) => {
-  try {
-    const { profile } = await getCurrentUser();
-
-    const jobOrder = await prisma.jobOrder.findUnique({
-      where: { id: jobOrderId },
-      include: {
-        quotation: {
-          include: {
-            profile: true,
-            items: {
-              include: {
-                service: true,
-              },
-            },
-          },
-        },
-        lab_analysis: {
-          include: {
-            analyst: true,
-          },
-        },
-        sampling_assignment: true,
-      },
-    });
-
-    if (!jobOrder) {
-      throw new Error("Job order not found");
-    }
-
-    // Check access
-    const allowedRoles = ["admin", "operator", "reporting"];
-    if (!allowedRoles.includes(profile!.role)) {
-      throw new Error("Unauthorized");
-    }
-
-    // Reporting staff can access jobs assigned to them OR jobs ready for reporting (analysis_done)
-    if (profile!.role === "reporting") {
-      const isAssigned = jobOrder.reporting_id === profile!.id;
-      const isReadyForReporting = jobOrder.status === 'analysis_done';
-      
-      if (!isAssigned && !isReadyForReporting) {
-        throw new Error("You are not assigned to this job order");
+    const item = await prisma.labReport.findUnique({
+      where: { id },
+      include: { 
+        items: { orderBy: { sequence: 'asc' } },
+        regulation: true
       }
-    }
-
-    // Return with serialized data
-    return serializeData({ 
-      jobOrder: {
-        ...jobOrder,
-        lab_analysis: jobOrder.lab_analysis,
-        quotation: jobOrder.quotation,
-        sampling_assignment: jobOrder.sampling_assignment,
-      }, 
-      success: true 
-    });
+    })
+    return serializeData(item)
   } catch (error) {
-    console.error("Error getting reporting job:", error);
-    return {
-      jobOrder: null,
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to get job",
-    };
+    console.error('Get Lab Report Detail Error:', error)
+    return null
   }
-});
+}
 
-/**
- * Get statistik untuk dashboard reporting
- */
-export async function getReportingDashboard() {
+export async function createLabReport(data: any) {
   try {
-    const { profile } = await getCurrentUser();
+    const report = await prisma.labReport.create({
+      data: {
+        report_number: data.report_number,
+        sampling_date: data.sampling_date ? new Date(data.sampling_date) : null,
+        received_date: data.received_date ? new Date(data.received_date) : null,
+        analysis_date: data.analysis_date ? new Date(data.analysis_date) : null,
+        client_name: data.client_name,
+        company_name: data.company_name,
+        address: data.address,
+        sample_type: data.sample_type,
+        sample_origin: data.sample_origin,
+        sample_code: data.sample_code,
+        regulation_id: data.regulation_id,
+        status: 'draft',
+        items: {
+          create: data.items?.map((item: any, idx: number) => ({
+            parameter: item.parameter,
+            unit: item.unit,
+            standard_value: item.standard_value,
+            result_value: item.result_value,
+            method: item.method,
+            is_qualified: item.is_qualified,
+            sequence: idx
+          }))
+        }
+      }
+    })
+    revalidatePath('/reporting')
+    return { success: true, id: report.id }
+  } catch (error) {
+    console.error('Create Lab Report Error:', error)
+    return { success: false, message: 'Gagal membuat laporan hasil uji' }
+  }
+}
 
-    if (profile.role !== "reporting") {
-      throw new Error("Only reporting staff can access this");
-    }
+export async function updateLabReport(id: string, data: any) {
+  try {
+    await prisma.$transaction(async (tx: any) => {
+      // Delete old items
+      await tx.labReportItem.deleteMany({ where: { report_id: id } })
+      
+      // Update main data
+      await tx.labReport.update({
+        where: { id },
+        data: {
+          report_number: data.report_number,
+          sampling_date: data.sampling_date ? new Date(data.sampling_date) : null,
+          received_date: data.received_date ? new Date(data.received_date) : null,
+          analysis_date: data.analysis_date ? new Date(data.analysis_date) : null,
+          client_name: data.client_name,
+          company_name: data.company_name,
+          address: data.address,
+          sample_type: data.sample_type,
+          sample_origin: data.sample_origin,
+          sample_code: data.sample_code,
+          regulation_id: data.regulation_id,
+          status: data.status || 'draft',
+          items: {
+            create: data.items?.map((item: any, idx: number) => ({
+              parameter: item.parameter,
+              unit: item.unit,
+              standard_value: item.standard_value,
+              result_value: item.result_value,
+              method: item.method,
+              is_qualified: item.is_qualified,
+              sequence: idx
+            }))
+          }
+        }
+      })
+    })
+    revalidatePath('/reporting')
+    revalidatePath(`/reporting/${id}`)
+    return { success: true }
+  } catch (error) {
+    console.error('Update Lab Report Error:', error)
+    return { success: false, message: 'Gagal memperbarui laporan' }
+  }
+}
 
-    const [pending, inProgress, done, total] = await Promise.all([
-      prisma.jobOrder.count({
-        where: {
-          reporting_id: profile.id,
-          status: "analysis_done",
-        },
-      }),
-      prisma.jobOrder.count({
-        where: {
-          reporting_id: profile.id,
-          status: "reporting",
-        },
-      }),
-      prisma.jobOrder.count({
-        where: {
-          reporting_id: profile.id,
-          status: "completed",
-        },
-      }),
-      prisma.jobOrder.count({
-        where: {
-          reporting_id: profile.id,
-        },
-      }),
-    ]);
+// --- JOB ORDER FOR REPORTING ACTIONS ---
 
-    const recentJobs = await prisma.jobOrder.findMany({
-      where: { reporting_id: profile.id },
-      take: 5,
-      orderBy: { created_at: "desc" },
+// --- JOB ORDER FOR REPORTING ACTIONS ---
+
+export async function getReportingJobById(id: string) {
+  try {
+    const item = await prisma.jobOrder.findUnique({
+      where: { id },
       include: {
         quotation: {
-          select: {
-            quotation_number: true,
+          include: {
             profile: {
               select: {
                 full_name: true,
                 company_name: true,
-              },
+                address: true
+              }
             },
-          },
+            items: {
+              include: {
+                service: true
+              }
+            }
+          }
         },
-      },
-    });
+        lab_analysis: true
+      }
+    })
+    return { success: true, jobOrder: serializeData(item) }
+  } catch (error) {
+    console.error('Get Reporting Job Detail Error:', error)
+    return { success: false }
+  }
+}
+
+export async function saveReportingResults(id: string, data: any) {
+  try {
+    // Update notes in JobOrder
+    await prisma.jobOrder.update({
+      where: { id },
+      data: { notes: data.analysis_notes }
+    })
+
+    // Upsert LabAnalysis results
+    const existingAnalysis = await prisma.labAnalysis.findUnique({
+      where: { job_order_id: id }
+    })
+
+    if (existingAnalysis) {
+      await prisma.labAnalysis.update({
+        where: { job_order_id: id },
+        data: { test_results: data.test_results }
+      })
+    } else {
+      // If analyst hasn't created it yet, reporting team can create basic record
+      // although normally it should exist from analysis_done status
+      await prisma.labAnalysis.create({
+        data: {
+          job_order_id: id,
+          analyst_id: "system", // Fallback
+          test_results: data.test_results
+        }
+      })
+    }
+
+    revalidatePath(`/reporting/jobs/${id}`)
+    return { success: true }
+  } catch (error) {
+    console.error('Save Reporting Results Error:', error)
+    return { success: false, error: 'Gagal menyimpan hasil' }
+  }
+}
+
+export async function generateLHU(id: string) {
+  try {
+    const jobOrder = await prisma.jobOrder.findUnique({
+      where: { id },
+      include: {
+        quotation: { include: { profile: true } },
+        lab_analysis: true
+      }
+    })
+
+    if (!jobOrder) throw new Error("Pekerjaan tidak ditemukan")
+
+    const lhuNumber = `LHU-${Date.now()}` // Dynamic number generation logic
+    
+    // Construct LHU Data for PDF generation
+    const lhuData = {
+      lhu_number: lhuNumber,
+      date: new Date(),
+      tracking_code: jobOrder.tracking_code,
+      client: jobOrder.quotation.profile,
+      analysis: jobOrder.lab_analysis,
+      items: jobOrder.lab_analysis?.test_results || []
+    }
+
+    return { success: true, lhuNumber, lhuData }
+  } catch (error) {
+    console.error('Generate LHU Error:', error)
+    return { success: false, error: 'Gagal generate LHU' }
+  }
+}
+
+export async function uploadLHUPDF(id: string, formData: FormData) {
+  try {
+    const file = formData.get('file')
+    if (!(file instanceof File)) {
+      throw new Error('File PDF tidak ditemukan')
+    }
+
+    const { publicUrl } = await uploadToSupabaseStorage({
+      bucket: STORAGE_BUCKETS.labResults,
+      folder: `lhu/${id}`,
+      file,
+      allowedMimeTypes: ['application/pdf'],
+      maxSizeBytes: 15 * 1024 * 1024,
+    })
+
+    return { success: true, url: publicUrl }
+  } catch (error: any) {
+    console.error('Upload LHU PDF Error:', error)
+    return { success: false, error: error.message || 'Gagal upload LHU PDF' }
+  }
+}
+
+export async function publishLabReportWithLHU(jobOrderId: string, certificateUrl: string, lhuNumber: string) {
+  try {
+    const jobOrder = await prisma.jobOrder.findUnique({
+      where: { id: jobOrderId },
+      include: {
+        quotation: { include: { profile: true } },
+        lab_analysis: true
+      }
+    })
+
+    if (!jobOrder) throw new Error("Pekerjaan tidak ditemukan")
+
+    await prisma.$transaction(async (tx: any) => {
+      // 1. Update Job Order
+      await tx.jobOrder.update({
+        where: { id: jobOrderId },
+        data: {
+          status: 'completed',
+          certificate_url: certificateUrl,
+          reporting_done_at: new Date()
+        }
+      })
+
+      // 2. Create official LabReport record
+      await tx.labReport.create({
+        data: {
+          report_number: lhuNumber,
+          job_order_id: jobOrderId,
+          client_name: jobOrder.quotation.profile.full_name,
+          company_name: jobOrder.quotation.profile.company_name,
+          address: jobOrder.quotation.profile.address,
+          status: 'final',
+          items: {
+            create: (jobOrder.lab_analysis?.test_results as any[])?.map((item: any, idx: number) => ({
+              parameter: item.parameter,
+              unit: item.unit,
+              standard_value: item.limit || item.standard_value,
+              result_value: item.result,
+              method: item.method,
+              sequence: idx
+            }))
+          }
+        }
+      })
+    })
+
+    revalidatePath('/reporting')
+    revalidatePath(`/reporting/jobs/${jobOrderId}`)
+    return { success: true }
+  } catch (error) {
+    console.error('Publish LHU Error:', error)
+    return { success: false, error: 'Gagal menerbitkan LHU' }
+  }
+}
+
+export async function getMyReportingJobs(page = 1, limit = 10) {
+  try {
+    const skip = (page - 1) * limit
+
+    const [items, total] = await Promise.all([
+      prisma.jobOrder.findMany({
+        where: {
+          status: {
+            in: ['analysis_done', 'reporting', 'completed']
+          }
+        },
+        skip,
+        take: limit,
+        include: {
+          quotation: {
+            include: {
+              profile: {
+                select: {
+                  full_name: true,
+                  company_name: true,
+                  email: true
+                }
+              }
+            }
+          }
+        },
+        orderBy: { created_at: 'desc' }
+      }),
+      prisma.jobOrder.count({
+        where: {
+          status: {
+            in: ['analysis_done', 'reporting', 'completed']
+          }
+        }
+      })
+    ])
 
     return serializeData({
-      stats: {
-        pending,
-        inProgress,
-        done,
-        total,
-      },
-      recentJobs,
-    });
+      jobOrders: items,
+      total,
+      pages: Math.ceil(total / limit)
+    })
   } catch (error) {
-    console.error("Error getting reporting dashboard:", error);
-    return {
-      stats: { pending: 0, inProgress: 0, done: 0, total: 0 },
-      recentJobs: [],
-      error: error instanceof Error ? error.message : "Failed to get dashboard",
-    };
+    console.error('Get My Reporting Jobs Error:', error)
+    return { jobOrders: [], total: 0, pages: 0 }
   }
 }
 
-/**
- * Get all analysts untuk dropdown assignment
- */
-export async function getAllAnalysts() {
+export async function deleteLabReport(id: string) {
   try {
-    const { profile } = await getCurrentUser();
-
-    if (!["admin", "operator"].includes(profile.role)) {
-      throw new Error("Only admin/operator can access this");
-    }
-
-    const analysts = await prisma.profile.findMany({
-      where: {
-        role: "analyst",
-      },
-      select: {
-        id: true,
-        full_name: true,
-        email: true,
-      },
-      orderBy: {
-        full_name: "asc",
-      },
-    });
-
-    return { analysts, success: true };
+    await prisma.labReport.delete({ where: { id } })
+    revalidatePath('/reporting')
+    return { success: true }
   } catch (error) {
-    console.error("Error getting analysts:", error);
-    return {
-      analysts: [],
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to get analysts",
-    };
-  }
-}
-
-/**
- * Get all reporting staff untuk dropdown assignment
- */
-export async function getAllReportingStaff() {
-  try {
-    const { profile } = await getCurrentUser();
-
-    if (!["admin", "operator"].includes(profile.role)) {
-      throw new Error("Only admin/operator can access this");
-    }
-
-    const staff = await prisma.profile.findMany({
-      where: {
-        role: "reporting",
-      },
-      select: {
-        id: true,
-        full_name: true,
-        email: true,
-      },
-      orderBy: {
-        full_name: "asc",
-      },
-    });
-
-    return { staff, success: true };
-  } catch (error) {
-    console.error("Error getting reporting staff:", error);
-    return {
-      staff: [],
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to get reporting staff",
-    };
+    console.error('Delete Lab Report Error:', error)
+    return { success: false, message: 'Gagal menghapus laporan' }
   }
 }

@@ -36,7 +36,8 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { PageSkeleton } from "@/components/ui";
-import { createClient } from '@/lib/supabase/client';
+// TODO: Implement polling or SSE for real-time updates instead of Supabase realtime
+// import { createClient } from '@/lib/supabase/client';
 import { getMySamplingAssignments, updateSamplingStatus, rejectSamplingAssignment } from "@/lib/actions/sampling";
 import { getProfile } from "@/lib/actions/auth";
 import { toast } from "sonner";
@@ -74,8 +75,6 @@ export default function FieldDashboard() {
   const [rejectReason, setRejectReason] = useState("");
   const [isRejecting, setIsRejecting] = useState(false);
 
-  const supabase = createClient();
-
   const loadData = useCallback(async (showRefreshToast = false) => {
     if (showRefreshToast) setRefreshing(true);
     else setLoading(true);
@@ -103,21 +102,11 @@ export default function FieldDashboard() {
   useEffect(() => {
     loadData();
 
-    const channel = supabase
-      .channel('field_sampling_updates')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'sampling_assignments'
-      }, () => {
-        loadData();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [loadData, supabase]);
+    // TODO: Implement polling or Server-Sent Events for real-time updates
+    // const channel = supabase.channel('field_sampling_updates')...
+    const interval = setInterval(() => loadData(), 60000); // Poll every 60s
+    return () => clearInterval(interval);
+  }, [loadData]);
 
   const filteredAssignments = assignments.filter((assignment: any) => {
     const matchesSearch = search === "" ||

@@ -112,6 +112,11 @@ export default function OperatorQuotationDetailPage({ params }: { params: Promis
                <h1 className="text-3xl font-black text-emerald-950 tracking-tighter uppercase font-[family-name:var(--font-montserrat)]">{quotation.quotation_number}</h1>
                <Badge className={cn("font-black text-[10px] px-3 py-1 rounded-full border-none shadow-sm", cfg.bg, cfg.color)}>{cfg.label}</Badge>
             </div>
+            {quotation.title && (
+              <p className="text-emerald-700 text-sm font-black uppercase tracking-tight mb-1 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-100 w-fit">
+                {quotation.title}
+              </p>
+            )}
             <p className="text-slate-500 text-sm font-medium italic">Manajemen berkas penawaran digital laboratorium.</p>
           </div>
         </div>

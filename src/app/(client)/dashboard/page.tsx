@@ -23,7 +23,6 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
-import { createClient } from "@/lib/supabase/client";
 import { getJobOrders } from "@/lib/actions/jobs";
 import { getProfile } from "@/lib/actions/auth";
 import { cn } from "@/lib/utils";
@@ -69,14 +68,16 @@ export default function ClientDashboard() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
 
-  const supabase = createClient();
-
   const loadData = useCallback(async (showRefreshToast = false) => {
     if (showRefreshToast) setRefreshing(true);
     else setLoading(true);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // Get user from session
+      const sessionRes = await fetch('/api/auth/session');
+      const session = await sessionRes.json();
+      const user = session?.user || null;
+
       const [prof, jobsData, notifData] = await Promise.all([
         getProfile(),
         getJobOrders(1, 100),
@@ -120,18 +121,15 @@ export default function ClientDashboard() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     loadData();
-    const channel = supabase
-      .channel('client_refresh')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'job_orders' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'quotations' }, () => loadData())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [loadData, supabase]);
+    // TODO: Implement polling or Server-Sent Events for real-time updates
+    // const channel = supabase.channel('client_refresh')...
+    const interval = setInterval(() => loadData(), 60000); // Poll every 60s
+    return () => clearInterval(interval);
+  }, [loadData]);
 
   const handleApproveQuotation = async (id: string) => {
     try {

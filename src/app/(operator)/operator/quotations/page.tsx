@@ -65,7 +65,6 @@ import { getAllServices } from "@/lib/actions/services";
 import { getAllOperationalCatalogs } from "@/lib/actions/operational-catalog";
 import { getAllEquipment } from "@/lib/actions/equipment";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -155,8 +154,6 @@ export default function OperatorQuotationListPage() {
   const [pendingFormData, setPendingFormData] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
 
-  const supabase = createClient();
-
   const { register, control, handleSubmit, setValue, getValues, reset, formState: { errors } } = useForm({
     resolver: zodResolver(quotationSchema),
     defaultValues: {
@@ -231,14 +228,9 @@ export default function OperatorQuotationListPage() {
 
   useEffect(() => {
     loadData();
-    const channel = supabase
-      .channel('quotation_updates')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'quotations' }, () => {
-        loadData();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [loadData, supabase]);
+    const interval = setInterval(() => loadData(), 60000);
+    return () => { clearInterval(interval); };
+  }, [loadData]);
 
   useEffect(() => {
     if (isDialogOpen) {

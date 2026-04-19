@@ -5,543 +5,567 @@ import {
   Text,
   View,
   StyleSheet,
+  Font,
   Image
 } from '@react-pdf/renderer';
 
-// Use basic fonts only to avoid any formatting issues
-// Helvetica is built-in to all PDF viewers and react-pdf
+// Register Montserrat font for a more modern look
+Font.register({
+  family: 'Montserrat',
+  fonts: [
+    { src: 'https://fonts.gstatic.com/s/montserrat/v25/JTUSjIg1_i6t8kCHKm459Wlhyw.woff', fontWeight: 'normal' },
+    { src: 'https://fonts.gstatic.com/s/montserrat/v25/JTURjIg1_i6t8kCHKm45_dJE330EBz998Q.woff', fontWeight: 'bold' }
+  ]
+});
 
 interface InvoiceData {
   invoice_number: string;
-  quotation_number?: string | null;
-  tracking_code: string;
-  issue_date: string;
-  due_date: string;
   amount: number;
-  payment_status: string;
-  payment_method?: string | null;
+  status: string;
+  due_date: string;
   paid_at?: string | null;
-  customer: {
-    full_name?: string | null;
-    company_name?: string | null;
-    email?: string | null;
-    phone?: string | null;
-    address?: string | null;
+  created_at: string;
+  notes?: string | null;
+  job_order: {
+    tracking_code: string;
+    quotation: {
+      quotation_number: string;
+      subtotal: number;
+      tax_amount: number;
+      use_tax: boolean;
+      total_amount: number;
+      perdiem_price?: number | null;
+      perdiem_qty?: number | null;
+      perdiem_name?: string | null;
+      transport_price?: number | null;
+      transport_qty?: number | null;
+      transport_name?: string | null;
+      profile: {
+        full_name?: string | null;
+        company_name?: string | null;
+        email?: string | null;
+        phone?: string | null;
+        address?: string | null;
+      };
+      items: Array<{
+        id: string;
+        qty: number;
+        price_snapshot: number;
+        parameter_snapshot?: string | null;
+        service?: {
+          name: string;
+          category?: string | null;
+          regulation?: string | null;
+        } | null;
+        equipment?: {
+          name: string;
+        } | null;
+      }>;
+    };
   };
-  items?: Array<{
-    category_name?: string | null;
-    service_name?: string | null;
-    parameters?: string | null;
-    regulation?: string | null;
-    quantity: number;
-    unit_price: number;
-    subtotal: number;
-  }>;
-  company: {
-    company_name: string;
-    address?: string | null;
-    phone?: string | null;
-    email?: string | null;
-    logo_url?: string | null;
-    npwp?: string | null;
-  };
+}
+
+interface CompanyProfile {
+  company_name: string;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  logo_url?: string | null;
+  tagline?: string | null;
+  npwp?: string | null;
+  leader_name?: string | null;
+  signature_url?: string | null;
+  stamp_url?: string | null;
 }
 
 interface InvoicePDFProps {
   data: InvoiceData;
+  company?: CompanyProfile;
 }
 
 const styles = StyleSheet.create({
   page: {
-    padding: 40,
-    backgroundColor: '#ffffff',
+    paddingTop: 30,
+    paddingBottom: 50,
+    paddingLeft: 60,
+    paddingRight: 60,
     fontSize: 9,
     fontFamily: 'Helvetica',
+    lineHeight: 1.5,
+    color: '#1a1a1a'
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 20,
-    paddingBottom: 20,
-    borderBottomWidth: 2,
-    borderBottomColor: '#10b981',
-    borderBottomStyle: 'solid',
+    marginBottom: 5,
+    paddingBottom: 5,
+    borderBottom: '2pt solid #000',
   },
-  logoSection: {
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 2
   },
-  logo: {
-    width: 60,
-    height: 60,
+  logoContainer: {
+    width: 70,
+    marginRight: 15
+  },
+  logoImage: {
+    width: 65,
+    height: 65,
+    objectFit: 'contain'
+  },
+  companyInfoContainer: {
+    flex: 1,
+    textAlign: 'center',
+    paddingRight: 70
   },
   companyName: {
     fontSize: 16,
-    color: '#065f46',
     fontWeight: 'bold',
+    textTransform: 'uppercase',
     marginBottom: 2,
-    marginLeft: 10,
+    color: '#064e3b'
   },
-  companyInfo: {
+  companyTagline: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#059669',
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 1
+  },
+  companyAddress: {
     fontSize: 8,
-    color: '#64748b',
-    lineHeight: 1.4,
-    marginLeft: 10,
-    maxWidth: 250,
+    color: '#4b5563',
+    lineHeight: 1.2
   },
-  invoiceTitleSection: {
-    textAlign: 'right',
-  },
-  invoiceTitleText: {
-    fontSize: 20,
-    color: '#065f46',
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  invoiceNumberLabel: {
-    fontSize: 10,
-    color: '#1e293b',
-    fontWeight: 'bold',
-  },
-  section: {
-    marginBottom: 20,
-  },
-  // New Two-Column Info Section
-  infoContainer: {
+  invoiceHeader: {
+    marginTop: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 25,
-    gap: 20,
+    alignItems: 'flex-start',
+    marginBottom: 20
   },
-  infoBox: {
-    flex: 1,
+  invoiceTitleBox: {
+    width: '40%'
   },
-  infoSectionTitle: {
+  invoiceTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#064e3b',
+    textTransform: 'uppercase',
+    marginBottom: 2
+  },
+  invoiceNumber: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#1a1a1a'
+  },
+  customerBox: {
+    width: '55%',
+    backgroundColor: '#f9fafb',
+    padding: 10,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#059669'
+  },
+  boxTitle: {
+    fontSize: 8,
+    fontWeight: 'bold',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+    letterSpacing: 0.5
+  },
+  customerName: {
     fontSize: 10,
     fontWeight: 'bold',
-    color: '#065f46',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-    borderBottomStyle: 'solid',
-    paddingBottom: 4,
-    marginBottom: 8,
-    textTransform: 'uppercase',
+    color: '#111827',
+    marginBottom: 2
   },
-  
-  infoRow: {
+  customerInfo: {
+    fontSize: 8,
+    color: '#4b5563',
+    lineHeight: 1.3
+  },
+  metaGrid: {
     flexDirection: 'row',
-    marginBottom: 4,
+    marginBottom: 20,
+    gap: 15
   },
-  infoLabel: {
-    width: 85,
-    color: '#64748b',
-    fontSize: 8,
-  },
-  infoValue: {
+  metaItem: {
     flex: 1,
-    color: '#1e293b',
-    fontSize: 8,
-    fontWeight: 'bold',
+    padding: 8,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 6
   },
-
+  metaLabel: {
+    fontSize: 7,
+    fontWeight: 'bold',
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    marginBottom: 2
+  },
+  metaValue: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#374151'
+  },
   table: {
     marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 4,
+    overflow: 'hidden'
   },
   tableHeader: {
     flexDirection: 'row',
-    backgroundColor: '#10b981',
-    color: '#ffffff',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    fontSize: 9,
+    backgroundColor: '#064e3b',
+    color: '#fff',
     fontWeight: 'bold',
+    minHeight: 25,
+    alignItems: 'center'
   },
   tableRow: {
     flexDirection: 'row',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-    borderBottomStyle: 'solid',
+    borderBottomColor: '#f3f4f6',
+    minHeight: 25,
+    alignItems: 'center'
   },
-  tableRowAlt: {
-    backgroundColor: '#f8fafc',
+  tableCell: {
+    padding: 6,
+    fontSize: 8
   },
-  col1: { width: '5%', textAlign: 'center' },
-  col2: { width: '50%', textAlign: 'left', paddingRight: 5 },
-  categoryText: {
-    fontSize: 7,
-    color: '#10b981',
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    marginBottom: 1,
-  },
-  serviceNameText: {
-    fontSize: 9,
-    fontWeight: 'bold',
-    color: '#1e293b',
-  },
-  regulationText: {
-    fontSize: 7,
-    color: '#0f172a',
-    marginTop: 2,
-    backgroundColor: '#f1f5f9',
-    padding: 2,
-  },
-  parameterText: {
-    fontSize: 7,
-    color: '#64748b',
-    marginTop: 2,
-    fontStyle: 'italic',
-  },
-  col3: { width: '10%', textAlign: 'center' },
-  col4: { width: '15%', textAlign: 'right' },
-  col5: { width: '20%', textAlign: 'right' },
+  colNum: { width: '5%', textAlign: 'center' },
+  colDesc: { flex: 1 },
+  colQty: { width: '10%', textAlign: 'center' },
+  colPrice: { width: '20%', textAlign: 'right' },
+  colTotal: { width: '20%', textAlign: 'right' },
   
-  summary: {
+  summarySection: {
     marginTop: 15,
-    flexDirection: 'column',
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    justifyContent: 'flex-end'
+  },
+  summaryBox: {
+    width: '45%'
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    width: 200,
+    paddingVertical: 3,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#f3f4f6'
   },
   summaryLabel: {
     fontSize: 9,
-    color: '#64748b',
+    color: '#4b5563'
   },
   summaryValue: {
     fontSize: 9,
-    color: '#1e293b',
     fontWeight: 'bold',
+    color: '#111827'
   },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    width: 200,
-    backgroundColor: '#10b981',
+    padding: 8,
+    backgroundColor: '#064e3b',
+    color: '#fff',
     borderRadius: 4,
-    marginTop: 5,
+    marginTop: 5
   },
   totalLabel: {
     fontSize: 10,
-    color: '#ffffff',
-    fontWeight: 'bold',
+    fontWeight: 'bold'
   },
   totalValue: {
     fontSize: 11,
-    color: '#ffffff',
-    fontWeight: 'bold',
+    fontWeight: 'bold'
   },
-
-  statusBadge: {
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    borderRadius: 3,
-    fontSize: 8,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    width: 100,
-  },
-  statusPaid: {
-    backgroundColor: '#dcfce7',
-    color: '#166534',
-  },
-  statusPending: {
-    backgroundColor: '#fef3c7',
-    color: '#92400e',
-  },
-  statusCancelled: {
-    backgroundColor: '#fee2e2',
-    color: '#991b1b',
-  },
-
-  notes: {
+  paymentInfo: {
     marginTop: 30,
     padding: 12,
-    backgroundColor: '#f8fafc',
-    borderRadius: 6,
+    backgroundColor: '#f0fdf4',
+    borderRadius: 8,
     borderWidth: 1,
-    borderStyle: 'solid',
-    borderColor: '#e2e8f0',
+    borderColor: '#dcfce7'
   },
-  notesTitle: {
+  paymentTitle: {
     fontSize: 9,
     fontWeight: 'bold',
-    color: '#1e293b',
-    marginBottom: 4,
+    color: '#166534',
+    marginBottom: 5,
+    textTransform: 'uppercase'
   },
-  notesText: {
+  paymentText: {
     fontSize: 8,
-    color: '#64748b',
-    lineHeight: 1.4,
+    color: '#166534',
+    marginBottom: 2
+  },
+  signatureArea: {
+    marginTop: 40,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingRight: 20
+  },
+  signatureBox: {
+    width: 180,
+    alignItems: 'center'
+  },
+  signatureTitle: {
+    fontSize: 9,
+    marginBottom: 45,
+    textAlign: 'center'
+  },
+  signatureName: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    textDecoration: 'underline',
+    textTransform: 'uppercase'
+  },
+  stampContainer: {
+    position: 'absolute',
+    top: -15,
+    left: -20,
+    width: 70,
+    height: 70,
+    opacity: 0.5,
+    zIndex: 1
+  },
+  signatureImage: {
+    position: 'absolute',
+    top: -30,
+    width: 90,
+    height: 50,
+    zIndex: 2,
+    objectFit: 'contain'
   },
   footer: {
-    marginTop: 30,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-    paddingTop: 10,
-  },
-  signBox: {
-    flex: 1,
+    position: 'absolute',
+    bottom: 30,
+    left: 60,
+    right: 60,
+    borderTopWidth: 0.5,
+    borderTopColor: '#d1d5db',
+    paddingTop: 8,
     textAlign: 'center',
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 4,
-  },
-  signTitle: {
-    fontSize: 8,
-    marginBottom: 40,
-    color: '#64748b',
-  },
-  signName: {
-    fontSize: 9,
-    fontWeight: 'bold',
-    color: '#1e293b',
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-    paddingTop: 4,
-  },
-  footerText: {
     fontSize: 7,
-    color: '#94a3b8',
-    textAlign: 'center',
-    marginTop: 10,
-  },
+    color: '#9ca3af',
+    fontStyle: 'italic'
+  }
 });
 
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0,
-  }).format(amount);
-};
-
-const formatDate = (dateString: string) => {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('id-ID', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-};
-
-export const InvoicePDF: React.FC<InvoicePDFProps> = ({ data }) => {
-  const getStatusStyle = (status: string) => {
-    switch (status) {
-      case 'paid':
-        return styles.statusPaid;
-      case 'cancelled':
-        return styles.statusCancelled;
-      default:
-        return styles.statusPending;
-    }
+export const InvoicePDF: React.FC<InvoicePDFProps> = ({
+  data,
+  company = {
+    company_name: 'WahfaLab',
+    address: 'Jl. Raya Cianjur - Bandung No. 123, Cianjur',
+    phone: '(0263) 123456',
+    email: 'finance@wahfalab.com',
+    logo_url: null,
+    tagline: 'Laboratorium Lingkungan & Analisis Teknis',
+    leader_name: 'Kepala Operasional'
+  }
+}) => {
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0
+    }).format(amount);
   };
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'paid':
-        return 'LUNAS';
-      case 'cancelled':
-        return 'DIBATALKAN';
-      default:
-        return 'BELUM BAYAR';
-    }
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
   };
+
+  const getBaseUrl = () => {
+    if (typeof window !== 'undefined') return window.location.origin;
+    return process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  };
+
+  const fullLogoUrl = company.logo_url?.startsWith('/') ? `${getBaseUrl()}${company.logo_url}` : company.logo_url;
+  const fullSignatureUrl = company.signature_url?.startsWith('/') ? `${getBaseUrl()}${company.signature_url}` : company.signature_url;
+  const fullStampUrl = company.stamp_url?.startsWith('/') ? `${getBaseUrl()}${company.stamp_url}` : company.stamp_url;
+
+  const quotation = data.job_order.quotation;
+  const hasAdditionalCosts = (quotation.perdiem_price || 0) > 0 || (quotation.transport_price || 0) > 0;
 
   return (
-    <Document>
+    <Document title={`INVOICE - ${data.invoice_number}`}>
       <Page size="A4" style={styles.page}>
-        {/* Header */}
+        {/* Kop Surat */}
         <View style={styles.header}>
-          <View style={styles.logoSection}>
-            {data.company.logo_url ? (
-              <Image style={styles.logo} src={data.company.logo_url} />
-            ) : (
-              <View style={[styles.logo, { backgroundColor: '#10b981', borderRadius: 8 }]} />
-            )}
-            <View>
-              <Text style={styles.companyName}>{data.company.company_name}</Text>
-              {data.company.address && (
-                <Text style={styles.companyInfo}>{data.company.address}</Text>
-              )}
-              <Text style={styles.companyInfo}>
-                Telp: {data.company.phone || '-'} | Email: {data.company.email || '-'}
-              </Text>
-              {data.company.npwp && (
-                <Text style={styles.companyInfo}>NPWP: {data.company.npwp}</Text>
+          <View style={styles.headerRow}>
+            <View style={styles.logoContainer}>
+              {fullLogoUrl ? (
+                <Image source={{ uri: fullLogoUrl }} style={styles.logoImage} />
+              ) : (
+                <View style={{ width: 60, height: 60, backgroundColor: '#f3f4f6', borderRadius: 8 }} />
               )}
             </View>
+            <View style={styles.companyInfoContainer}>
+              <Text style={styles.companyName}>{company.company_name}</Text>
+              <Text style={styles.companyTagline}>{company.tagline || 'Laboratorium Analisis Lingkungan'}</Text>
+              <Text style={styles.companyAddress}>{company.address}</Text>
+              <Text style={styles.companyAddress}>
+                {company.phone && `Telp: ${company.phone}`}
+                {company.email && ` | Email: ${company.email}`}
+              </Text>
+            </View>
           </View>
-          <View style={styles.invoiceTitleSection}>
-            <Text style={styles.invoiceTitleText}>INVOICE</Text>
-            <Text style={styles.invoiceNumberLabel}>{data.invoice_number}</Text>
-            <Text style={{ fontSize: 8, color: '#64748b', marginTop: 2 }}>
-              Tanggal Terbit: {formatDate(data.issue_date)}
+        </View>
+
+        {/* Invoice Header Section */}
+        <View style={styles.invoiceHeader}>
+          <View style={styles.invoiceTitleBox}>
+            <Text style={styles.invoiceTitle}>INVOICE</Text>
+            <Text style={styles.invoiceNumber}>{data.invoice_number}</Text>
+            <Text style={{ fontSize: 8, color: '#6b7280', marginTop: 4 }}>
+              Tracking Code: {data.job_order.tracking_code}
+            </Text>
+          </View>
+          
+          <View style={styles.customerBox}>
+            <Text style={styles.boxTitle}>Tagihan Kepada:</Text>
+            <Text style={styles.customerName}>{quotation.profile.company_name || quotation.profile.full_name}</Text>
+            {quotation.profile.company_name && (
+              <Text style={styles.customerInfo}>u.p. {quotation.profile.full_name}</Text>
+            )}
+            <Text style={styles.customerInfo}>{quotation.profile.address || '-'}</Text>
+            <Text style={styles.customerInfo}>{quotation.profile.phone || '-'}</Text>
+          </View>
+        </View>
+
+        {/* Meta Info Grid */}
+        <View style={styles.metaGrid}>
+          <View style={styles.metaItem}>
+            <Text style={styles.metaLabel}>Tanggal Terbit</Text>
+            <Text style={styles.metaValue}>{formatDate(data.created_at)}</Text>
+          </View>
+          <View style={styles.metaItem}>
+            <Text style={styles.metaLabel}>Jatuh Tempo</Text>
+            <Text style={styles.metaValue}>{formatDate(data.due_date)}</Text>
+          </View>
+          <View style={styles.metaItem}>
+            <Text style={styles.metaLabel}>No. Penawaran</Text>
+            <Text style={styles.metaValue}>{quotation.quotation_number}</Text>
+          </View>
+          <View style={styles.metaItem}>
+            <Text style={styles.metaLabel}>Status</Text>
+            <Text style={[styles.metaValue, { color: data.status === 'paid' ? '#059669' : '#d97706' }]}>
+              {data.status.toUpperCase()}
             </Text>
           </View>
         </View>
 
-        {/* Two-Column Info Section */}
-        <View style={styles.infoContainer}>
-          {/* Column Left: Customer Info */}
-          <View style={styles.infoBox}>
-            <Text style={styles.infoSectionTitle}>Kepada Yth:</Text>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Nama</Text>
-              <Text style={styles.infoValue}>: {data.customer.full_name || '-'}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Perusahaan</Text>
-              <Text style={styles.infoValue}>: {data.customer.company_name || '-'}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Email</Text>
-              <Text style={styles.infoValue}>: {data.customer.email || '-'}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Telepon</Text>
-              <Text style={styles.infoValue}>: {data.customer.phone || '-'}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Alamat</Text>
-              <Text style={styles.infoValue}>: {data.customer.address || '-'}</Text>
-            </View>
-          </View>
-
-          {/* Column Right: Invoice Details */}
-          <View style={[styles.infoBox, { maxWidth: 200 }]}>
-            <Text style={styles.infoSectionTitle}>Detail Tagihan:</Text>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>No. Penawaran</Text>
-              <Text style={styles.infoValue}>: {data.quotation_number || '-'}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Job Order</Text>
-              <Text style={styles.infoValue}>: {data.tracking_code}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Jatuh Tempo</Text>
-              <Text style={styles.infoValue}>: {formatDate(data.due_date)}</Text>
-            </View>
-            <View style={[styles.infoRow, { marginTop: 5 }]}>
-              <Text style={styles.infoLabel}>Status</Text>
-              <View style={[styles.statusBadge, getStatusStyle(data.payment_status)]}>
-                <Text>{getStatusLabel(data.payment_status)}</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        <View style={{ marginBottom: 15 }}>
-          <Text style={{ fontSize: 9, marginBottom: 4, fontWeight: "bold", color: "#1e293b" }}>Dengan Hormat,</Text>
-          <Text style={{ fontSize: 9, lineHeight: 1.4, color: "#334155" }}>
-            Menindaklanjuti permintaan penawaran harga perihal tersebut di atas, dengan ini kami sampaikan rincian penawaran harga sebagai berikut:
-          </Text>
-        </View>
-
         {/* Items Table */}
-        <View style={styles.section}>
-          <Text style={[styles.infoSectionTitle, { marginBottom: 5 }]}>Rincian Layanan & Pengujian</Text>
-          <View style={styles.table}>
-            <View style={styles.tableHeader}>
-              <Text style={styles.col1}>No</Text>
-              <Text style={styles.col2}>Deskripsi</Text>
-              <Text style={styles.col3}>Qty</Text>
-              <Text style={styles.col4}>Harga Satuan</Text>
-              <Text style={styles.col5}>Subtotal</Text>
-            </View>
-            {data.items && data.items.length > 0 ? (
-              data.items.map((item, index) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.tableRow,
-                    index % 2 === 1 ? styles.tableRowAlt : {},
-                  ]}
-                  wrap={false}
-                >
-                  <Text style={styles.col1}>{index + 1}</Text>
-                  <View style={styles.col2}>
-                    <Text style={styles.serviceNameText}>{item.service_name || 'Layanan'}</Text>
-                    {item.regulation && (
-                      <Text style={styles.regulationText}>Regulasi: {item.regulation}</Text>
-                    )}
-                    {item.parameters && (
-                      <Text style={styles.parameterText}>Parameter: {item.parameters}</Text>
-                    )}
-                  </View>
-                  <Text style={styles.col3}>{item.quantity}</Text>
-                  <Text style={styles.col4}>{formatCurrency(item.unit_price)}</Text>
-                  <Text style={styles.col5}>{formatCurrency(item.subtotal)}</Text>
-                </View>
-              ))
-            ) : (
-              <View style={styles.tableRow}>
-                <Text style={styles.col2}>Layanan sampling dan analisis laboratorium</Text>
-                <Text style={styles.col3}>1</Text>
-                <Text style={styles.col4}>{formatCurrency(data.amount)}</Text>
-                <Text style={styles.col5}>{formatCurrency(data.amount)}</Text>
-              </View>
-            )}
+        <View style={styles.table}>
+          <View style={styles.tableHeader}>
+            <Text style={[styles.tableCell, styles.colNum]}>No</Text>
+            <Text style={[styles.tableCell, styles.colDesc]}>Deskripsi Layanan / Item</Text>
+            <Text style={[styles.tableCell, styles.colQty]}>Qty</Text>
+            <Text style={[styles.tableCell, styles.colPrice]}>Harga Satuan</Text>
+            <Text style={[styles.tableCell, styles.colTotal]}>Jumlah</Text>
           </View>
+          
+          {quotation.items.map((item, index) => (
+            <View key={item.id} style={styles.tableRow}>
+              <Text style={[styles.tableCell, styles.colNum]}>{index + 1}</Text>
+              <View style={[styles.tableCell, styles.colDesc]}>
+                <Text style={{ fontWeight: 'bold' }}>{item.service?.name || item.equipment?.name || 'Item'}</Text>
+                {item.parameter_snapshot && (
+                  <Text style={{ fontSize: 7, color: '#6b7280' }}>Parameter: {item.parameter_snapshot}</Text>
+                )}
+              </View>
+              <Text style={[styles.tableCell, styles.colQty]}>{item.qty}</Text>
+              <Text style={[styles.tableCell, styles.colPrice]}>{formatCurrency(Number(item.price_snapshot))}</Text>
+              <Text style={[styles.tableCell, styles.colTotal]}>{formatCurrency(Number(item.qty * Number(item.price_snapshot)))}</Text>
+            </View>
+          ))}
 
-          {/* Summary */}
-          <View style={styles.summary}>
+          {/* Additional Costs Rows */}
+          {(quotation.perdiem_price || 0) > 0 && (
+            <View style={styles.tableRow}>
+              <Text style={[styles.tableCell, styles.colNum]}>{quotation.items.length + 1}</Text>
+              <Text style={[styles.tableCell, styles.colDesc]}>{quotation.perdiem_name || 'Uang Harian / Perdiem'}</Text>
+              <Text style={[styles.tableCell, styles.colQty]}>{quotation.perdiem_qty}</Text>
+              <Text style={[styles.tableCell, styles.colPrice]}>{formatCurrency(Number(quotation.perdiem_price))}</Text>
+              <Text style={[styles.tableCell, styles.colTotal]}>{formatCurrency(Number(quotation.perdiem_qty! * Number(quotation.perdiem_price)))}</Text>
+            </View>
+          )}
+          {(quotation.transport_price || 0) > 0 && (
+            <View style={styles.tableRow}>
+              <Text style={[styles.tableCell, styles.colNum]}>{quotation.items.length + (Number(quotation.perdiem_price) > 0 ? 2 : 1)}</Text>
+              <Text style={[styles.tableCell, styles.colDesc]}>{quotation.transport_name || 'Biaya Transportasi'}</Text>
+              <Text style={[styles.tableCell, styles.colQty]}>{quotation.transport_qty}</Text>
+              <Text style={[styles.tableCell, styles.colPrice]}>{formatCurrency(Number(quotation.transport_price))}</Text>
+              <Text style={[styles.tableCell, styles.colTotal]}>{formatCurrency(Number(quotation.transport_qty! * Number(quotation.transport_price)))}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Calculation Summary */}
+        <View style={styles.summarySection}>
+          <View style={styles.summaryBox}>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Subtotal</Text>
-              <Text style={styles.summaryValue}>{formatCurrency(data.amount)}</Text>
+              <Text style={styles.summaryValue}>{formatCurrency(Number(quotation.subtotal))}</Text>
             </View>
+            
+            {quotation.use_tax && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>PPN (11%)</Text>
+                <Text style={styles.summaryValue}>{formatCurrency(Number(quotation.tax_amount))}</Text>
+              </View>
+            )}
+
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>TOTAL TAGIHAN</Text>
-              <Text style={styles.totalValue}>{formatCurrency(data.amount)}</Text>
+              <Text style={styles.totalValue}>{formatCurrency(Number(quotation.total_amount))}</Text>
             </View>
           </View>
         </View>
 
-        {/* Payment Info & Notes */}
-        <View style={styles.notes}>
-          <Text style={styles.notesTitle}>Syarat, Ketentuan & Instruksi Pembayaran:</Text>
-          <Text style={styles.notesText}>• Pembayaran dilakukan melalui transfer ke rekening perusahaan dalam jangka waktu maksimal 14 hari.</Text>
-          <Text style={styles.notesText}>• Mohon lampirkan nomor invoice {data.invoice_number} pada berita transfer untuk memudahkan verifikasi.</Text>
-          <Text style={styles.notesText}>• Harap konfirmasi pembayaran kepada admin kami segera setelah transfer berhasil dilakukan.</Text>
-          <Text style={styles.notesText}>• Invoice ini dianggap sah dan merupakan bukti tagihan resmi dari WahfaLab.</Text>
-          <Text style={styles.notesText}>• Keterlambatan pembayaran dapat mengakibatkan penundaan penerbitan Laporan Hasil Uji (LHU).</Text>
+        {/* Payment & Terms */}
+        <View style={styles.paymentInfo}>
+          <Text style={styles.paymentTitle}>Informasi Pembayaran:</Text>
+          <Text style={styles.paymentText}>• Pembayaran dapat dilakukan melalui transfer Bank:</Text>
+          <Text style={[styles.paymentText, { fontWeight: 'bold' }]}>  BANK MANDIRI - 1234567890 a.n. WAHFALAB INDONESIA</Text>
+          <Text style={styles.paymentText}>• Mohon cantumkan No. Invoice {data.invoice_number} pada berita transfer.</Text>
+          <Text style={styles.paymentText}>• Pembayaran dianggap sah jika dana sudah masuk ke rekening kami.</Text>
         </View>
 
-        {/* Footer / Signatures */}
-        <View style={styles.footer} wrap={false}>
-          <View style={styles.signBox}>
-            <Text style={styles.signTitle}>Pelanggan,</Text>
-            <Text style={styles.signName}>( ____________________ )</Text>
-          </View>
-          <View style={styles.signBox}>
-            <Text style={styles.signTitle}>Hormat Kami,</Text>
-            <Text style={styles.signName}>( ____________________ )</Text>
-          </View>
-          <View style={styles.signBox}>
-            <Text style={styles.signTitle}>Disetujui Oleh,</Text>
-            <Text style={styles.signName}>( WahfaLab Admin )</Text>
+        {/* Signature */}
+        <View style={styles.signatureArea}>
+          <View style={styles.signatureBox}>
+            <Text style={styles.signatureTitle}>Hormat Kami,{'\n'}WahfaLab Finance</Text>
+            
+            <View style={{ height: 60, justifyContent: 'center', position: 'relative' }}>
+              {fullStampUrl && <Image source={{ uri: fullStampUrl }} style={styles.stampContainer} />}
+              {fullSignatureUrl && <Image source={{ uri: fullSignatureUrl }} style={styles.signatureImage} />}
+            </View>
+
+            <Text style={styles.signatureName}>{company.leader_name}</Text>
+            <Text style={{ fontSize: 8, color: '#6b7280', marginTop: 2 }}>Finance Manager</Text>
           </View>
         </View>
 
-        <Text style={styles.footerText}>
-          Terima kasih atas kepercayaan Anda menggunakan layanan WahfaLab. 
-          Dokumen ini diterbitkan secara elektronik dan sah tanpa tanda tangan basah.
-        </Text>
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Text>Dokumen ini diterbitkan secara elektronik oleh WahfaLab LIMS dan sah tanpa tanda tangan basah.</Text>
+        </View>
       </Page>
     </Document>
   );
 };
+
+export default InvoicePDF;

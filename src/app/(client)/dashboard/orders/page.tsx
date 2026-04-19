@@ -58,10 +58,11 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+// TODO: Implement file upload API route for payment proofs
+// import { createClient } from "@/lib/supabase/client";
 import { getJobOrders } from "@/lib/actions/jobs";
 import { getProfile } from "@/lib/actions/auth";
-import { submitPaymentProof } from "@/lib/actions/invoice";
+import { submitPaymentProof, uploadPaymentProofFile } from "@/lib/actions/invoice";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ChemicalLoader, LoadingOverlay, LoadingButton } from "@/components/ui";
@@ -149,22 +150,24 @@ export default function ClientOrdersPage() {
   const [uploading, setSubmitting] = useState(false);
   const [paymentData, setPaymentData] = useState({ reference: "", file: null as File | null, preview: "" });
 
-  const supabase = createClient();
-
   const loadOrders = async (showRefreshToast = false) => {
     if (showRefreshToast) setRefreshing(true);
     else setLoading(true);
     try {
       const [prof, jobsData] = await Promise.all([getProfile(), getJobOrders(1, 100)]);
       setProfile(prof);
-      const { data: { user } } = await supabase.auth.getUser();
       
+      // Get user from session
+      const sessionRes = await fetch('/api/auth/session');
+      const session = await sessionRes.json();
+      const user = session?.user || null;
+
       // Strict but inclusive filtering (Profile ID OR UserId OR Email Match)
       const filteredOrders = (jobsData.items || []).filter((o: any) => {
         const profileIdMatch = o.quotation?.profile?.id === prof?.id;
         const userIdMatch = o.quotation?.user_id === user?.id;
         const emailMatch = user?.email && o.quotation?.profile?.email?.toLowerCase() === user.email.toLowerCase();
-        
+
         return profileIdMatch || userIdMatch || emailMatch;
       });
       
@@ -251,20 +254,13 @@ export default function ClientOrdersPage() {
 
     setSubmitting(true);
     try {
-      // 1. Upload to Supabase Storage
-      const fileExt = paymentData.file.name.split('.').pop();
-      const fileName = `proof-${selectedOrder.invoice.invoice_number}-${Date.now()}.${fileExt}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('payment-proofs') // You might need to create this bucket
-        .upload(fileName, paymentData.file);
+      const uploadResult = await uploadPaymentProofFile(selectedOrder.invoice.id, paymentData.file);
+      if (uploadResult.error || !uploadResult.url) {
+        throw new Error(uploadResult.error || "Gagal upload bukti transfer");
+      }
 
-      if (uploadError) throw uploadError;
+      const result = await submitPaymentProof(selectedOrder.invoice.id, uploadResult.url, paymentData.reference);
 
-      const { data: { publicUrl } } = supabase.storage.from('payment-proofs').getPublicUrl(fileName);
-
-      // 2. Call Server Action
-      const result = await submitPaymentProof(selectedOrder.invoice.id, publicUrl, paymentData.reference);
-      
       if (result.error) throw new Error(result.error);
 
       toast.success("Konfirmasi Berhasil!", { description: "Bagian keuangan akan segera memverifikasi pembayaran Anda." });

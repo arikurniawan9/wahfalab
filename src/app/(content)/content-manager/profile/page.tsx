@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
 import { User, Mail, Lock, Eye, EyeOff, Save, Shield } from "lucide-react";
-import { getProfile, updateProfile, updatePassword } from "@/lib/actions/auth";
+import { getProfile, updateProfile, updatePasswordAction } from "@/lib/actions/auth";
 import { LoadingOverlay, LoadingButton } from "@/components/ui";
 
 export default function ContentManagerProfilePage() {
@@ -74,7 +74,7 @@ export default function ContentManagerProfilePage() {
     }
     setLoading(true);
     try {
-      const result = await updatePassword({
+      const result = await updatePasswordAction({
         current_password: passwordData.current_password,
         new_password: passwordData.new_password
       });

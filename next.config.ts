@@ -15,7 +15,7 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "*.supabase.co",
+        hostname: "**", // Allow all external image URLs
       },
     ],
     formats: ["image/avif", "image/webp"],

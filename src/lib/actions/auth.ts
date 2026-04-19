@@ -1,183 +1,135 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
 import prisma from '@/lib/prisma'
+import { signIn as nextAuthSignIn, signOut as nextAuthSignOut } from '@/lib/auth'
 import { redirect } from 'next/navigation'
+import { hashPassword, verifyPassword, getRedirectPath } from '@/lib/auth-helpers'
 
 export async function login(formData: FormData) {
-  const supabase = await createClient()
   const email = formData.get('email') as string
   const password = formData.get('password') as string
 
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  })
-
-  if (error) {
-    return { error: error.message }
+  try {
+    await nextAuthSignIn('credentials', {
+      email,
+      password,
+      redirect: false,
+    })
+  } catch (error: any) {
+    return { error: error.message || "Login gagal" }
   }
 
-  // Ambil role dari database menggunakan Prisma
-  let profile = await prisma.profile.findUnique({
-    where: { id: data.user?.id },
+  // Ambil profile user
+  const profile = await prisma.profile.findUnique({
+    where: { email },
     select: { role: true }
   })
 
-  // SELF-HEALING: Jika user ada di Auth tapi profil hilang di DB (misal habis reset)
-  if (!profile && data.user) {
-    console.log("Self-healing: Creating missing profile for user", data.user.id);
-    profile = await prisma.profile.create({
-      data: {
-        id: data.user.id,
-        email: data.user.email,
-        full_name: data.user.user_metadata?.full_name || 'User',
-        role: 'client' // Default untuk user yang mendaftar sendiri
-      },
-      select: { role: true }
-    });
+  if (!profile) {
+    return { error: "Profil tidak ditemukan" }
   }
 
   // Redirect berdasarkan role
-  if (profile?.role === 'admin') {
-    redirect('/admin')
-  } else if (profile?.role === 'content_manager') {
-    redirect('/content-manager')
-  } else if (profile?.role === 'operator') {
-    redirect('/operator')
-  } else if (profile?.role === 'field_officer') {
-    redirect('/field')
-  } else if (profile?.role === 'finance') {
-    redirect('/finance')
-  } else if (profile?.role === 'analyst') {
-    redirect('/analyst')
-  } else if (profile?.role === 'reporting') {
-    redirect('/reporting')
-  } else {
-    redirect('/dashboard')
-  }
+  const redirectPath = await getRedirectPath(profile.role)
+  redirect(redirectPath)
 }
 
 export async function signup(formData: FormData) {
-  const supabase = await createClient()
   const email = formData.get('email') as string
   const password = formData.get('password') as string
   const full_name = formData.get('full_name') as string
   const company_name = formData.get('company_name') as string | null
   const address = formData.get('address') as string
 
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        full_name,
-      },
-    },
+  // Cek apakah email sudah terdaftar
+  const existingUser = await prisma.profile.findUnique({
+    where: { email }
   })
 
-  if (error) {
-    return { error: error.message }
+  if (existingUser) {
+    return { error: "Email sudah terdaftar" }
   }
 
-  // Ensure profile is created in Prisma if trigger fails or for redundancy
-  if (data.user) {
-    try {
-      await prisma.profile.upsert({
-        where: { id: data.user.id },
-        update: {
-          full_name,
-          email,
-          role: 'client', // Always set to client for self-registration
-          company_name: company_name || undefined,
-          address,
-        },
-        create: {
-          id: data.user.id,
-          full_name,
-          email,
-          role: 'client', // Always set to client for self-registration
-          company_name: company_name || undefined,
-          address,
-        },
-      })
-    } catch (e) {
-      console.error('Prisma Profile Creation Error:', e)
-    }
+  // Hash password
+  const hashedPassword = await hashPassword(password)
+
+  // Buat user baru
+  try {
+    await prisma.profile.create({
+      data: {
+        email,
+        password: hashedPassword,
+        full_name,
+        role: 'client',
+        company_name: company_name || undefined,
+        address,
+      }
+    })
+  } catch (error: any) {
+    return { error: error.message || "Gagal mendaftar" }
   }
 
-  redirect('/login?message=Cek email Anda untuk verifikasi')
+  redirect('/login?message=Registrasi berhasil. Silakan login')
 }
 
 export async function logout() {
-  const supabase = await createClient()
-  await supabase.auth.signOut()
-  redirect('/login')
+  await nextAuthSignOut({ redirectTo: '/login' })
 }
 
-export async function verifyPassword(password: string) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+export async function verifyPasswordAction(password: string) {
+  const profile = await prisma.profile.findUnique({
+    where: { email: (await getCurrentUserEmail()) || '' }
+  })
 
-  if (!user || !user.email) {
+  if (!profile || !profile.password) {
     return { error: "Sesi berakhir, silakan login kembali" }
   }
 
-  const { error } = await supabase.auth.signInWithPassword({
-    email: user.email,
-    password,
-  })
+  const isValid = await verifyPassword(password, profile.password)
 
-  if (error) {
+  if (!isValid) {
     return { error: "Password yang Anda masukkan salah" }
   }
 
   return { success: true }
 }
 
-export async function getProfile() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+async function getCurrentUserEmail(): Promise<string | null> {
+  // Import di sini untuk menghindari circular dependency
+  const { auth } = await import('@/lib/auth')
+  const session = await auth()
+  return session?.user?.email || null
+}
 
-  if (!user) return null
+export async function getProfile() {
+  const email = await getCurrentUserEmail()
+  if (!email) return null
 
   return await prisma.profile.findUnique({
-    where: { id: user.id }
+    where: { email }
   })
 }
 
-export async function updateProfile(formData: { 
-  full_name: string; 
+export async function updateProfile(formData: {
+  full_name: string;
   email: string;
   avatar_url?: string;
   phone?: string;
   address?: string;
 }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
+  const email = await getCurrentUserEmail()
+  if (!email) {
     return { error: "Unauthorized" }
   }
 
   try {
-    // Update profile in Prisma
     await prisma.profile.update({
-      where: { id: user.id },
+      where: { email },
       data: {
         full_name: formData.full_name,
         email: formData.email,
         phone: formData.phone,
         address: formData.address,
-      }
-    })
-
-    // Update user metadata in Supabase Auth
-    await supabase.auth.updateUser({
-      email: formData.email,
-      data: {
-        full_name: formData.full_name,
-        avatar_url: formData.avatar_url,
       }
     })
 
@@ -187,36 +139,38 @@ export async function updateProfile(formData: {
   }
 }
 
-export async function updatePassword(formData: { 
-  current_password: string; 
-  new_password: string; 
+export async function updatePasswordAction(formData: {
+  current_password: string;
+  new_password: string;
 }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
+  const email = await getCurrentUserEmail()
+  if (!email) {
     return { error: "Unauthorized" }
   }
 
+  const profile = await prisma.profile.findUnique({
+    where: { email }
+  })
+
+  if (!profile || !profile.password) {
+    return { error: "Profil tidak ditemukan" }
+  }
+
+  // Verifikasi password saat ini
+  const isValid = await verifyPassword(formData.current_password, profile.password)
+
+  if (!isValid) {
+    return { error: "Password saat ini salah" }
+  }
+
+  // Hash password baru
+  const hashedPassword = await hashPassword(formData.new_password)
+
   try {
-    // Sign in with current password to verify
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: user.email!,
-      password: formData.current_password,
+    await prisma.profile.update({
+      where: { email },
+      data: { password: hashedPassword }
     })
-
-    if (signInError) {
-      return { error: "Password saat ini salah" }
-    }
-
-    // Update password
-    const { error: updateError } = await supabase.auth.updateUser({
-      password: formData.new_password,
-    })
-
-    if (updateError) {
-      return { error: updateError.message }
-    }
 
     return { success: true }
   } catch (error: any) {

@@ -1,0 +1,6 @@
+project url : https://mnjcbqnxxbsqffpaxjus.supabase.co
+publishable key : sb_publishable_Z-LeuOsqiSZBaPZkeowhnw_W69c8fIn
+direct connection string : postgresql://postgres:[YOUR-PASSWORD]@db.mnjcbqnxxbsqffpaxjus.supabase.co:5432/postgres
+
+
+password : wahfalab@123

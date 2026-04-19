@@ -9,10 +9,13 @@ import {
   Image
 } from '@react-pdf/renderer';
 
-// Register Montserrat font (optional, using default fonts for now)
+// Register Montserrat font for a more modern look
 Font.register({
   family: 'Montserrat',
-  src: 'https://fonts.gstatic.com/s/montserrat/v25/JTUSjIg1_i6t8kCHKm459Wlhyw.woff'
+  fonts: [
+    { src: 'https://fonts.gstatic.com/s/montserrat/v25/JTUSjIg1_i6t8kCHKm459Wlhyw.woff', fontWeight: 'normal' },
+    { src: 'https://fonts.gstatic.com/s/montserrat/v25/JTURjIg1_i6t8kCHKm45_dJE330EBz998Q.woff', fontWeight: 'bold' }
+  ]
 });
 
 interface TravelOrderData {
@@ -87,179 +90,208 @@ interface TravelOrderPDFProps {
 
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 40,
-    paddingBottom: 60,
-    paddingLeft: 50,
-    paddingRight: 50,
+    paddingTop: 30,
+    paddingBottom: 50,
+    paddingLeft: 60,
+    paddingRight: 60,
     fontSize: 10,
     fontFamily: 'Helvetica',
-    lineHeight: 1.4,
+    lineHeight: 1.5,
     color: '#1a1a1a'
   },
   header: {
-    marginBottom: 10,
-    borderBottomWidth: 2,
-    borderBottomColor: '#000',
-    borderBottomStyle: 'solid',
+    marginBottom: 5,
     paddingBottom: 5,
-    position: 'relative'
-  },
-  headerDoubleLine: {
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#000',
-    borderBottomStyle: 'solid',
-    marginTop: 1,
-    width: '100%'
+    borderBottom: '2pt solid #000',
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 5
+    marginBottom: 2
   },
   logoContainer: {
-    width: 65,
+    width: 70,
     marginRight: 15
   },
   logoImage: {
-    width: 60,
-    height: 60,
+    width: 65,
+    height: 65,
     objectFit: 'contain'
   },
   companyInfoContainer: {
     flex: 1,
-    textAlign: 'left',
-    marginRight: 0
+    textAlign: 'center',
+    paddingRight: 70 // Balance for the logo on the left
   },
   companyName: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
     textTransform: 'uppercase',
-    marginBottom: 2
+    marginBottom: 2,
+    color: '#064e3b' // Emerald 900
   },
   companyTagline: {
     fontSize: 9,
-    fontStyle: 'italic',
-    marginBottom: 2
+    fontWeight: 'bold',
+    color: '#059669', // Emerald 600
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 1
   },
   companyAddress: {
     fontSize: 8,
-    color: '#333'
+    color: '#4b5563', // Slate 600
+    lineHeight: 1.2
+  },
+  titleContainer: {
+    marginTop: 25,
+    marginBottom: 20,
+    alignItems: 'center'
   },
   title: {
-    textAlign: 'center',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: 'bold',
-    marginTop: 15,
-    marginBottom: 2,
-    textDecoration: 'underline'
+    textDecoration: 'underline',
+    textTransform: 'uppercase',
+    letterSpacing: 1
   },
   docNumber: {
-    textAlign: 'center',
     fontSize: 10,
-    marginBottom: 20
+    marginTop: 2
+  },
+  mainContent: {
+    marginTop: 10
   },
   section: {
-    marginBottom: 12
+    marginBottom: 15
   },
-  sectionTitle: {
-    fontSize: 10,
+  sectionHeader: {
+    flexDirection: 'row',
+    marginBottom: 8
+  },
+  sectionLabel: {
+    width: 100,
     fontWeight: 'bold',
-    marginBottom: 5,
-    textDecoration: 'underline',
     textTransform: 'uppercase'
   },
-  grid: {
-    marginLeft: 10
+  sectionSeparator: {
+    width: 20
   },
-  row: {
+  sectionValue: {
+    flex: 1
+  },
+  instructionText: {
+    fontSize: 10,
+    marginBottom: 10,
+    textAlign: 'justify'
+  },
+  detailsGrid: {
+    marginLeft: 20,
+    marginBottom: 15
+  },
+  detailRow: {
     flexDirection: 'row',
-    marginBottom: 3
+    marginBottom: 5
   },
-  label: {
-    width: 130,
-    fontSize: 10
+  detailLabel: {
+    width: 120,
+    color: '#4b5563'
   },
-  separator: {
+  detailSeparator: {
     width: 15,
     textAlign: 'center'
   },
-  value: {
+  detailValue: {
     flex: 1,
-    fontSize: 10
+    fontWeight: 'bold'
   },
   table: {
-    marginTop: 5,
+    marginTop: 10,
     borderWidth: 1,
     borderColor: '#000',
-    borderStyle: 'solid'
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#f3f4f6',
+    borderBottomWidth: 1,
+    borderBottomColor: '#000',
+    fontWeight: 'bold'
   },
   tableRow: {
     flexDirection: 'row',
-    borderBottomWidth: 1,
+    borderBottomWidth: 0.5,
     borderBottomColor: '#000',
-    borderBottomStyle: 'solid'
-  },
-  tableHeader: {
-    backgroundColor: '#f5f5f5',
-    fontWeight: 'bold'
+    minHeight: 25,
+    alignItems: 'center'
   },
   tableCell: {
     padding: 5,
-    fontSize: 9,
-    borderRightWidth: 1,
+    fontSize: 8,
+    borderRightWidth: 0.5,
     borderRightColor: '#000',
-    borderRightStyle: 'solid'
   },
-  tableCellNum: {
-    width: 25,
-    textAlign: 'center'
-  },
-  tableCellService: {
-    flex: 2
-  },
-  tableCellReg: {
-    flex: 2
-  },
-  tableCellParams: {
-    flex: 3
-  },
-  signatureSection: {
+  tableCellNum: { width: 30, textAlign: 'center' },
+  tableCellService: { flex: 2 },
+  tableCellReg: { flex: 2 },
+  tableCellParams: { flex: 3, borderRightWidth: 0 },
+  
+  signatureArea: {
     marginTop: 40,
     flexDirection: 'row',
-    justifyContent: 'space-between'
+    justifyContent: 'space-between',
+    paddingLeft: 20,
+    paddingRight: 20
   },
   signatureBox: {
     width: 200,
-    textAlign: 'center'
+    alignItems: 'center'
   },
-  signatureDate: {
-    fontSize: 9,
-    marginBottom: 2,
-    textAlign: 'center'
-  },
-  signatureRole: {
+  signatureTitle: {
     fontSize: 10,
-    marginBottom: 5,
-    minHeight: 25 // Ensure consistent height for multiline roles
+    marginBottom: 40,
+    textAlign: 'center'
   },
   signatureName: {
-    fontWeight: 'bold',
     fontSize: 10,
+    fontWeight: 'bold',
     textDecoration: 'underline',
-    paddingTop: 5
+    textTransform: 'uppercase'
+  },
+  signatureMeta: {
+    fontSize: 8,
+    color: '#6b7280',
+    marginTop: 2
+  },
+  stampContainer: {
+    position: 'absolute',
+    top: -20,
+    left: -30,
+    width: 80,
+    height: 80,
+    opacity: 0.5,
+    zIndex: 1
+  },
+  signatureImage: {
+    position: 'absolute',
+    top: -35,
+    width: 100,
+    height: 60,
+    zIndex: 2,
+    objectFit: 'contain'
   },
   footer: {
     position: 'absolute',
     bottom: 30,
-    left: 50,
-    right: 50,
-    fontSize: 8,
-    color: '#666',
-    textAlign: 'center',
-    fontStyle: 'italic',
+    left: 60,
+    right: 60,
     borderTopWidth: 0.5,
-    borderTopColor: '#ccc',
-    paddingTop: 5
+    borderTopColor: '#d1d5db',
+    paddingTop: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    fontSize: 7,
+    color: '#9ca3af',
+    fontStyle: 'italic'
   }
 });
 
@@ -267,49 +299,48 @@ export const TravelOrderPDF: React.FC<TravelOrderPDFProps> = ({
   data,
   company = {
     company_name: 'WahfaLab',
-    address: 'Jl. Laboratorium No. 123, Jakarta',
-    phone: '(021) 1234-5678',
-    email: 'info@wahfalab.com',
+    address: 'Jl. Raya Cianjur - Bandung No. 123, Cianjur',
+    phone: '(0263) 123456',
+    email: 'admin@wahfalab.com',
     logo_url: null,
-    tagline: 'Laboratorium Analisis & Kalibrasi',
-    npwp: null
+    tagline: 'Laboratorium Lingkungan & Analisis Teknis',
+    leader_name: 'Kepala Laboratorium'
   }
 }) => {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    const options: Intl.DateTimeFormatOptions = {
+    return date.toLocaleDateString('id-ID', {
       day: 'numeric',
       month: 'long',
       year: 'numeric'
-    };
-    return date.toLocaleDateString('id-ID', options);
+    });
   };
 
+  const getBaseUrl = () => {
+    if (typeof window !== 'undefined') return window.location.origin;
+    return process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  };
+
+  const fullLogoUrl = company.logo_url?.startsWith('/') ? `${getBaseUrl()}${company.logo_url}` : company.logo_url;
+  const fullSignatureUrl = company.signature_url?.startsWith('/') ? `${getBaseUrl()}${company.signature_url}` : company.signature_url;
+  const fullStampUrl = company.stamp_url?.startsWith('/') ? `${getBaseUrl()}${company.stamp_url}` : company.stamp_url;
+
   return (
-    <Document title={`Surat Tugas - ${data.document_number}`}>
+    <Document title={`SURAT TUGAS - ${data.document_number}`}>
       <Page size="A4" style={styles.page}>
-        {/* Header (Kop Surat) */}
+        {/* Kop Surat */}
         <View style={styles.header}>
           <View style={styles.headerRow}>
             <View style={styles.logoContainer}>
-              {company.logo_url ? (
-                <Image
-                  source={{ 
-                    uri: company.logo_url.startsWith('/') 
-                      ? `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}${company.logo_url}`
-                      : company.logo_url 
-                  }}
-                  style={styles.logoImage}
-                />
+              {fullLogoUrl ? (
+                <Image source={{ uri: fullLogoUrl }} style={styles.logoImage} />
               ) : (
-                <View style={{ width: 60, height: 60, backgroundColor: '#f5f5f5', borderRadius: 4, alignItems: 'center', justifyContent: 'center', border: '1px solid #ddd' }}>
-                  <Text style={{ fontSize: 20 }}>🧪</Text>
-                </View>
+                <View style={{ width: 60, height: 60, backgroundColor: '#f3f4f6', borderRadius: 8 }} />
               )}
             </View>
             <View style={styles.companyInfoContainer}>
               <Text style={styles.companyName}>{company.company_name}</Text>
-              {company.tagline && <Text style={styles.companyTagline}>{company.tagline}</Text>}
+              <Text style={styles.companyTagline}>{company.tagline || 'Laboratorium Analisis Lingkungan'}</Text>
               <Text style={styles.companyAddress}>{company.address}</Text>
               <Text style={styles.companyAddress}>
                 {company.phone && `Telp: ${company.phone}`}
@@ -317,154 +348,127 @@ export const TravelOrderPDF: React.FC<TravelOrderPDFProps> = ({
               </Text>
             </View>
           </View>
-          <View style={styles.headerDoubleLine} />
         </View>
 
-        {/* Document Title */}
-        <Text style={styles.title}>SURAT TUGAS PERJALANAN DINAS</Text>
-        <Text style={styles.docNumber}>Nomor: {data.document_number}</Text>
-
-        {/* Personnel Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>I. PERSONALIA BERTUGAS</Text>
-          <View style={styles.grid}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Petugas Utama</Text>
-              <Text style={styles.separator}>:</Text>
-              <Text style={[styles.value, { fontWeight: 'bold' }]}>{data.assignment.field_officer.full_name || '-'}</Text>
-            </View>
-            {data.assignment.assistants && data.assignment.assistants.length > 0 && (
-              <View style={styles.row}>
-                <Text style={styles.label}>Asisten</Text>
-                <Text style={styles.separator}>:</Text>
-                <View style={styles.value}>
-                  {data.assignment.assistants.map((a, i) => (
-                    <Text key={i}>{i + 1}. {a.full_name}</Text>
-                  ))}
-                </View>
-              </View>
-            )}
-          </View>
+        {/* Judul Dokumen */}
+        <View style={styles.titleContainer}>
+          <Text style={styles.title}>SURAT TUGAS PENGAMBILAN CONTOH</Text>
+          <Text style={styles.docNumber}>Nomor : {data.document_number}</Text>
         </View>
 
-        {/* Execution Details */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>II. RINCIAN PELAKSANAAN</Text>
-          <View style={styles.grid}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Lokasi / Tujuan</Text>
-              <Text style={styles.separator}>:</Text>
-              <Text style={styles.value}>{data.destination}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Waktu</Text>
-              <Text style={styles.separator}>:</Text>
-              <Text style={styles.value}>{formatDate(data.departure_date)} s/d {formatDate(data.return_date)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Maksud Tugas</Text>
-              <Text style={styles.separator}>:</Text>
-              <Text style={styles.value}>{data.purpose}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Customer</Text>
-              <Text style={styles.separator}>:</Text>
-              <Text style={styles.value}>
-                {data.assignment.job_order.quotation.profile.full_name || '-'}
-                {data.assignment.job_order.quotation.profile.company_name && ` (${data.assignment.job_order.quotation.profile.company_name})`}
+        {/* Isi Surat */}
+        <View style={styles.mainContent}>
+          {/* Dasar */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>DASAR</Text>
+              <Text style={styles.sectionSeparator}>:</Text>
+              <Text style={styles.sectionValue}>
+                Permohonan Pengujian/Sampling dari {data.assignment.job_order.quotation.profile.company_name || data.assignment.job_order.quotation.profile.full_name} 
+                dengan Nomor Penawaran {data.assignment.job_order.quotation.quotation_number}.
               </Text>
             </View>
           </View>
-        </View>
 
-        {/* Sampling Scope Table */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>III. RUANG LINGKUP SAMPLING & PENGUJIAN</Text>
-          <View style={styles.table}>
-            <View style={[styles.tableRow, styles.tableHeader]}>
-              <Text style={[styles.tableCell, styles.tableCellNum]}>No</Text>
-              <Text style={[styles.tableCell, styles.tableCellService]}>Nama Pengujian / Sampel</Text>
-              <Text style={[styles.tableCell, styles.tableCellReg]}>Regulasi / Baku Mutu</Text>
-              <Text style={[styles.tableCell, styles.tableCellParams, { borderRightWidth: 0 }]}>Parameter Analisis</Text>
-            </View>
-            
-            {data.assignment.job_order.quotation.items?.map((item, index) => {
-              const isService = !!item.service;
-              return (
-                <View key={item.id} style={[styles.tableRow, { borderBottomWidth: index === data.assignment.job_order.quotation.items.length - 1 ? 0 : 1 }]}>
-                  <Text style={[styles.tableCell, styles.tableCellNum]}>{index + 1}</Text>
-                  <Text style={[styles.tableCell, styles.tableCellService]}>
-                    {isService ? item.service?.name : (item.equipment?.name || 'Item Kustom')}
-                  </Text>
-                  <Text style={[styles.tableCell, styles.tableCellReg]}>
-                    {isService 
-                      ? (item.service?.regulation_ref?.name || item.service?.regulation || item.service?.category || '-') 
-                      : 'Penyewaan Alat / Peralatan'}
-                  </Text>
-                  <Text style={[styles.tableCell, styles.tableCellParams, { borderRightWidth: 0 }]}>
-                    {isService 
-                      ? (item.parameter_snapshot || 'Sesuai standar operasional') 
-                      : `Jumlah: ${item.qty} unit`}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-        </View>
+          <Text style={[styles.instructionText, { fontWeight: 'bold', textAlign: 'center', marginBottom: 15 }]}>
+            MENUGASKAN :
+          </Text>
 
-        {/* Instructions / Notes */}
-        {data.notes && (
+          {/* Kepada */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>IV. INSTRUKSI KHUSUS</Text>
-            <Text style={{ fontSize: 9 }}>{data.notes}</Text>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>KEPADA</Text>
+              <Text style={styles.sectionSeparator}>:</Text>
+              <View style={styles.sectionValue}>
+                <Text style={{ fontWeight: 'bold' }}>1. {data.assignment.field_officer.full_name}</Text>
+                {data.assignment.assistants?.map((ast, idx) => (
+                  <Text key={ast.id}>{idx + 2}. {ast.full_name}</Text>
+                ))}
+              </View>
+            </View>
           </View>
-        )}
 
-        {/* Signature Area */}
-        <View style={styles.signatureSection}>
+          {/* Untuk */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>UNTUK</Text>
+              <Text style={styles.sectionSeparator}>:</Text>
+              <View style={styles.sectionValue}>
+                <Text style={styles.instructionText}>Melaksanakan pengambilan contoh uji (sampling) dan pengukuran lapangan dengan rincian sebagai berikut:</Text>
+                
+                <View style={styles.detailsGrid}>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Lokasi / Perusahaan</Text>
+                    <Text style={styles.detailSeparator}>:</Text>
+                    <Text style={styles.detailValue}>{data.destination}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Waktu Pelaksanaan</Text>
+                    <Text style={styles.detailSeparator}>:</Text>
+                    <Text style={styles.detailValue}>{formatDate(data.departure_date)} s/d {formatDate(data.return_date)}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Maksud Perjalanan</Text>
+                    <Text style={styles.detailSeparator}>:</Text>
+                    <Text style={styles.detailValue}>{data.purpose}</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* Tabel Ruang Lingkup */}
+          <View style={styles.section}>
+            <Text style={{ fontSize: 9, fontWeight: 'bold', marginBottom: 5 }}>RUANG LINGKUP SAMPLING & PENGUJIAN :</Text>
+            <View style={styles.table}>
+              <View style={styles.tableHeader}>
+                <Text style={[styles.tableCell, styles.tableCellNum]}>No</Text>
+                <Text style={[styles.tableCell, styles.tableCellService]}>Jenis Contoh / Lokasi</Text>
+                <Text style={[styles.tableCell, styles.tableCellReg]}>Baku Mutu / Regulasi</Text>
+                <Text style={[styles.tableCell, styles.tableCellParams]}>Parameter Uji</Text>
+              </View>
+              {data.assignment.job_order.quotation.items.map((item, index) => (
+                <View key={item.id} style={styles.tableRow}>
+                  <Text style={[styles.tableCell, styles.tableCellNum]}>{index + 1}</Text>
+                  <Text style={[styles.tableCell, styles.tableCellService]}>{item.service?.name || item.equipment?.name || 'Item'}</Text>
+                  <Text style={[styles.tableCell, styles.tableCellReg]}>{item.service?.regulation_ref?.name || item.service?.regulation || '-'}</Text>
+                  <Text style={[styles.tableCell, styles.tableCellParams]}>{item.parameter_snapshot || '-'}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* Penutup */}
+          <Text style={[styles.instructionText, { marginTop: 10 }]}>
+            Demikian surat tugas ini diberikan agar dilaksanakan dengan penuh tanggung jawab dan melaporkan hasilnya setelah selesai melaksanakan tugas.
+          </Text>
+        </View>
+
+        {/* Tanda Tangan */}
+        <View style={styles.signatureArea}>
           <View style={styles.signatureBox}>
-            <View style={{ height: 15 }} />
-            <Text style={styles.signatureRole}>Petugas Pelaksana,</Text>
-            <View style={{ height: 50 }} />
+            <Text style={styles.signatureTitle}>Diterima Oleh,{'\n'}Petugas Pelaksana</Text>
+            <View style={{ height: 60 }} />
             <Text style={styles.signatureName}>{data.assignment.field_officer.full_name}</Text>
           </View>
-          
+
           <View style={styles.signatureBox}>
-            <Text style={styles.signatureDate}>Cianjur, {formatDate(data.created_at)}</Text>
-            <Text style={styles.signatureRole}>Mengesahkan, {'\n'}Kepala Operasional</Text>
+            <Text style={styles.signatureTitle}>Ditetapkan di Cianjur{'\n'}Pada Tanggal {formatDate(data.created_at)}</Text>
             
-            {/* Digital Validation Container */}
-            <View style={{ height: 60, position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
-              {company.signature_url && (
-                <Image 
-                  source={{ 
-                    uri: company.signature_url.startsWith('/') 
-                      ? `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}${company.signature_url}`
-                      : company.signature_url 
-                  }} 
-                  style={{ width: 100, height: 50, zIndex: 2 }} 
-                />
-              )}
-              {company.stamp_url && (
-                <Image 
-                  source={{ 
-                    uri: company.stamp_url.startsWith('/') 
-                      ? `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}${company.stamp_url}`
-                      : company.stamp_url 
-                  }} 
-                  style={{ width: 70, height: 70, position: 'absolute', opacity: 0.6, zIndex: 1, left: 10 }} 
-                />
-              )}
+            <View style={{ height: 60, justifyContent: 'center', position: 'relative' }}>
+              {fullStampUrl && <Image source={{ uri: fullStampUrl }} style={styles.stampContainer} />}
+              {fullSignatureUrl && <Image source={{ uri: fullSignatureUrl }} style={styles.signatureImage} />}
             </View>
 
-            <Text style={styles.signatureName}>{company.leader_name || '( ........................................... )'}</Text>
+            <Text style={styles.signatureName}>{company.leader_name}</Text>
+            <Text style={styles.signatureMeta}>Kepala Operasional</Text>
           </View>
         </View>
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text>WahfaLab - LIMS Digital Document | Tracking Code: {data.assignment.job_order.tracking_code}</Text>
-          <Text>Surat tugas ini diterbitkan secara resmi melalui sistem dan sah sebagai instruksi kerja lapangan.</Text>
+          <Text>WahfaLab Digital Signature ID: {data.assignment.job_order.tracking_code}</Text>
+          <Text>Halaman 1 dari 1</Text>
         </View>
       </Page>
     </Document>

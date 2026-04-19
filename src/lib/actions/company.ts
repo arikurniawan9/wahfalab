@@ -2,8 +2,7 @@
 
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
-import fs from 'fs'
-import path from 'path'
+import { STORAGE_BUCKETS, deleteFromSupabaseStorage, uploadToSupabaseStorage } from '@/lib/supabase/storage'
 
 // Helper to make string URL friendly
 function slugify(text: string) {
@@ -137,30 +136,14 @@ async function uploadCompanyFile(file: File, type: 'logo' | 'signature' | 'stamp
     
     // Create slug from company name
     const slug = slugify(companyName);
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${slug}-${type}-${Date.now()}.${fileExt}`;
-    
-    // Local directory path
-    const uploadDir = path.join(process.cwd(), 'public', 'img');
-    
-    // Ensure directory exists
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
+    const { publicUrl } = await uploadToSupabaseStorage({
+      bucket: STORAGE_BUCKETS.companyAssets,
+      folder: `${slug}/${type}`,
+      file,
+      allowedMimeTypes: ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml'],
+      maxSizeBytes: 5 * 1024 * 1024,
+    });
 
-    const filePath = path.join(uploadDir, fileName);
-    
-    // Convert File to Buffer
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    
-    // Write file locally
-    fs.writeFileSync(filePath, buffer);
-
-    // Path for web access
-    const publicUrl = `/img/${fileName}`;
-
-    // Update company profile with new local path based on type
     const updateData: any = {};
     if (type === 'logo') updateData.logo_url = publicUrl;
     if (type === 'signature') updateData.signature_url = publicUrl;
@@ -170,7 +153,7 @@ async function uploadCompanyFile(file: File, type: 'logo' | 'signature' | 'stamp
 
     return { success: true, url: publicUrl };
   } catch (error: any) {
-    console.error(`Error uploading ${type} locally:`, error);
+    console.error(`Error uploading ${type} to Supabase:`, error);
     return { error: error.message };
   }
 }
@@ -184,14 +167,8 @@ export async function deleteCompanyFile(type: 'logo' | 'signature' | 'stamp') {
     if (type === 'signature') currentUrl = profile?.signature_url;
     if (type === 'stamp') currentUrl = profile?.stamp_url;
     
-    if (currentUrl && currentUrl.startsWith('/img/')) {
-      const fileName = currentUrl.replace('/img/', '');
-      const filePath = path.join(process.cwd(), 'public', 'img', fileName);
-      
-      // Delete local file if exists
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
+    if (currentUrl?.startsWith('http')) {
+      await deleteFromSupabaseStorage(STORAGE_BUCKETS.companyAssets, currentUrl);
     }
 
     // Update database, setting field back to null
@@ -211,7 +188,7 @@ export async function deleteCompanyFile(type: 'logo' | 'signature' | 'stamp') {
     revalidatePath('/admin/settings/company');
     return { success: true };
   } catch (error: any) {
-    console.error(`Error deleting local ${type}:`, error);
+    console.error(`Error deleting ${type} from Supabase:`, error);
     return { error: error.message };
   }
 }

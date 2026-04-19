@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { serializeData } from "@/lib/utils/serialize";
 import { audit } from "@/lib/audit-log";
+import { STORAGE_BUCKETS, uploadToSupabaseStorage } from "@/lib/supabase/storage";
 
 /**
  * Get system statistics for maintenance dashboard
@@ -145,11 +146,11 @@ export async function exportSystemData(categories?: string[]) {
       const wantStaff = categories?.includes('staff');
 
       if (wantUsers && !wantStaff) {
-        profiles = profilesRaw.filter(p => p.role === 'client');
+        profiles = profilesRaw.filter((p: any) => p.role === 'client');
       } else if (wantStaff && !wantUsers) {
-        profiles = profilesRaw.filter(p => staffRoles.includes(p.role));
+        profiles = profilesRaw.filter((p: any) => staffRoles.includes(p.role));
       } else if (wantUsers && wantStaff) {
-        profiles = profilesRaw.filter(p => p.role === 'client' || staffRoles.includes(p.role));
+        profiles = profilesRaw.filter((p: any) => p.role === 'client' || staffRoles.includes(p.role));
       }
       // If none, but profiles was fetched (shouldn't happen with current logic), it remains as is or empty
     }
@@ -256,7 +257,7 @@ export async function factoryReset() {
       where: { role: 'admin' },
       select: { id: true }
     });
-    const adminIds = admins.map(a => a.id);
+    const adminIds = admins.map((a: any) => a.id);
 
     await prisma.$transaction([
       prisma.notification.deleteMany(),
@@ -408,13 +409,25 @@ export async function updateLandingPageConfig(data: any) {
 }
 
 /**
- * Utility for local image path conversion
+ * Upload image/media ke Supabase Storage untuk konten publik
  */
 export async function uploadLocalImage(formData: FormData): Promise<{ success: boolean; url?: string; error?: string }> {
   try {
-    // Note: This is a placeholder for local file handling
-    return { success: true, url: '/img/placeholder.jpg' };
-  } catch (error) {
-    return { success: false, error: 'Failed to upload' };
+    const file = formData.get("file");
+    if (!(file instanceof File)) {
+      throw new Error("File tidak ditemukan");
+    }
+
+    const { publicUrl } = await uploadToSupabaseStorage({
+      bucket: STORAGE_BUCKETS.contentMedia,
+      folder: "public-content",
+      file,
+      allowedMimeTypes: ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif', 'image/svg+xml'],
+      maxSizeBytes: 10 * 1024 * 1024,
+    });
+
+    return { success: true, url: publicUrl };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to upload' };
   }
 }

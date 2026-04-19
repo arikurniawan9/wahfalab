@@ -40,7 +40,6 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { logout, getProfile } from "@/lib/actions/auth";
-import { createClient } from "@/lib/supabase/client";
 import Image from "next/image";
 
 export const adminMenuItems = () => [

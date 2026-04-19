@@ -206,7 +206,7 @@ export default function ContentManagementPage() {
                 placeholder="Kosongkan untuk menggunakan animasi Beaker default"
                 className="h-12 rounded-2xl border-slate-200 font-bold"
               />
-              <p className="text-[10px] text-slate-400 italic">Gunakan link gambar eksternal atau upload ke Supabase Storage terlebih dahulu.</p>
+              <p className="text-[10px] text-slate-400 italic">Gunakan link gambar eksternal atau upload ke Cloud Storage terlebih dahulu.</p>
             </div>
           </CardContent>
         </Card>

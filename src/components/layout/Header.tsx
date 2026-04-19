@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Bell, Menu, X } from 'lucide-react'
+import { Bell, Menu, X, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NotificationBell } from '@/components/ui/notification-bell'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
@@ -113,6 +113,11 @@ export function Header({ title, subtitle, profile }: HeaderProps) {
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2 md:gap-3">
+        {/* Search Toggle (Visual Premium Only for now) */}
+        <Button variant="ghost" size="icon" className="hidden md:flex text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-full transition-all">
+          <Search className="h-5 w-5" />
+        </Button>
+
         {/* Notification Bell */}
         <NotificationBell />
 

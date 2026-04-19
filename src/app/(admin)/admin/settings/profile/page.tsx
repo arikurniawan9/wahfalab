@@ -17,12 +17,13 @@ import {
   MapPin,
   TextQuote
 } from "lucide-react";
-import { getProfile, updateProfile, updatePassword, logout } from "@/lib/actions/auth";
+import { getProfile, updateProfile, updatePasswordAction, logout } from "@/lib/actions/auth";
 import { LoadingOverlay, LoadingButton } from "@/components/ui";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { createClient } from "@/lib/supabase/client";
+// TODO: Replace Cloud Storage uploads with API endpoints/file upload utility
+// import { createClient } from "@/lib/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { format } from "date-fns";
 import { id } from "date-fns/locale";
@@ -100,24 +101,22 @@ export default function ProfileSettingsPage() {
 
     setLoading(true);
     try {
-      const supabase = createClient();
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${profile.id}-${Math.random()}.${fileExt}`;
-      const filePath = `avatars/${fileName}`;
+      // TODO: Replace Cloud Storage uploads with API endpoints/file upload utility
+      // const supabase = createClient();
+      // const fileExt = file.name.split('.').pop();
+      // const fileName = `${profile.id}-${Math.random()}.${fileExt}`;
+      // const filePath = `avatars/${fileName}`;
+      // const { error: uploadError } = await supabase.storage
+      //   .from('public')
+      //   .upload(filePath, file);
+      // if (uploadError) throw uploadError;
+      // const { data: { publicUrl } } = supabase.storage
+      //   .from('public')
+      //   .getPublicUrl(filePath);
+      // await updateProfile({ ...formData, avatar_url: publicUrl });
 
-      const { error: uploadError } = await supabase.storage
-        .from('public')
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('public')
-        .getPublicUrl(filePath);
-
-      await updateProfile({ ...formData, avatar_url: publicUrl });
-      toast.success("Foto profil berhasil diperbarui");
-      loadProfile();
+      toast.info("Upload avatar belum tersedia. Hubungi admin untuk mengganti foto profil.");
+      // loadProfile();
     } catch (error: any) {
       toast.error("Gagal mengunggah foto: " + error.message);
     } finally {
@@ -133,7 +132,7 @@ export default function ProfileSettingsPage() {
     }
     setLoading(true);
     try {
-      const result = await updatePassword({
+      const result = await updatePasswordAction({
         current_password: passwordData.current_password,
         new_password: passwordData.new_password
       });

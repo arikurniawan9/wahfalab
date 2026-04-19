@@ -218,6 +218,13 @@ export const QuotationDocument = ({ data }: any) => {
 
         <Text style={styles.title}>Penawaran Harga / Faktur Uji</Text>
 
+        {data.title && (
+          <View style={{ marginBottom: 12, padding: 8, backgroundColor: "#f0fdf4", borderRadius: 4, borderLeftWidth: 4, borderLeftColor: "#059669" }}>
+            <Text style={{ fontSize: 8, fontWeight: "bold", color: "#166534", textTransform: "uppercase" }}>Perihal / Judul Pengujian:</Text>
+            <Text style={{ fontSize: 10, color: "#064e3b", marginTop: 2, fontWeight: "bold" }}>{data.title}</Text>
+          </View>
+        )}
+
         <View style={styles.infoSection}>
           <View style={styles.infoCol}>
             <Text style={styles.label}>PELANGGAN:</Text>

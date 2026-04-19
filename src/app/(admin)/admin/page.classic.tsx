@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import prisma from '@/lib/prisma'
 import { Button } from '@/components/ui/button'
@@ -7,8 +7,8 @@ import { getAdminDashboardStats } from '@/lib/actions/dashboard'
 import { DashboardCharts } from '@/components/admin/DashboardCharts'
 
 export default async function AdminDashboard() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const session = await auth()
+  const user = session?.user
 
   if (!user) redirect('/login')
 
@@ -219,7 +219,7 @@ export default async function AdminDashboard() {
           </h3>
           {recentQuotations.length > 0 ? (
             <div className="space-y-3">
-              {recentQuotations.map((quotation) => (
+              {recentQuotations.map((quotation: any) => (
                 <div 
                   key={quotation.id} 
                   className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 transition-colors border border-slate-100"
@@ -261,7 +261,7 @@ export default async function AdminDashboard() {
           </h3>
           {recentJobOrders.length > 0 ? (
             <div className="space-y-3">
-              {recentJobOrders.map((job) => (
+              {recentJobOrders.map((job: any) => (
                 <div 
                   key={job.id} 
                   className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 transition-colors border border-slate-100"

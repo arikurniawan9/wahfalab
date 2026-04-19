@@ -2,9 +2,9 @@
 
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
 import { generateTravelOrderNumber } from '@/lib/utils/generateNumber'
 import { serializeData } from '@/lib/utils/serialize'
+import { STORAGE_BUCKETS, uploadToSupabaseStorage } from '@/lib/supabase/storage'
 
 export async function createTravelOrder(data: {
   assignment_id: string
@@ -223,30 +223,14 @@ export async function updateTravelOrder(id: string, data: {
 
 export async function uploadTravelOrderPdf(travelOrderId: string, file: File) {
   try {
-    const supabase = await createClient()
-    
-    // Upload ke Supabase Storage
-    const fileExt = file.name.split('.').pop()
-    const fileName = `travel-order-${travelOrderId}-${Date.now()}.${fileExt}`
-    
-    const arrayBuffer = await file.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
-    
-    const { data, error } = await supabase.storage
-      .from('travel-orders')
-      .upload(fileName, buffer, {
-        contentType: 'application/pdf',
-        upsert: false
-      })
+    const { publicUrl } = await uploadToSupabaseStorage({
+      bucket: STORAGE_BUCKETS.travelOrders,
+      folder: `travel-orders/${travelOrderId}`,
+      file,
+      allowedMimeTypes: ['application/pdf'],
+      maxSizeBytes: 10 * 1024 * 1024,
+    })
 
-    if (error) throw error
-
-    // Get public URL
-    const { data: { publicUrl } } = supabase.storage
-      .from('travel-orders')
-      .getPublicUrl(fileName)
-
-    // Update database
     await prisma.travelOrder.update({
       where: { id: travelOrderId },
       data: { pdf_url: publicUrl }

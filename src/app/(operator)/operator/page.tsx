@@ -49,7 +49,6 @@ import {
   DialogFooter
 } from "@/components/ui/dialog";
 import { ChemicalLoader } from "@/components/ui";
-import { createClient } from '@/lib/supabase/client';
 import { getJobOrders } from "@/lib/actions/jobs";
 import { getProfile } from "@/lib/actions/auth";
 import { getAllServices } from "@/lib/actions/services";
@@ -108,8 +107,6 @@ export default function OperatorDashboard() {
     stuck: 0
   });
 
-  const supabase = createClient();
-
   const loadData = useCallback(async (showRefreshToast = false) => {
     if (showRefreshToast) setRefreshing(true);
     else setLoading(true);
@@ -134,7 +131,7 @@ export default function OperatorDashboard() {
       const threeDaysAgo = new Date();
       threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
 
-      const stuckJobs = jobList.filter((j: any) => 
+      const stuckJobs = jobList.filter((j: any) =>
         j.status !== 'completed' && new Date(j.created_at) < threeDaysAgo
       );
 
@@ -163,23 +160,9 @@ export default function OperatorDashboard() {
 
   useEffect(() => {
     loadData();
-
-    // Real-time subscription
-    const channel = supabase
-      .channel('job_updates')
-      .on('postgres_changes', {
-        event: '*', // Listen to all changes for better audit visibility
-        schema: 'public',
-        table: 'job_orders'
-      }, (payload) => {
-        loadData();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [loadData, supabase]);
+    const interval = setInterval(() => loadData(), 60000); // Poll every 60s
+    return () => clearInterval(interval);
+  }, [loadData]);
 
   // Filter & Search
   const filteredJobs = jobs.filter((job: any) => {

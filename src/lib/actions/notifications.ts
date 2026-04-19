@@ -1,9 +1,9 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
+import { auth } from '@/lib/auth'
 
 export type NotificationType =
   | 'sampling_completed'
@@ -79,20 +79,20 @@ export async function createNotifications(data: CreateNotificationData[]) {
  */
 export async function getMyNotifications(page = 1, limit = 20, unreadOnly = false) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return { error: 'Unauthorized' }
-    }
+    const session = await auth()
+    if (!session?.user) return { error: 'Unauthorized' }
+    const profile = await prisma.profile.findUnique({
+      where: { email: session.user.email! },
+      select: { id: true, role: true }
+    })
 
     const skip = (page - 1) * limit
     const where = {
-      user_id: user.id,
+      user_id: profile?.id,
       ...(unreadOnly ? { is_read: false } : {})
     }
 
-    const [notifications, total] = await Promise.all([
+    const [notifications, total, unreadCount] = await Promise.all([
       prisma.notification.findMany({
         where,
         skip,
@@ -107,19 +107,33 @@ export async function getMyNotifications(page = 1, limit = 20, unreadOnly = fals
           }
         }
       }),
-      prisma.notification.count({ where })
+      prisma.notification.count({ where }),
+      prisma.notification.count({
+        where: { user_id: profile?.id, is_read: false }
+      })
     ])
 
     return serializeData({
       items: notifications,
       total,
       pages: Math.ceil(total / limit),
-      unreadCount: await prisma.notification.count({
-        where: { user_id: user.id, is_read: false }
-      })
+      unreadCount
     })
   } catch (error: any) {
     console.error('Error fetching notifications:', error)
+    
+    // Handle database connection errors gracefully
+    if (error?.message?.includes('Server has closed the connection') || 
+        error?.message?.includes('database connection')) {
+      return { 
+        items: [], 
+        total: 0, 
+        pages: 0, 
+        unreadCount: 0,
+        error: 'Koneksi database terputus sementara. Mencoba menghubungkan kembali...' 
+      }
+    }
+    
     return { error: error.message }
   }
 }
@@ -147,16 +161,16 @@ export async function markNotificationAsRead(notificationId: string) {
  */
 export async function markAllNotificationsAsRead() {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return { error: 'Unauthorized' }
-    }
+    const session = await auth()
+    if (!session?.user) return { error: 'Unauthorized' }
+    const profile = await prisma.profile.findUnique({
+      where: { email: session.user.email! },
+      select: { id: true, role: true }
+    })
 
     await prisma.notification.updateMany({
       where: {
-        user_id: user.id,
+        user_id: profile?.id,
         is_read: false
       },
       data: {
@@ -194,19 +208,19 @@ export async function deleteNotification(notificationId: string) {
  */
 export async function getNotificationStats() {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return { error: 'Unauthorized' }
-    }
+    const session = await auth()
+    if (!session?.user) return { error: 'Unauthorized' }
+    const profile = await prisma.profile.findUnique({
+      where: { email: session.user.email! },
+      select: { id: true, role: true }
+    })
 
     const [unreadCount, totalCount] = await Promise.all([
       prisma.notification.count({
-        where: { user_id: user.id, is_read: false }
+        where: { user_id: profile?.id, is_read: false }
       }),
       prisma.notification.count({
-        where: { user_id: user.id }
+        where: { user_id: profile?.id }
       })
     ])
 
@@ -240,7 +254,7 @@ export async function notifySamplingCompleted(
         where: { role: 'analyst' },
         select: { id: true }
       })
-      targetUserIds = analysts.map(a => a.id)
+      targetUserIds = analysts.map((a: any) => a.id)
     }
 
     // Also notify admin
@@ -248,7 +262,7 @@ export async function notifySamplingCompleted(
       where: { role: 'admin' },
       select: { id: true }
     })
-    targetUserIds = [...targetUserIds, ...admins.map(a => a.id)]
+    targetUserIds = [...targetUserIds, ...admins.map((a: any) => a.id)]
 
     const notifications = targetUserIds.map(userId => ({
       user_id: userId,
@@ -288,7 +302,7 @@ export async function notifyInvoiceGenerated(
       select: { id: true }
     })
 
-    const targetUserIds = [...financeUsers.map(f => f.id), ...admins.map(a => a.id)]
+    const targetUserIds = [...financeUsers.map((f: any) => f.id), ...admins.map((a: any) => a.id)]
 
     const notifications = targetUserIds.map(userId => ({
       user_id: userId,
@@ -348,7 +362,7 @@ export async function notifyPaymentReceived(
       select: { id: true }
     })
 
-    const notifications = adminsAndFinance.map(user => ({
+    const notifications = adminsAndFinance.map((user: any) => ({
       user_id: user.id,
       type: 'payment_received' as NotificationType,
       title: 'Pembayaran Diterima',

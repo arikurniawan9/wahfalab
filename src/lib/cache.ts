@@ -9,7 +9,7 @@ const prisma = globalThis.prisma as any || new PrismaClient();
  * Cached per request using React's cache()
  * 
  * NOTE: This function must be called from Server Components only.
- * For client components, use the auth hook or Supabase client directly.
+ * For client components, use the auth hook directly.
  */
 export const getCachedProfile = cache(async () => {
   // This should only be called from server components

@@ -3,6 +3,7 @@
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
+import { getCachedAllServices, invalidateGlobalCache } from "@/lib/cache"
 
 export async function getServices(page = 1, limit = 10, search = "") {
   const skip = (page - 1) * limit
@@ -25,7 +26,7 @@ export async function getServices(page = 1, limit = 10, search = "") {
       include: { 
         category_ref: true,
         regulation_ref: {
-          select: { id: true, name: true, code: true }
+          select: { id: true, name: true }
         }
       }
     }),
@@ -121,8 +122,6 @@ export async function deleteManyServices(ids: string[]) {
     return { success: false, error: 'Gagal menghapus beberapa data' }
   }
 }
-
-import { getCachedAllServices, invalidateGlobalCache } from "@/lib/cache"
 
 export async function getAllServices() {
   return await getCachedAllServices()

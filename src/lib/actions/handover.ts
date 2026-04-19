@@ -4,7 +4,7 @@ import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
 import { generateHandoverNumber } from '@/lib/utils/generateNumber'
-import { createClient } from '@/lib/supabase/server'
+import { auth } from '@/lib/auth'
 
 export async function createSampleHandover(data: {
   job_order_id: string;
@@ -13,16 +13,14 @@ export async function createSampleHandover(data: {
   notes?: string;
 }) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
+    const session = await auth()
+    if (!session?.user) {
       return { error: 'Unauthorized' }
     }
 
     // Ambil profil analis (penerima)
     const analystProfile = await prisma.profile.findUnique({
-      where: { email: user.email! }
+      where: { email: session.user.email! }
     })
 
     if (!analystProfile) {

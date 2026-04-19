@@ -3,7 +3,7 @@
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
-import { createClient } from '@/lib/supabase/server'
+import { auth } from '@/lib/auth'
 
 /**
  * Get all active bank accounts
@@ -31,9 +31,8 @@ export async function saveBankAccount(data: {
   balance?: number
 }) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { error: 'Unauthorized' }
+    const session = await auth()
+    if (!session?.user) return { error: 'Unauthorized' }
 
     if (data.id) {
       await prisma.bankAccount.update({
@@ -68,9 +67,8 @@ export async function saveBankAccount(data: {
  */
 export async function getFinancialRecords(page = 1, limit = 10, type?: 'income' | 'expense', category?: string) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { error: 'Unauthorized' }
+    const session = await auth()
+    if (!session?.user) return { error: 'Unauthorized' }
 
     const skip = (page - 1) * limit
     const where: any = {}
@@ -138,9 +136,8 @@ export async function createFinancialRecord(data: {
   date?: Date
 }) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { error: 'Unauthorized' }
+    const session = await auth()
+    if (!session?.user) return { error: 'Unauthorized' }
 
     const record = await prisma.financialRecord.create({
       data: {
@@ -150,7 +147,7 @@ export async function createFinancialRecord(data: {
         description: data.description,
         bank_account_id: data.bank_account_id,
         transaction_date: data.date || new Date(),
-        recorded_by: user.id
+        recorded_by: (session.user as any).id
       }
     })
 
@@ -199,7 +196,7 @@ export async function getMonthlyTrend(months = 6) {
     const months_names = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
     const trend: Record<string, { month: string, income: number, expense: number }> = {}
 
-    records.forEach(r => {
+    records.forEach((r: any) => {
       const date = new Date(r.transaction_date)
       const key = `${date.getFullYear()}-${date.getMonth()}`
       if (!trend[key]) {
