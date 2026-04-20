@@ -50,11 +50,10 @@ export async function createOrUpdateService(formData: any, id?: string) {
 
     const data = {
       category_id: formData.category_id,
-      regulation_id: formData.regulation_id || null,
+      regulation_id: formData.regulation_id === "none" ? null : (formData.regulation_id || null),
       name: formData.name,
       price: formData.price,
       unit: formData.unit,
-      regulation: formData.regulation, // Keep this for legacy compatibility
       parameters: parsedParameters,
     }
 

@@ -54,8 +54,8 @@ export const adminMenuItems = () => [
   {
     group: "Data Master",
     items: [
-      { icon: FlaskConical, label: "Katalog Layanan", href: "/admin/services", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
       { icon: Tag, label: "Kategori Layanan", href: "/admin/categories", color: "text-teal-400", bgColor: "bg-teal-500/10" },
+      { icon: FlaskConical, label: "Katalog Layanan", href: "/admin/services", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
       { icon: BookOpen, label: "Regulasi & Baku Mutu", href: "/admin/regulations", color: "text-blue-400", bgColor: "bg-blue-500/10" },
       { icon: Wrench, label: "Inventaris Alat", href: "/admin/equipment", color: "text-orange-400", bgColor: "bg-orange-500/10" },
       { icon: UserCheck, label: "Database Customer", href: "/admin/customers", color: "text-indigo-400", bgColor: "bg-indigo-500/10" },
@@ -132,8 +132,8 @@ export const operatorMenuItems = [
   {
     group: "Laboratorium",
     items: [
-      { icon: FlaskConical, label: "Katalog Layanan", href: "/operator/services", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
       { icon: Tag, label: "Kategori", href: "/operator/categories", color: "text-teal-400", bgColor: "bg-teal-500/10" },
+      { icon: FlaskConical, label: "Katalog Layanan", href: "/operator/services", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
       { icon: Wrench, label: "Sewa Alat", href: "/operator/equipment", color: "text-orange-400", bgColor: "bg-orange-500/10" },
       { icon: Users, label: "Asisten Lapangan", href: "/operator/assistants", color: "text-purple-400", bgColor: "bg-purple-500/10" },
     ]

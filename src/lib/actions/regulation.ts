@@ -324,14 +324,22 @@ export async function getAllRegulationsForDropdown() {
   try {
     const regulations = await prisma.regulation.findMany({
       where: { status: "active" },
-      select: {
-        id: true,
-        name: true,
+      include: {
+        parameters: {
+          select: { parameter: true },
+          orderBy: { sequence: "asc" }
+        }
       },
       orderBy: { name: "asc" },
     });
 
-    return { regulations, success: true };
+    // Transform to include simple parameters_list for easier frontend consumption
+    const transformed = regulations.map(reg => ({
+      ...reg,
+      parameters_list: reg.parameters.map(p => p.parameter)
+    }));
+
+    return { regulations: transformed, success: true };
   } catch (error: any) {
     return { regulations: [], success: false, error: error.message };
   }

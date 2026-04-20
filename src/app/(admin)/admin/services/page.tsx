@@ -6,7 +6,7 @@
 // 3. ✅ Compact Layout (Header & Filters)
 // 4. ✅ Responsive Mobile View
 // 5. ✅ Quick Edit harga di tabel
-// 6. ✅ Integrasi Regulasi dropdown
+// 6. ✅ Integrasi Regulasi dropdown (Searchable Combobox)
 // ============================================================================
 
 "use client";
@@ -38,7 +38,9 @@ import {
   Check,
   AlertCircle,
   Tag,
-  Filter
+  Filter,
+  RotateCcw,
+  ChevronsUpDown
 } from "lucide-react";
 import {
   Dialog,
@@ -71,6 +73,14 @@ import {
   PopoverContent,
   PopoverTrigger
 } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { ChemicalLoader, LoadingOverlay, LoadingButton, TableSkeleton, EmptyState } from "@/components/ui";
 import { getServices, createOrUpdateService, deleteService, deleteManyServices, updateServiceParameters } from "@/lib/actions/services";
 import { getAllCategories } from "@/lib/actions/categories";
@@ -130,6 +140,7 @@ export default function ServicesPage() {
   // Parameter input state
   const [parameterInput, setParameterInput] = useState("");
   const [parameterList, setParameterList] = useState<string[]>([]);
+  const [isRegPopoverOpen, setIsRegPopoverOpen] = useState(false);
 
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm();
 
@@ -178,10 +189,16 @@ export default function ServicesPage() {
       
       if (result.success) {
         setIsDialogOpen(false);
-        reset();
         setEditingItem(null);
         setParameterList([]);
-        loadData();
+        reset({
+          name: "",
+          category_id: "",
+          regulation_id: "none",
+          price: 0,
+          unit: ""
+        });
+        await loadData();
         toast.success(editingItem ? "Layanan diperbarui" : "Layanan baru ditambahkan");
       } else {
         toast.error(result.error || "Gagal menyimpan data");
@@ -341,14 +358,45 @@ export default function ServicesPage() {
   const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
 
   return (
-    <div className="p-4 md:p-10 pb-24 md:pb-10">
-      {/* Header */}
-      <div className="mb-10">
-        <h1 className="text-3xl font-bold text-emerald-900 tracking-tight flex items-center gap-3">
-          <FlaskConical className="h-8 w-8 text-emerald-600" />
-          Katalog Layanan
-        </h1>
-        <p className="text-slate-500 text-sm mt-1">Kelola daftar pengujian dan parameter laboratorium.</p>
+    <div className="p-4 md:p-8 lg:p-10 pb-24 md:pb-10">
+      {/* Premium Header Section */}
+      <div className="mb-8 overflow-hidden rounded-3xl bg-emerald-900 shadow-xl border border-emerald-700/50">
+        <div className="bg-gradient-to-br from-emerald-950 via-emerald-800 to-emerald-500 p-4 md:p-5 text-white relative overflow-hidden">
+          {/* Decorative Glows */}
+          <div className="absolute -top-12 -right-12 w-64 h-64 bg-emerald-400/20 rounded-full blur-[60px]" />
+          
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-inner shrink-0">
+                <FlaskConical className="h-5 w-5 text-emerald-200" />
+              </div>
+              <div>
+                <h1 className="text-lg md:text-xl font-black tracking-tight text-white leading-none uppercase">
+                  Service Catalog
+                </h1>
+                <p className="text-emerald-100/60 text-[10px] md:text-xs font-medium mt-1 uppercase tracking-widest">
+                  Daftar Parameter & Kategori Layanan Laboratorium.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 self-end sm:self-auto">
+              <div className="hidden lg:block text-right border-r border-white/10 pr-4">
+                <p className="text-emerald-300 text-[8px] font-bold uppercase tracking-widest mb-0.5">Total Layanan</p>
+                <p className="text-lg font-black text-white leading-none">{data.total} <span className="text-emerald-300 text-[10px] font-bold uppercase tracking-normal">Item</span></p>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="bg-white/10 border-white/20 hover:bg-white/20 text-white rounded-xl h-9 px-4 backdrop-blur-md transition-all text-xs font-bold"
+                onClick={() => loadData()}
+              >
+                <RotateCcw className={cn("h-3.5 w-3.5 mr-2", loading && "animate-spin")} />
+                Refresh
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Filters & Actions Bar */}
@@ -455,8 +503,8 @@ export default function ServicesPage() {
                         }} />
                       </TableCell>
                       <TableCell className="px-4">
-                        <Badge variant="outline" className="border-emerald-200 text-emerald-700 bg-emerald-50">
-                          {item.category_ref?.name || item.category}
+                        <Badge variant="outline" className="border-emerald-200 text-emerald-700 bg-emerald-50 max-w-[150px] truncate">
+                          {item.category_ref?.name || item.category || "Tanpa Kategori"}
                         </Badge>
                       </TableCell>
                       <TableCell className="font-bold text-slate-800 px-4">{item.name}</TableCell>
@@ -715,16 +763,76 @@ export default function ServicesPage() {
               </div>
               <div className="space-y-2">
                 <Label className="text-xs font-bold uppercase text-slate-500">Regulasi / Baku Mutu</Label>
-                <Select onValueChange={(val) => {
-                  setValue("regulation_id", val);
-                  const selectedReg = regulations.find(r => r.id === val);
-                  if (selectedReg && selectedReg.parameters_list) {
-                    setParameterList(selectedReg.parameters_list);
-                  }
-                }} defaultValue={watch("regulation_id")}>
-                  <SelectTrigger className="h-11 rounded-xl cursor-pointer"><SelectValue placeholder="Pilih Regulasi" /></SelectTrigger>
-                  <SelectContent>{regulations.map(reg => <SelectItem key={reg.id} value={reg.id} className="cursor-pointer">{reg.name} {reg.code && `(${reg.code})`}</SelectItem>)}</SelectContent>
-                </Select>
+                <Popover open={isRegPopoverOpen} onOpenChange={setIsRegPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={isRegPopoverOpen}
+                      className="w-full h-11 justify-between rounded-xl font-normal border-slate-200 hover:bg-slate-50 overflow-hidden shadow-sm"
+                    >
+                      <span className="truncate">
+                        {watch("regulation_id") && watch("regulation_id") !== "none"
+                          ? regulations.find((reg) => reg.id === watch("regulation_id"))?.name
+                          : "Pilih Regulasi"}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0 rounded-xl overflow-hidden shadow-2xl border border-slate-100" align="start">
+                    <Command className="border-none">
+                      <CommandInput placeholder="Cari regulasi..." className="h-12 border-none focus:ring-0" />
+                      <CommandList className="max-h-[300px]">
+                        <CommandEmpty>Regulasi tidak ditemukan.</CommandEmpty>
+                        <CommandGroup>
+                          <CommandItem
+                            value="none"
+                            onSelect={() => {
+                              setValue("regulation_id", "none");
+                              setParameterList([]);
+                              setIsRegPopoverOpen(false);
+                            }}
+                            className="cursor-pointer py-3"
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4 text-emerald-600",
+                                watch("regulation_id") === "none" ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            <span className="text-slate-400 italic font-medium">Tanpa Regulasi</span>
+                          </CommandItem>
+                          {regulations.map((reg) => (
+                            <CommandItem
+                              key={reg.id}
+                              value={reg.name}
+                              onSelect={() => {
+                                setValue("regulation_id", reg.id);
+                                if (reg.parameters_list) {
+                                  setParameterList(reg.parameters_list);
+                                  toast.info(`Parameter otomatis diisi dari regulasi: ${reg.name}`);
+                                }
+                                setIsRegPopoverOpen(false);
+                              }}
+                              className="cursor-pointer py-3"
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4 text-emerald-600",
+                                  watch("regulation_id") === reg.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              <div className="flex flex-col">
+                                <span className="font-bold text-slate-700 text-[11px] leading-tight">{reg.name}</span>
+                                {reg.code && <span className="text-[9px] text-slate-400 uppercase font-mono mt-0.5">{reg.code}</span>}
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
 
