@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 
 export interface Notification {
@@ -25,38 +25,28 @@ export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [stats, setStats] = useState<NotificationStats>({ unreadCount: 0, totalCount: 0, readCount: 0 })
   const [loading, setLoading] = useState(true)
-  const [fetching, setFetching] = useState(false)
+  const isFetching = useRef(false) // Use ref to prevent dependency loop
   const [page, setPage] = useState(1)
   const limit = 20
 
   // Fetch notifications
   const fetchNotifications = useCallback(async (unreadOnly = false) => {
-    if (fetching) return
+    if (isFetching.current) return
     
     try {
-      setFetching(true)
+      isFetching.current = true
       const response = await fetch(`/api/notifications?page=${page}&limit=${limit}&unreadOnly=${unreadOnly}`)
       
-      // Handle unauthorized or forbidden silently (session expired or glitch)
+      // Handle unauthorized or forbidden silently
       if (response.status === 401 || response.status === 403) {
         setLoading(false)
-        setFetching(false)
         return
       }
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
       
       const data = await response.json()
-
-      if (data.error) {
-        // Only log serious errors, ignore common connection glitches in development/polling
-        if (!data.error.includes('connection')) {
-          console.error('Error fetching notifications:', data.error)
-        }
-        return
-      }
+      if (data.error) return
 
       setNotifications(data.items || [])
       setStats({
@@ -65,15 +55,12 @@ export function useNotifications() {
         readCount: (data.total || 0) - (data.unreadCount || 0)
       })
     } catch (error: any) {
-      // Quietly handle connection errors during polling
-      if (!error?.message?.includes('connection') && !error?.message?.includes('fetch')) {
-        console.error('Error fetching notifications:', error)
-      }
+      // Quietly handle connection errors
     } finally {
-      setFetching(false)
+      isFetching.current = false
       setLoading(false)
     }
-  }, [page, limit, fetching])
+  }, [page]) // Only depend on page
 
   // Mark as read
   const markAsRead = useCallback(async (id: string) => {
@@ -89,7 +76,7 @@ export function useNotifications() {
       )
       setStats(prev => ({
         ...prev,
-        unreadCount: prev.unreadCount - 1,
+        unreadCount: Math.max(0, prev.unreadCount - 1),
         readCount: prev.readCount + 1
       }))
     } catch (error) {
@@ -123,11 +110,12 @@ export function useNotifications() {
         body: JSON.stringify({ id }),
       })
 
+      const target = notifications.find(n => n.id === id)
       setNotifications(prev => prev.filter(n => n.id !== id))
       setStats(prev => ({
         ...prev,
         totalCount: prev.totalCount - 1,
-        unreadCount: prev.unreadCount - (notifications.find(n => n.id === id)?.is_read ? 0 : 1)
+        unreadCount: prev.unreadCount - (target?.is_read ? 0 : 1)
       }))
     } catch (error) {
       console.error('Error deleting notification:', error)
@@ -140,11 +128,11 @@ export function useNotifications() {
     fetchNotifications()
   }, [fetchNotifications])
 
-  // Polling for new notifications (every 30 seconds)
+  // Polling for new notifications (every 60 seconds, less aggressive)
   useEffect(() => {
     const interval = setInterval(() => {
       fetchNotifications(true)
-    }, 30000)
+    }, 60000)
 
     return () => clearInterval(interval)
   }, [fetchNotifications])

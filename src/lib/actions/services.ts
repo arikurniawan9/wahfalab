@@ -68,7 +68,7 @@ export async function createOrUpdateService(formData: any, id?: string) {
       })
     }
 
-    invalidateGlobalCache("all_services")
+    await invalidateGlobalCache("all_services")
     revalidatePath('/admin/services')
     revalidatePath('/operator/services')
     return { success: true }
@@ -99,7 +99,7 @@ export async function deleteService(id: string) {
     await prisma.service.delete({
       where: { id }
     })
-    invalidateGlobalCache("all_services")
+    await invalidateGlobalCache("all_services")
     revalidatePath('/admin/services')
     revalidatePath('/operator/services')
     return { success: true }
@@ -113,7 +113,7 @@ export async function deleteManyServices(ids: string[]) {
     await prisma.service.deleteMany({
       where: { id: { in: ids } }
     })
-    invalidateGlobalCache("all_services")
+    await invalidateGlobalCache("all_services")
     revalidatePath('/admin/services')
     revalidatePath('/operator/services')
     return { success: true }

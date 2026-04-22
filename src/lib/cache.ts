@@ -89,32 +89,47 @@ export const getCachedCompanyProfile = cache(async () => {
 });
 
 /**
- * Global In-Memory Cache (Acting as a fast Redis alternative for Master Data)
+ * Global Redis Cache for Master Data
  */
-const globalCache: Record<string, { data: any; timestamp: number }> = {};
-const CACHE_TTL = 1000 * 60 * 60; // 1 hour for master data
+import { redis } from "./redis";
 
-export function getFromGlobalCache(key: string) {
-  const entry = globalCache[key];
-  if (entry && Date.now() - entry.timestamp < CACHE_TTL) {
-    return entry.data;
+const CACHE_TTL = 60 * 60; // 1 hour for master data in seconds
+
+export async function getFromGlobalCache(key: string) {
+  try {
+    // Only attempt if redis is connected and ready
+    if (redis.status !== "ready") return null;
+    
+    const data = await redis.get(key);
+    if (data) return JSON.parse(data);
+    return null;
+  } catch (error) {
+    // Silent fail for local dev without redis
+    return null;
   }
-  return null;
 }
 
-export function setToGlobalCache(key: string, data: any) {
-  globalCache[key] = {
-    data,
-    timestamp: Date.now()
-  };
+export async function setToGlobalCache(key: string, data: any) {
+  try {
+    if (redis.status !== "ready") return;
+    
+    await redis.set(key, JSON.stringify(data), "EX", CACHE_TTL);
+  } catch (error) {
+    // Silent fail
+  }
 }
 
-export function invalidateGlobalCache(key?: string) {
-  if (key) {
-    delete globalCache[key];
-  } else {
-    // Clear all if no key provided
-    Object.keys(globalCache).forEach(k => delete globalCache[k]);
+export async function invalidateGlobalCache(key?: string) {
+  try {
+    if (redis.status !== "ready") return;
+    
+    if (key) {
+      await redis.del(key);
+    } else {
+      await redis.flushdb();
+    }
+  } catch (error) {
+    // Silent fail
   }
 }
 
@@ -123,7 +138,7 @@ export function invalidateGlobalCache(key?: string) {
  */
 export const getCachedAllServices = cache(async () => {
   const cacheKey = "all_services";
-  const cached = getFromGlobalCache(cacheKey);
+  const cached = await getFromGlobalCache(cacheKey);
   if (cached) return cached;
 
   try {
@@ -135,7 +150,7 @@ export const getCachedAllServices = cache(async () => {
       orderBy: { name: 'asc' }
     });
     const serialized = await import("@/lib/utils/serialize").then(m => m.serializeData(services));
-    setToGlobalCache(cacheKey, serialized);
+    await setToGlobalCache(cacheKey, serialized);
     return serialized;
   } catch (error) {
     console.error("Error fetching services:", error);
@@ -148,7 +163,7 @@ export const getCachedAllServices = cache(async () => {
  */
 export const getCachedAllCategories = cache(async () => {
   const cacheKey = "all_categories";
-  const cached = getFromGlobalCache(cacheKey);
+  const cached = await getFromGlobalCache(cacheKey);
   if (cached) return cached;
 
   try {
@@ -161,7 +176,7 @@ export const getCachedAllCategories = cache(async () => {
       }
     });
     const serialized = await import("@/lib/utils/serialize").then(m => m.serializeData(categories));
-    setToGlobalCache(cacheKey, serialized);
+    await setToGlobalCache(cacheKey, serialized);
     return serialized;
   } catch (error) {
     console.error("Error fetching categories:", error);

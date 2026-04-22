@@ -57,8 +57,9 @@ import {
   createQuotation, 
   getNextInvoiceNumber,
   cloneQuotation,
-  updateQuotationStatus
-} from "@/lib/actions/quotation";
+  updateQuotationStatus,
+  publishInvoiceRequest
+  } from "@/lib/actions/quotation";
 import { getClients, createOrUpdateUser } from "@/lib/actions/users";
 import { getProfile } from "@/lib/actions/auth";
 import { getAllServices } from "@/lib/actions/services";
@@ -149,7 +150,9 @@ export default function OperatorQuotationListPage() {
   const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
   
   const [submitting, setSubmitting] = useState(false);
+  const [publishingInvoice, setPublishingInvoice] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [confirmInvoiceQuotationId, setConfirmInvoiceQuotationId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [pendingFormData, setPendingFormData] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
@@ -293,6 +296,21 @@ export default function OperatorQuotationListPage() {
     } catch (error: any) { toast.error("Gagal update status"); }
   };
 
+  const handlePublishInvoiceRequest = async (quotationId: string) => {
+    try {
+      setPublishingInvoice(true);
+      const result = await publishInvoiceRequest(quotationId);
+      if (result.error) throw new Error(result.error);
+      toast.success(result.invoiceCreated ? "Invoice draft tersedia untuk finance" : "Permintaan invoice dikirim ke finance");
+      loadData();
+    } catch (error: any) {
+      toast.error(error.message || "Gagal menerbitkan permintaan invoice");
+    } finally {
+      setPublishingInvoice(false);
+      setConfirmInvoiceQuotationId(null);
+    }
+  };
+
   const [customerData, setCustomerData] = useState({ full_name: "", email: "", company_name: "", address: "", password: "123456" });
   const handleCreateCustomer = async () => {
     if (!customerData.full_name || !customerData.email) return toast.error("Nama dan Email wajib diisi");
@@ -400,6 +418,9 @@ export default function OperatorQuotationListPage() {
                   filteredItems.map((item) => {
                     const cfg = statusConfig[item.status] || statusConfig.draft;
                     const Icon = cfg.icon;
+                    const latestJobOrder = item.job_orders?.[0];
+                    const invoiceRequested = !!latestJobOrder?.notes?.includes("[INVOICE_REQUESTED]");
+                    const hasInvoice = !!latestJobOrder?.invoice;
                     return (
                       <tr key={item.id} className="group hover:bg-emerald-50/30 transition-all cursor-default">
                         <td className="px-4 md:px-8 py-4 md:py-6">
@@ -424,7 +445,7 @@ export default function OperatorQuotationListPage() {
                         </td>
                         <td className="px-4 md:px-8 py-4 md:py-6">
                           <div className="flex items-center justify-center gap-1 md:gap-2">
-                            {item.status === 'draft' && (
+                             {item.status === 'draft' && (
                               <Button 
                                 onClick={() => handleStatusUpdate(item.id, 'sent')}
                                 size="sm" 
@@ -432,18 +453,42 @@ export default function OperatorQuotationListPage() {
                               >
                                 <Send className="h-3 w-3 mr-1.5" /> Kirim
                               </Button>
-                            )}
-                            <Link href={`/operator/quotations/${item.id}`}><Button variant="ghost" size="icon" className="h-8 md:h-10 w-8 md:w-10 rounded-lg md:rounded-xl hover:bg-emerald-100 text-emerald-600 transition-all"><Eye className="h-4 w-4" /></Button></Link>
-                            <DropdownMenu>
+                             )}
+                              {item.status === 'accepted' && latestJobOrder && !hasInvoice && (
+                                <Button
+                                  onClick={() => setConfirmInvoiceQuotationId(item.id)}
+                                  disabled={invoiceRequested || publishingInvoice}
+                                  size="sm"
+                                  className={cn(
+                                    "font-black text-[9px] uppercase h-9 px-4 rounded-xl transition-all active:scale-95",
+                                   invoiceRequested
+                                     ? "bg-slate-100 text-slate-500 hover:bg-slate-100"
+                                     : "bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-900/20"
+                                 )}
+                               >
+                                 <Send className="h-3 w-3 mr-1.5" />
+                                 {invoiceRequested ? "Terkirim" : "Invoice"}
+                               </Button>
+                             )}
+                             <Link href={`/operator/quotations/${item.id}`}><Button variant="ghost" size="icon" className="h-8 md:h-10 w-8 md:w-10 rounded-lg md:rounded-xl hover:bg-emerald-100 text-emerald-600 transition-all"><Eye className="h-4 w-4" /></Button></Link>
+                             <DropdownMenu>
                               <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 md:h-10 w-8 md:w-10 rounded-lg md:rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-56 rounded-2xl border-2 border-slate-100 p-2 shadow-2xl">
                                 <DropdownMenuItem className="rounded-xl font-bold text-xs cursor-pointer px-4 py-3"><Printer className="mr-2 h-4 w-4" /> Cetak Penawaran</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => cloneQuotation(item.id).then(() => loadData())} className="rounded-xl font-bold text-xs cursor-pointer px-4 py-3"><Copy className="mr-2 h-4 w-4" /> Duplikasi</DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={() => handleStatusUpdate(item.id, 'accepted')} className="rounded-xl font-bold text-xs cursor-pointer px-4 py-3 text-emerald-600"><CheckCircle className="mr-2 h-4 w-4" /> Tandai Diterima</DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={() => setDeleteId(item.id)} className="rounded-xl font-bold text-xs cursor-pointer px-4 py-3 text-red-600"><Trash2 className="mr-2 h-4 w-4" /> Hapus</DropdownMenuItem>
-                              </DropdownMenuContent>
+                                 <DropdownMenuItem onClick={() => cloneQuotation(item.id).then(() => loadData())} className="rounded-xl font-bold text-xs cursor-pointer px-4 py-3"><Copy className="mr-2 h-4 w-4" /> Duplikasi</DropdownMenuItem>
+                                 <DropdownMenuSeparator />
+                                 <DropdownMenuItem onClick={() => handleStatusUpdate(item.id, 'accepted')} className="rounded-xl font-bold text-xs cursor-pointer px-4 py-3 text-emerald-600"><CheckCircle className="mr-2 h-4 w-4" /> Tandai Diterima</DropdownMenuItem>
+                                 {item.status === 'accepted' && latestJobOrder && !hasInvoice && (
+                                   <>
+                                     <DropdownMenuSeparator />
+                                     <DropdownMenuItem onClick={() => setConfirmInvoiceQuotationId(item.id)} disabled={invoiceRequested || publishingInvoice} className="rounded-xl font-bold text-xs cursor-pointer px-4 py-3 text-blue-600 disabled:text-slate-400">
+                                       <Send className="mr-2 h-4 w-4" /> {invoiceRequested ? 'Permintaan Terkirim' : 'Terbitkan Invoice'}
+                                     </DropdownMenuItem>
+                                   </>
+                                 )}
+                                 <DropdownMenuSeparator />
+                                 <DropdownMenuItem onClick={() => setDeleteId(item.id)} className="rounded-xl font-bold text-xs cursor-pointer px-4 py-3 text-red-600"><Trash2 className="mr-2 h-4 w-4" /> Hapus</DropdownMenuItem>
+                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>
                         </td>
@@ -466,6 +511,27 @@ export default function OperatorQuotationListPage() {
             <Button variant="outline" size="sm" className="h-10 w-10 rounded-xl border-slate-200 transition-all active:scale-90" disabled={page === data.pages} onClick={() => setPage(p => p + 1)}><ChevronRight className="h-4 w-4" /></Button>
          </div>
       </div>
+
+      <AlertDialog open={confirmInvoiceQuotationId !== null} onOpenChange={(open) => !open && setConfirmInvoiceQuotationId(null)}>
+        <AlertDialogContent className="rounded-3xl border-none shadow-2xl p-10 max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-xl font-black text-center uppercase">Terbitkan Permintaan Invoice?</AlertDialogTitle>
+            <AlertDialogDescription className="text-center text-slate-500 text-sm py-4">
+              Permintaan ini akan dikirim ke finance. Invoice draft akan tersedia setelah sampling selesai.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-3 mt-4">
+            <AlertDialogCancel className="rounded-2xl h-14 flex-1 font-black text-slate-400 uppercase text-[10px]">Batal</AlertDialogCancel>
+            <Button
+              onClick={() => confirmInvoiceQuotationId && handlePublishInvoiceRequest(confirmInvoiceQuotationId)}
+              disabled={publishingInvoice}
+              className="bg-blue-600 hover:bg-blue-700 rounded-2xl h-14 flex-1 font-black text-white uppercase text-[10px]"
+            >
+              {publishingInvoice ? "Memproses..." : "Terbitkan"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* CREATE QUOTATION DIALOG */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

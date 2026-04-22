@@ -5,7 +5,13 @@ import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
 import { hashPassword } from '@/lib/auth-helpers'
 
-export async function getUsers(page = 1, limit = 10, search = "", role?: string, notRole?: string) {
+export async function getUsers(
+  page = 1,
+  limit = 10,
+  search = "",
+  role?: string,
+  notRole?: string | string[]
+) {
   const skip = (page - 1) * limit
   const where: any = {}
 
@@ -19,10 +25,10 @@ export async function getUsers(page = 1, limit = 10, search = "", role?: string,
 
   if (role && role !== 'all') {
     where.role = role
-  }
-
-  if (notRole) {
-    where.role = { not: notRole }
+  } else if (notRole) {
+    where.NOT = (Array.isArray(notRole) ? notRole : [notRole]).map((excludedRole) => ({
+      role: excludedRole
+    }))
   }
 
   try {
@@ -45,6 +51,10 @@ export async function getUsers(page = 1, limit = 10, search = "", role?: string,
     console.error("GetUsers Error:", error);
     return { users: [], total: 0, pages: 0 };
   }
+}
+
+export async function getInternalUsers(page = 1, limit = 10, search = "") {
+  return getUsers(page, limit, search, undefined, ['client', 'admin'])
 }
 
 export async function createOrUpdateUser(formData: any, id?: string) {

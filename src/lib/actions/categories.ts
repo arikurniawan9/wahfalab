@@ -88,7 +88,7 @@ export async function createCategory(input: CategoryInput) {
       }
     })
 
-    invalidateGlobalCache("all_categories")
+    await invalidateGlobalCache("all_categories")
     revalidatePath('/admin/categories')
     revalidatePath('/operator/categories')
     return { success: true, data: category }
@@ -133,7 +133,7 @@ export async function updateCategory(id: string, input: Partial<CategoryInput>) 
       }
     })
 
-    invalidateGlobalCache("all_categories")
+    await invalidateGlobalCache("all_categories")
     revalidatePath('/admin/categories')
     revalidatePath('/operator/categories')
     return { success: true, data: category }
@@ -166,7 +166,7 @@ export async function deleteCategory(id: string) {
       where: { id }
     })
 
-    invalidateGlobalCache("all_categories")
+    await invalidateGlobalCache("all_categories")
     revalidatePath('/admin/categories')
     revalidatePath('/operator/categories')
     return { success: true }
@@ -202,7 +202,7 @@ export async function deleteManyCategories(ids: string[]) {
       where: { id: { in: ids } }
     })
 
-    invalidateGlobalCache("all_categories")
+    await invalidateGlobalCache("all_categories")
     revalidatePath('/admin/categories')
     revalidatePath('/operator/categories')
     return { success: true }

@@ -8,6 +8,8 @@ import { generateInvoice } from '@/lib/actions/payment'
 import { notifySamplingCompleted, notifyInvoiceGenerated, notifyJobAssigned } from '@/lib/actions/notifications'
 import { STORAGE_BUCKETS, deleteFromSupabaseStorage, uploadToSupabaseStorage } from '@/lib/supabase/storage'
 
+const INVOICE_REQUEST_MARKER = '[INVOICE_REQUESTED]'
+
 export async function uploadSamplingPdf(assignmentId: string, file: File) {
   try {
     const session = await auth()
@@ -263,21 +265,24 @@ export async function completeSamplingAssignment(
         }
       })
 
-      // 3. Auto-generate Invoice (Draft)
+      // 3. Auto-generate Invoice (Draft) only if invoice request was published
       const quotation = assignment.job_order.quotation
-      const invoiceNumber = `INV-${Date.now()}`
+      let invoice = null
 
-      const invoice = await tx.invoice.create({
-        data: {
-          invoice_number: invoiceNumber,
-          job_order_id: jobOrder.id,
-          quotation_id: quotation.id,
-          amount: quotation.total_amount,
-          status: 'draft',
-          due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days
-          created_by: profile?.id
-        }
-      })
+      if (assignment.job_order.notes?.includes(INVOICE_REQUEST_MARKER)) {
+        const invoiceNumber = `INV-${Date.now()}`
+        invoice = await tx.invoice.create({
+          data: {
+            invoice_number: invoiceNumber,
+            job_order_id: jobOrder.id,
+            quotation_id: quotation.id,
+            amount: quotation.total_amount,
+            status: 'draft',
+            due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days
+            created_by: profile?.id
+          }
+        })
+      }
 
       return { assignment, jobOrder, invoice }
     })
@@ -285,14 +290,16 @@ export async function completeSamplingAssignment(
     // 4. Send notifications (outside transaction)
     const trackingCode = result.jobOrder.tracking_code
     await notifySamplingCompleted(result.jobOrder.id, trackingCode)
-    await notifyInvoiceGenerated(
-      result.invoice.id,
-      result.invoice.invoice_number,
-      Number(result.invoice.amount),
-      result.assignment.job_order.quotation.profile?.company_name || 
-      result.assignment.job_order.quotation.profile?.full_name || 
-      'Client'
-    )
+    if (result.invoice) {
+      await notifyInvoiceGenerated(
+        result.invoice.id,
+        result.invoice.invoice_number,
+        Number(result.invoice.amount),
+        result.assignment.job_order.quotation.profile?.company_name || 
+        result.assignment.job_order.quotation.profile?.full_name || 
+        'Client'
+      )
+    }
 
     revalidatePath('/field')
     revalidatePath('/field/assignments')
@@ -411,14 +418,16 @@ export async function updateSamplingStatus(assignmentId: string, status: any, no
       }
     })
 
-    // 2. Auto-generate invoice dengan status 'sent' agar bisa diproses Finance/Customer
+    // 2. Auto-generate invoice draft only if invoice request was published
     // CEK TERLEBIH DAHULU apakah invoice sudah ada untuk job ini
     const existingInvoice = await prisma.invoice.findUnique({
       where: { job_order_id: jobOrder.id }
     })
 
     const quotation = jobOrder.quotation
-    if (quotation && !existingInvoice) {
+    const isInvoiceRequested = !!jobOrder.notes?.includes(INVOICE_REQUEST_MARKER)
+
+    if (quotation && !existingInvoice && isInvoiceRequested) {
       const invoiceNumber = `INV-${jobOrder.tracking_code}-${Date.now().toString().slice(-4)}`
       invoice = await prisma.invoice.create({
         data: {
@@ -426,7 +435,7 @@ export async function updateSamplingStatus(assignmentId: string, status: any, no
           job_order_id: jobOrder.id,
           quotation_id: quotation.id,
           amount: quotation.total_amount,
-          status: 'sent',
+          status: 'draft',
           due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
           created_by: profile?.id
         }
@@ -443,6 +452,8 @@ export async function updateSamplingStatus(assignmentId: string, status: any, no
     } else if (existingInvoice) {
       invoice = existingInvoice;
       // Jika sudah ada, pastikan notifikasi sampling tetap terkirim jika perlu
+      await notifySamplingCompleted(jobOrder.id, jobOrder.tracking_code)
+    } else {
       await notifySamplingCompleted(jobOrder.id, jobOrder.tracking_code)
     }
   } else if (status === 'in_progress') {

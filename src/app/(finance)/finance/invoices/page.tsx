@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,18 +16,15 @@ import { toast } from "sonner";
 import {
   FileText,
   Search,
-  Download,
   Send,
   CreditCard,
   Calendar,
-  Building,
-  DollarSign,
-  CheckCircle,
-  XCircle,
-  Clock
+  Clock,
+  BellRing,
+  ArrowRight
 } from "lucide-react";
 import Link from "next/link";
-import { getAllInvoices, getInvoiceStats } from "@/lib/actions/invoice";
+import { getAllInvoices, getInvoiceStats, getPendingInvoiceRequests, sendInvoiceToCustomer } from "@/lib/actions/invoice";
 import { cn } from "@/lib/utils";
 
 const statusColors: Record<string, string> = {
@@ -48,25 +44,27 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function InvoicesPage() {
-  const router = useRouter();
   const [data, setData] = useState<any>({ items: [], total: 0, pages: 1 });
+  const [pendingRequests, setPendingRequests] = useState<any>({ items: [], total: 0, pages: 1 });
   const [stats, setStats] = useState<any>({});
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
+    loadPendingRequests();
     loadStats();
   }, [page, statusFilter]);
 
-  async function loadData() {
+  async function loadData(pageOverride?: number) {
     setLoading(true);
     try {
       const result = await getAllInvoices(
-        page,
+        pageOverride ?? page,
         limit,
         statusFilter === "all" ? undefined : statusFilter,
         search || undefined
@@ -95,9 +93,45 @@ export default function InvoicesPage() {
     }
   }
 
+  async function loadPendingRequests(pageOverride?: number) {
+    try {
+      const result = await getPendingInvoiceRequests(pageOverride ?? page, limit, search || undefined);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      setPendingRequests(result);
+    } catch (error) {
+      console.error('Load pending invoice requests error:', error);
+      toast.error("Gagal memuat permintaan invoice");
+    }
+  }
+
   const handleSearch = () => {
     setPage(1);
-    loadData();
+    loadData(1);
+    loadPendingRequests(1);
+  };
+
+  const handleSendInvoice = async (item: any) => {
+    try {
+      setSendingInvoiceId(item.id);
+      const customerEmail = item.job_order?.quotation?.profile?.email;
+      if (!customerEmail) {
+        throw new Error("Email customer belum tersedia");
+      }
+
+      const result = await sendInvoiceToCustomer(item.id, customerEmail);
+      if (result.error) throw new Error(result.error);
+
+      toast.success("Invoice berhasil diterbitkan ke customer");
+      await loadData();
+      await loadStats();
+    } catch (error: any) {
+      toast.error(error.message || "Gagal menerbitkan invoice");
+    } finally {
+      setSendingInvoiceId(null);
+    }
   };
 
   const formatCurrency = (amount: number) => {
@@ -114,6 +148,19 @@ export default function InvoicesPage() {
       month: 'short',
       year: 'numeric'
     });
+  };
+
+  const getRequestMeta = (notes?: string | null) => {
+    const line = notes?.split('\n').find((entry) => entry.includes('[INVOICE_REQUESTED]'));
+    if (!line) return null;
+
+    const requesterMatch = line.match(/by=(.+?) at=/);
+    const requestedAtMatch = line.match(/at=(.+)$/);
+
+    return {
+      requestedBy: requesterMatch?.[1] || '-',
+      requestedAt: requestedAtMatch?.[1] || null
+    };
   };
 
   return (
@@ -233,6 +280,74 @@ export default function InvoicesPage() {
         </CardContent>
       </Card>
 
+      <Card className="mb-6 border-amber-200 bg-amber-50/40">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2 text-amber-900">
+            <BellRing className="h-4 w-4 text-amber-600" />
+            Permintaan Invoice Masuk
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {pendingRequests.items?.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-amber-200 bg-white/70 px-4 py-8 text-center">
+              <p className="text-sm font-medium text-slate-700">Belum ada permintaan invoice yang menunggu.</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Permintaan dari admin atau operator akan muncul di sini sebelum invoice draft dibuat.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {pendingRequests.items.map((item: any) => {
+                const requestMeta = getRequestMeta(item.notes);
+                const customerName = item.quotation?.profile?.company_name || item.quotation?.profile?.full_name || "-";
+                const readyToIssue = ['analysis_ready', 'analysis', 'analysis_done', 'reporting', 'completed', 'pending_payment', 'paid'].includes(item.status);
+
+                return (
+                  <div
+                    key={item.id}
+                    className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-white p-4 md:flex-row md:items-center md:justify-between"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge className="bg-amber-100 text-amber-800 border-amber-200 uppercase text-[10px] font-bold">
+                          Permintaan Baru
+                        </Badge>
+                        <span className="font-mono text-xs text-slate-500">
+                          {item.quotation?.quotation_number || "-"}
+                        </span>
+                      </div>
+                      <p className="text-sm font-semibold text-slate-800">{customerName}</p>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                        <span>Job: {item.tracking_code}</span>
+                        <span>Progress: {item.status}</span>
+                        <span>Diminta oleh: {requestMeta?.requestedBy || "-"}</span>
+                        <span>
+                          Waktu: {requestMeta?.requestedAt ? formatDate(requestMeta.requestedAt) : "-"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge className={cn(
+                        "border text-[10px] font-bold uppercase",
+                        readyToIssue
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : "border-slate-200 bg-slate-100 text-slate-600"
+                      )}>
+                        {readyToIssue ? "Siap Buat Draft" : "Menunggu Sampling Selesai"}
+                      </Badge>
+                      <div className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+                        Ditampilkan setelah draft invoice dibuat
+                        <ArrowRight className="ml-1 h-3 w-3" />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Invoices Table */}
       <Card>
         <CardHeader>
@@ -269,7 +384,7 @@ export default function InvoicesPage() {
                           <div className="text-center">
                             <p className="text-lg font-semibold text-slate-700">Belum ada invoice</p>
                             <p className="text-sm text-slate-500 mt-1">
-                              Invoice akan dibuat otomatis setelah sampling selesai
+                              Invoice draft akan muncul di sini setelah permintaan invoice diterbitkan dan progres sampling selesai
                             </p>
                           </div>
                         </div>
@@ -300,7 +415,7 @@ export default function InvoicesPage() {
                         </td>
                         <td className="py-3 px-4">
                           <Link
-                            href={`/finance/jobs/${item.job_order?.id}`}
+                            href={`/finance/invoices/${item.id}`}
                             className="text-emerald-600 hover:underline text-sm font-mono"
                           >
                             {item.job_order?.tracking_code || '-'}
@@ -338,7 +453,19 @@ export default function InvoicesPage() {
                                 Detail
                               </Button>
                             </Link>
-                            {item.status !== 'paid' && item.status !== 'cancelled' && (
+                            {item.status === 'draft' && (
+                              <Button
+                                size="sm"
+                                onClick={() => handleSendInvoice(item)}
+                                disabled={sendingInvoiceId === item.id}
+                                className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700"
+                                title="Terbitkan Invoice"
+                              >
+                                <Send className="h-3 w-3 mr-1" />
+                                {sendingInvoiceId === item.id ? 'Mengirim...' : 'Terbitkan'}
+                              </Button>
+                            )}
+                            {item.status !== 'paid' && item.status !== 'cancelled' && item.status !== 'draft' && (
                               <Button
                                 size="sm"
                                 variant="ghost"

@@ -7,9 +7,13 @@ import { generateInvoiceNumber } from '@/lib/utils/generateNumber'
 import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { headers } from 'next/headers'
 import { audit } from '@/lib/audit-log'
+import { auth } from '@/lib/auth'
+import { notifyInvoiceGenerated } from '@/lib/actions/notifications'
+
+const INVOICE_REQUEST_MARKER = '[INVOICE_REQUESTED]'
 
 export async function getNextInvoiceNumber() {
-  return await generateInvoiceNumber("INV")
+  return await generateInvoiceNumber()
 }
 
 export async function getQuotationById(id: string) {
@@ -72,7 +76,15 @@ export async function getQuotationById(id: string) {
 }
 
 export async function getQuotations(
-  pageOrOptions?: number | { page?: number; limit?: number; search?: string; status?: string; userId?: string },
+  pageOrOptions?: number | { 
+    page?: number; 
+    limit?: number; 
+    search?: string; 
+    status?: string; 
+    userId?: string;
+    date_from?: string;
+    date_to?: string;
+  },
   limit = 10,
   search = "",
   status?: string,
@@ -85,6 +97,8 @@ export async function getQuotations(
   search = typeof pageOrOptions === 'number' ? search : (options?.search ?? "")
   status = typeof pageOrOptions === 'number' ? status : (options?.status)
   const finalUserId = typeof pageOrOptions === 'object' ? options?.userId : userId
+  const date_from = typeof pageOrOptions === 'object' ? options?.date_from : undefined
+  const date_to = typeof pageOrOptions === 'object' ? options?.date_to : undefined
 
   const skip = (page - 1) * limit
   
@@ -106,7 +120,17 @@ export async function getQuotations(
     where.user_id = finalUserId
   }
 
-  const [items, total] = await Promise.all([
+  if (date_from || date_to) {
+    where.created_at = {}
+    if (date_from) where.created_at.gte = new Date(date_from)
+    if (date_to) {
+      const toDate = new Date(date_to)
+      toDate.setHours(23, 59, 59, 999)
+      where.created_at.lte = toDate
+    }
+  }
+
+  const [items, total, counts] = await Promise.all([
     prisma.quotation.findMany({
       where,
       skip: Number(skip),
@@ -154,19 +178,185 @@ export async function getQuotations(
             },
             equipment: { select: { id: true, name: true } }
           }
+        },
+        job_orders: {
+          select: {
+            id: true,
+            tracking_code: true,
+            status: true,
+            notes: true,
+            invoice: {
+              select: {
+                id: true,
+                invoice_number: true,
+                status: true,
+              }
+            }
+          },
+          orderBy: { created_at: 'desc' }
         }
       },
       orderBy: { created_at: 'desc' }
     }),
-    prisma.quotation.count({ where })
+    prisma.quotation.count({ where }),
+    prisma.quotation.groupBy({
+      by: ['status'],
+      _count: { _all: true },
+      where: finalUserId ? { user_id: finalUserId } : {}
+    })
   ])
+
+  // Process counts into a flat object
+  const statusCounts = {
+    total: counts.reduce((acc, curr) => acc + curr._count._all, 0),
+    draft: counts.find(c => c.status === 'draft')?._count._all || 0,
+    accepted: counts.find(c => c.status === 'accepted')?._count._all || 0,
+    rejected: counts.find(c => c.status === 'rejected')?._count._all || 0,
+    paid: counts.find(c => c.status === 'paid')?._count._all || 0,
+  }
 
   // Deeply serialize decimals and dates to avoid Client Component errors
   return JSON.parse(JSON.stringify(serializeData({ 
     items, 
     total, 
-    pages: Math.ceil(total / limit) 
+    pages: Math.ceil(total / limit),
+    statusCounts
   })));
+}
+
+export async function publishInvoiceRequest(quotationId: string) {
+  try {
+    const session = await auth()
+    if (!session?.user?.email) {
+      return { error: 'Unauthorized' }
+    }
+
+    const requester = await prisma.profile.findUnique({
+      where: { email: session.user.email },
+      select: { id: true, role: true, full_name: true, email: true }
+    })
+
+    if (!requester || !['admin', 'operator'].includes(requester.role)) {
+      return { error: 'Forbidden' }
+    }
+
+    const quotation = await prisma.quotation.findUnique({
+      where: { id: quotationId },
+      include: {
+        profile: {
+          select: { id: true, full_name: true, company_name: true }
+        },
+        job_orders: {
+          include: {
+            invoice: {
+              select: { id: true, invoice_number: true, status: true }
+            }
+          },
+          orderBy: { created_at: 'desc' },
+          take: 1
+        }
+      }
+    })
+
+    if (!quotation) {
+      return { error: 'Penawaran tidak ditemukan' }
+    }
+
+    if (quotation.status !== 'accepted') {
+      return { error: 'Invoice hanya dapat diterbitkan dari penawaran yang sudah diterima' }
+    }
+
+    const jobOrder = quotation.job_orders[0]
+    if (!jobOrder) {
+      return { error: 'Job order belum tersedia untuk penawaran ini' }
+    }
+
+    if (jobOrder.invoice) {
+      return { error: 'Invoice untuk penawaran ini sudah tersedia' }
+    }
+
+    if (jobOrder.notes?.includes(INVOICE_REQUEST_MARKER)) {
+      return { success: true, alreadyRequested: true }
+    }
+
+    const requestStamp = `${INVOICE_REQUEST_MARKER} by=${requester.full_name || requester.email} at=${new Date().toISOString()}`
+    const updatedNotes = [jobOrder.notes, requestStamp].filter(Boolean).join('\n')
+
+    await prisma.jobOrder.update({
+      where: { id: jobOrder.id },
+      data: { notes: updatedNotes }
+    })
+
+    const financeAndAdmins = await prisma.profile.findMany({
+      where: {
+        OR: [
+          { role: 'finance' },
+          { role: 'admin' }
+        ]
+      },
+      select: { id: true }
+    })
+
+    const targetUsers = financeAndAdmins.filter((user) => user.id !== requester.id)
+
+    if (targetUsers.length > 0) {
+      await prisma.notification.createMany({
+        data: targetUsers.map((recipient) => ({
+          user_id: recipient.id,
+          type: 'invoice_generated',
+          title: 'Permintaan Invoice Baru',
+          message: `${requester.role === 'admin' ? 'Admin' : 'Operator'} ${requester.full_name || requester.email} meminta penerbitan invoice untuk ${quotation.quotation_number}. Invoice draft akan tersedia setelah sampling selesai.`,
+          link: '/finance/invoices',
+          metadata: {
+            quotation_id: quotation.id,
+            quotation_number: quotation.quotation_number,
+            job_order_id: jobOrder.id,
+            tracking_code: jobOrder.tracking_code,
+            requested_by: requester.full_name || requester.email,
+          }
+        }))
+      })
+    }
+
+    const samplingFinishedStatuses = ['analysis_ready', 'analysis', 'analysis_done', 'reporting', 'completed', 'pending_payment', 'paid']
+    let createdInvoice: any = null
+
+    if (samplingFinishedStatuses.includes(jobOrder.status)) {
+      const invoiceNumber = await generateInvoiceNumber('INV')
+      createdInvoice = await prisma.invoice.create({
+        data: {
+          invoice_number: invoiceNumber,
+          job_order_id: jobOrder.id,
+          quotation_id: quotation.id,
+          amount: quotation.total_amount,
+          status: 'draft',
+          due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+          created_by: requester.id
+        }
+      })
+
+      await notifyInvoiceGenerated(
+        createdInvoice.id,
+        createdInvoice.invoice_number,
+        Number(createdInvoice.amount),
+        quotation.profile?.company_name || quotation.profile?.full_name || 'Client'
+      )
+    }
+
+    revalidatePath('/admin/quotations')
+    revalidatePath('/operator/quotations')
+    revalidatePath('/finance/invoices')
+    revalidatePath('/api/notifications')
+
+    return {
+      success: true,
+      requested: true,
+      invoiceCreated: !!createdInvoice
+    }
+  } catch (error: any) {
+    console.error('Publish invoice request error:', error)
+    return { error: error.message || 'Gagal menerbitkan permintaan invoice' }
+  }
 }
 
 export async function updateQuotationStatus(id: string, status: any) {
@@ -386,6 +576,7 @@ export async function cloneQuotation(id: string) {
 }
 
 export async function createQuotation(formData: any) {
+  console.log("CREATE QUOTATION - RECEIVED FORM DATA:", JSON.stringify(formData, null, 2));
   try {
     const headersList = await headers()
     const userId = headersList.get('x-user-id') || 'anonymous'
@@ -399,15 +590,23 @@ export async function createQuotation(formData: any) {
       if (profile) finalUserId = profile.id;
     }
 
+    // Calculate Totals Server-Side for Integrity
+    const itemsTotal = formData.items.reduce((acc: number, item: any) => acc + (Number(item.qty || 0) * Number(item.price || 0)), 0);
+    const perdiemTotal = Number(formData.perdiem_price || 0) * Number(formData.perdiem_qty || 0);
+    const transportTotal = Number(formData.transport_price || 0) * Number(formData.transport_qty || 0);
+    const subtotalValue = itemsTotal + perdiemTotal + transportTotal - Number(formData.discount_amount || 0);
+    const taxValue = formData.use_tax ? subtotalValue * 0.11 : 0;
+    const finalTotal = subtotalValue + taxValue;
+
     const quotation = await prisma.quotation.create({
       data: {
         quotation_number: formData.quotation_number,
         title: formData.title || null,
         user_id: finalUserId,
-        subtotal: formData.subtotal,
+        subtotal: subtotalValue,
         discount_amount: formData.discount_amount || 0,
         use_tax: formData.use_tax,
-        tax_amount: formData.tax_amount,
+        tax_amount: taxValue,
 
         perdiem_name: formData.perdiem_name || null,
         perdiem_price: formData.perdiem_price || 0,
@@ -416,7 +615,7 @@ export async function createQuotation(formData: any) {
         transport_price: formData.transport_price || 0,
         transport_qty: formData.transport_qty || 0,
 
-        total_amount: formData.total_amount,
+        total_amount: finalTotal,
         status: 'draft', // Status default baru: draft
         items: {
           create: formData.items.map((item: any) => ({
@@ -466,6 +665,14 @@ export async function updateQuotation(id: string, formData: any) {
       throw new Error('Penawaran tidak ditemukan')
     }
     
+    // Calculate Totals Server-Side for Integrity
+    const itemsTotal = formData.items.reduce((acc: number, item: any) => acc + (Number(item.qty || 0) * Number(item.price || 0)), 0);
+    const perdiemTotal = Number(formData.perdiem_price || 0) * Number(formData.perdiem_qty || 0);
+    const transportTotal = Number(formData.transport_price || 0) * Number(formData.transport_qty || 0);
+    const subtotalValue = itemsTotal + perdiemTotal + transportTotal - Number(formData.discount_amount || 0);
+    const taxValue = formData.use_tax ? subtotalValue * 0.11 : 0;
+    const finalTotal = subtotalValue + taxValue;
+
     // Update quotation with transaction to handle items
     const quotation = await prisma.$transaction(async (tx: any) => {
       // Delete existing items
@@ -479,9 +686,10 @@ export async function updateQuotation(id: string, formData: any) {
         data: {
           quotation_number: formData.quotation_number,
           title: formData.title || null,
-          subtotal: formData.subtotal,          discount_amount: formData.discount_amount || 0,
+          subtotal: subtotalValue,
+          discount_amount: formData.discount_amount || 0,
           use_tax: formData.use_tax,
-          tax_amount: formData.tax_amount,
+          tax_amount: taxValue,
   
           perdiem_name: formData.perdiem_name || null,
           perdiem_price: formData.perdiem_price || 0,
@@ -490,13 +698,13 @@ export async function updateQuotation(id: string, formData: any) {
           transport_price: formData.transport_price || 0,
           transport_qty: formData.transport_qty || 0,
   
-          total_amount: formData.total_amount,
+          total_amount: finalTotal,
           items: {
             create: formData.items.map((item: any) => ({
               service_id: item.service_id || null,
               equipment_id: item.equipment_id || null,
               qty: item.qty,
-              price_snapshot: item.price,
+              price_snapshot: Number(item.price || 0),
               parameter_snapshot: Array.isArray(item.parameters) ? item.parameters.join(", ") : null,
             })),
           },

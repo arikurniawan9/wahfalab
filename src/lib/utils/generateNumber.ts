@@ -1,22 +1,30 @@
 import prisma from "@/lib/prisma";
 
-export async function generateInvoiceNumber(prefix: string = "INV") {
+function toRoman(num: number): string {
+  const roman = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+  return roman[num - 1] || num.toString();
+}
+
+export async function generateInvoiceNumber(prefix: string = "WLI-PH") {
   const now = new Date();
   const year = now.getFullYear();
-  const month = (now.getMonth() + 1).toString().padStart(2, "0");
+  const shortYear = year.toString().slice(-2);
+  const month = now.getMonth() + 1;
+  const romanMonth = toRoman(month);
 
-  // Format dasar untuk pencarian (contoh: INV/2026/02/)
-  const searchPattern = `${prefix}/${year}/${month}/`;
+  // Format: {seq}/WLI-PH/II/26
+  // Search pattern for the current month and year
+  const searchSuffix = `/${prefix}/${romanMonth}/${shortYear}`;
 
-  // Cari nomor terakhir di bulan dan tahun yang sama
+  // Cari nomor terakhir yang memiliki suffix tersebut
   const lastQuotation = await prisma.quotation.findFirst({
     where: {
       quotation_number: {
-        startsWith: searchPattern,
+        endsWith: searchSuffix,
       },
     },
     orderBy: {
-      quotation_number: "desc",
+      created_at: "desc",
     },
     select: {
       quotation_number: true,
@@ -26,16 +34,16 @@ export async function generateInvoiceNumber(prefix: string = "INV") {
   let nextNumber = 1;
 
   if (lastQuotation) {
-    // Ambil 4 digit terakhir dan tambah 1
+    // Ambil bagian awal (sequence) sebelum '/'
     const lastParts = lastQuotation.quotation_number.split("/");
-    const lastSeq = parseInt(lastParts[lastParts.length - 1]);
+    const lastSeq = parseInt(lastParts[0]);
     if (!isNaN(lastSeq)) {
       nextNumber = lastSeq + 1;
     }
   }
 
-  const sequence = nextNumber.toString().padStart(4, "0");
-  return `${searchPattern}${sequence}`;
+  const sequence = nextNumber.toString().padStart(3, "0");
+  return `${sequence}${searchSuffix}`;
 }
 
 export async function generateHandoverNumber(prefix: string = "BAST") {

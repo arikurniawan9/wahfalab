@@ -6,13 +6,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { 
   FileText, Plus, Trash2, Check, X, MapPin, Car, Wrench, 
-  DollarSign, Keyboard, Info, CheckCircle, XCircle, Search, UserPlus
+  DollarSign, CheckCircle, XCircle, UserPlus, Info, PlusCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Dialog, 
   DialogContent, 
@@ -22,14 +20,13 @@ import {
 } from "@/components/ui/dialog";
 import { LoadingButton } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 
 const quotationSchema = z.object({
   quotation_number: z.string().min(1, "Nomor penawaran wajib diisi"),
-  title: z.string().optional().nullable(),
+  title: z.string().min(3, "Judul pengujian wajib diisi").nullable().or(z.literal("")),
   user_id: z.string().min(1, "Pilih klien terlebih dahulu"),
   use_tax: z.boolean().default(true),
-  discount_amount: z.coerce.number().default(0),
+  discount_amount: z.coerce.number().min(0).default(0),
   perdiem_name: z.string().optional().nullable(),
   perdiem_price: z.coerce.number().default(0),
   perdiem_qty: z.coerce.number().default(0),
@@ -39,8 +36,8 @@ const quotationSchema = z.object({
   items: z.array(z.object({
     service_id: z.string().optional().nullable(),
     equipment_id: z.string().optional().nullable(),
-    qty: z.coerce.number().default(1),
-    price: z.coerce.number().default(0),
+    qty: z.coerce.number().min(1).default(1),
+    price: z.coerce.number().min(0).default(0),
     name: z.string().optional().nullable(),
     parameters: z.array(z.string()).optional(),
   })).min(1, "Minimal harus ada 1 item"),
@@ -59,14 +56,6 @@ interface QuotationFormProps {
   onAddCustomer: () => void;
 }
 
-function ShortcutLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1.5 hidden md:flex items-center gap-1 opacity-70 group-hover:text-emerald-600 transition-colors">
-      <Keyboard className="h-2.5 w-2.5" /> {children}
-    </span>
-  );
-}
-
 export function QuotationForm({
   isOpen,
   onClose,
@@ -79,7 +68,7 @@ export function QuotationForm({
   isSubmitting,
   onAddCustomer
 }: QuotationFormProps) {
-  const { register, control, handleSubmit, setValue, watch, reset } = useForm({
+  const { register, control, handleSubmit, setValue, watch, formState: { errors } } = useForm({
     resolver: zodResolver(quotationSchema),
     mode: 'onChange',
     defaultValues: {
@@ -97,6 +86,16 @@ export function QuotationForm({
       items: [{ service_id: "", equipment_id: "", qty: 1, price: 0 }]
     }
   });
+
+  const groupedServices = React.useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    services.forEach(s => {
+      const cat = s.category_ref?.name || s.category || "LAINNYA";
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(s);
+    });
+    return groups;
+  }, [services]);
 
   const { fields, append, remove } = useFieldArray({ control, name: "items" });
 
@@ -117,39 +116,16 @@ export function QuotationForm({
   const watchedTransportName = watch("transport_name");
   const watchedUserId = watch("user_id");
 
-  const selectedClient = clients.find(c => c.id === watchedUserId);
-
-  const { total } = React.useMemo(() => {
+  const { subtotal, taxAmount, total } = React.useMemo(() => {
     const iSubtotal = (watchedItems || []).reduce((acc: number, item: any) => acc + (Number(item.qty || 0) * Number(item.price || 0)), 0);
     const pTotal = Number(watchedPerdiemPrice || 0) * Number(watchedPerdiemQty || 0);
     const tTotal = Number(watchedTransportPrice || 0) * Number(watchedTransportQty || 0);
     const sub = iSubtotal + pTotal + tTotal - Number(watchedDiscount || 0);
     const taxVal = watchedUseTax ? sub * 0.11 : 0;
-    return { total: sub + taxVal };
+    return { subtotal: sub, taxAmount: taxVal, total: sub + taxVal };
   }, [watchedItems, watchedPerdiemPrice, watchedPerdiemQty, watchedTransportPrice, watchedTransportQty, watchedDiscount, watchedUseTax]);
 
   const [activeCatalog, setActiveCatalog] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'Enter') {
-        e.preventDefault();
-        handleSubmit(onSubmit)();
-      }
-      if (e.altKey) {
-        switch (e.key.toLowerCase()) {
-          case 'n': e.preventDefault(); append({ service_id: "", equipment_id: "", qty: 1, price: 0 }); break;
-          case 'p': e.preventDefault(); setActiveCatalog('perdiem'); break;
-          case 't': e.preventDefault(); setActiveCatalog('transport'); break;
-          case 'e': e.preventDefault(); setActiveCatalog('equipment'); break;
-          case 'k': e.preventDefault(); onAddCustomer(); break;
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, handleSubmit, append, onSubmit, onAddCustomer]);
 
   const handleServiceChange = (index: number, serviceId: string) => {
     const service = services.find(s => s.id === serviceId);
@@ -173,296 +149,267 @@ export function QuotationForm({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent showCloseButton={false} className="max-w-[100vw] sm:max-w-[95vw] lg:max-w-[65vw] h-full sm:h-[90vh] p-0 border-none shadow-2xl rounded-none sm:rounded-2xl overflow-hidden flex flex-col">
+      <DialogContent showCloseButton={false} className="max-w-[95vw] lg:max-w-7xl h-[90vh] p-0 border-none shadow-2xl rounded-3xl overflow-hidden flex flex-col bg-white transition-all">
+        
         {/* Header */}
-        <div className="bg-emerald-900 px-4 sm:px-8 py-4 sm:py-5 flex items-center justify-between text-white shrink-0 border-b border-white/10 shadow-lg">
-          <div className="flex items-center gap-3 sm:gap-5">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white/10 flex items-center justify-center border border-white/10">
-              <FileText className="h-5 w-5 sm:h-6 sm:w-6" />
-            </div>
-            <div className="min-w-0">
-              <DialogTitle className="text-sm sm:text-xl font-black uppercase tracking-widest leading-none truncate">Draft Penawaran Baru</DialogTitle>
-              <DialogDescription className="text-[9px] sm:text-xs text-emerald-200 font-bold uppercase tracking-widest mt-1 opacity-60 italic truncate">Workspace Editor</DialogDescription>
-            </div>
+        <div className="bg-emerald-900 px-6 sm:px-10 py-4 text-white shrink-0 flex items-center justify-between relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-[80px] -mr-32 -mt-32" />
+          <div className="relative z-10 flex items-center gap-4">
+             <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/20">
+                <FileText className="h-5 w-5 text-emerald-300" />
+             </div>
+             <div>
+                <DialogTitle className="text-lg font-black uppercase tracking-tight leading-none">Draft Penawaran</DialogTitle>
+                <DialogDescription className="text-[10px] text-emerald-300/60 font-bold uppercase tracking-widest mt-0.5">Landscape Editor Mode</DialogDescription>
+             </div>
           </div>
-          <div className="flex items-center gap-2 sm:gap-4">
-            <div className="hidden md:flex flex-col items-end mr-4 border-r border-white/10 pr-6">
-              <p className="text-[10px] font-black text-emerald-300/50 uppercase tracking-widest leading-none mb-1">Total Tagihan</p>
-              <p className="text-xl font-black font-mono leading-none">Rp {total.toLocaleString("id-ID")}</p>
-            </div>
-            <Button variant="ghost" size="icon" onClick={onClose} className="h-9 w-9 sm:h-10 sm:w-10 text-white/60 hover:text-white hover:bg-white/10 rounded-xl"><X className="h-5 w-5 sm:h-6 sm:w-6" /></Button>
-          </div>
+          <Button variant="ghost" size="icon" onClick={onClose} className="h-9 w-9 text-white/40 hover:text-white hover:bg-white/10 rounded-xl transition-all"><X className="h-5 w-5" /></Button>
         </div>
 
-        <div className="flex-1 overflow-hidden relative">
-          <form id="quotation-form" onSubmit={handleSubmit(onSubmit)} className="h-full overflow-y-auto p-4 sm:p-8 md:p-12 space-y-10 sm:space-y-14 bg-white scrollbar-thin">
+        {/* Form Content - 2 Columns on Desktop Landscape */}
+        <div className="flex-1 overflow-hidden bg-slate-50/50">
+          <form id="quotation-form" onSubmit={handleSubmit(onSubmit)} className="h-full flex flex-col lg:flex-row">
             
-            {/* Step 1: Klien */}
-            <section className="space-y-6 sm:space-y-8">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-4 sm:pb-5">
-                <h4 className="text-xs sm:text-sm font-black text-emerald-600 uppercase tracking-[2px] sm:tracking-[3px] flex items-center gap-3 sm:gap-4">
-                  <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-[10px] sm:text-xs">01</span>
-                  Klien
-                </h4>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-10 bg-slate-50/50 p-5 sm:p-8 rounded-2xl border border-slate-100 shadow-inner">
-                <div className="space-y-2 sm:space-y-3">
-                  <label className="text-[10px] sm:text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">No. Penawaran</label>
-                  <Input {...register("quotation_number")} readOnly className="bg-white border-slate-100 font-mono font-black text-emerald-700 h-11 sm:h-12 rounded-xl text-sm sm:text-base px-4 sm:px-5" />
-                </div>
-                <div className="space-y-2 sm:space-y-3 flex flex-col">
-                  <label className="text-[10px] sm:text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1">Pilih Klien</label>
-                  <div className="flex gap-3 sm:gap-4 items-start">
-                    <div className="flex-1">
-                      <Controller
-                        control={control}
-                        name="user_id"
-                        render={({ field }) => (
-                          <Select value={field.value || ""} onValueChange={field.onChange}>
-                            <SelectTrigger className="h-11 sm:h-12 border-slate-100 bg-white rounded-xl font-bold text-xs sm:text-sm px-4 sm:px-5"><SelectValue placeholder="Cari klien..." /></SelectTrigger>
-                            <SelectContent className="rounded-xl border-emerald-50 shadow-2xl">
-                              {clients.map(c => <SelectItem key={c.id} value={c.id} className="text-sm font-bold py-3 px-4">{c.full_name} — {c.company_name || "PERSONAL"}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        )}
-                      />
-                    </div>
-                    <div className="flex flex-col items-center group">
-                      <Button type="button" size="icon" onClick={onAddCustomer} className="h-11 w-11 sm:h-12 sm:w-12 rounded-xl bg-white border border-slate-200 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all shadow-sm shrink-0">
-                        <UserPlus className="h-5 w-5 sm:h-6 sm:w-6" />
-                      </Button>
-                      <ShortcutLabel>Alt+K</ShortcutLabel>
-                    </div>
+            {/* Left Side: Client & Services (60%) */}
+            <div className="flex-1 lg:flex-[1.4] overflow-y-auto p-6 sm:p-8 space-y-8 custom-scrollbar border-r border-slate-200">
+               
+               {/* 01. Informasi Klien */}
+               <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <span className="h-5 w-5 rounded-full bg-emerald-600 text-white text-[9px] font-black flex items-center justify-center">1</span>
+                    <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Informasi Klien</h3>
                   </div>
-                </div>
-                <div className="md:col-span-2 space-y-2 sm:space-y-3">
-                  <label className="text-[10px] sm:text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Judul Pengujian / Perihal</label>
-                  <Input {...register("title")} placeholder="Contoh: Pengujian air di sumur ke 9" className="h-11 sm:h-12 border-slate-100 bg-white rounded-xl font-bold text-xs sm:text-sm px-4 sm:px-5" />
-                </div>
-              </div>
-            </section>
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-white p-5 rounded-2xl border border-slate-200/60 shadow-sm">
+                     <div className="md:col-span-4 space-y-1 text-left">
+                        <label className="text-[9px] font-black text-slate-400 uppercase ml-1">No. Penawaran</label>
+                        <Input {...register("quotation_number")} readOnly className="h-9 bg-slate-50 border-none font-mono font-black text-emerald-700 rounded-lg text-xs" />
+                     </div>
+                     <div className="md:col-span-8 space-y-1 text-left">
+                        <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Pilih Customer <span className="text-rose-500">*</span></label>
+                        <div className="flex gap-2">
+                           <div className="flex-1">
+                              <Controller
+                                 control={control}
+                                 name="user_id"
+                                 render={({ field }) => (
+                                    <Select value={field.value || ""} onValueChange={field.onChange}>
+                                       <SelectTrigger className={cn("h-9 border-slate-200 rounded-lg font-bold text-[10px] uppercase", errors.user_id && "border-rose-300 bg-rose-50")}>
+                                          <SelectValue placeholder="Klik mencari klien..." />
+                                       </SelectTrigger>
+                                       <SelectContent className="rounded-xl">
+                                          {clients.map(c => <SelectItem key={c.id} value={c.id} className="text-[10px] font-bold uppercase">{c.full_name} — {c.company_name || "PERSONAL"}</SelectItem>)}
+                                       </SelectContent>
+                                    </Select>
+                                 )}
+                              />
+                           </div>
+                           <Button type="button" onClick={onAddCustomer} variant="outline" className="h-9 w-9 rounded-lg border-slate-200 text-emerald-600 shrink-0"><UserPlus className="h-4 w-4" /></Button>
+                        </div>
+                     </div>
+                     <div className="md:col-span-12 space-y-1 text-left">
+                        <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Judul Pekerjaan <span className="text-rose-500">*</span></label>
+                        <Input {...register("title")} placeholder="Contoh: Analisa Berkala Kualitas Air" className={cn("h-9 border-slate-200 rounded-lg font-bold text-xs", errors.title && "border-rose-300")} />
+                     </div>
+                  </div>
+               </div>
 
-            {/* Step 2: Layanan */}
-            <section className="space-y-6 sm:space-y-8">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-4 sm:pb-5">
-                <h4 className="text-xs sm:text-sm font-black text-emerald-600 uppercase tracking-[2px] sm:tracking-[3px] flex items-center gap-3 sm:gap-4">
-                  <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-[10px] sm:text-xs">02</span>
-                  Layanan
-                </h4>
-                <div className="flex flex-col items-center group">
-                  <Button type="button" variant="outline" size="sm" onClick={() => append({ service_id: "", equipment_id: "", qty: 1, price: 0 })} className="h-10 sm:h-11 px-5 sm:px-8 rounded-xl border-emerald-200 text-emerald-700 font-black text-[9px] sm:text-[10px] uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all">
-                    TAMBAH
-                  </Button>
-                  <ShortcutLabel>Alt+N</ShortcutLabel>
-                </div>
-              </div>
-              <div className="space-y-5 sm:space-y-6">
-                {fields.map((field, index) => {
-                  if (watchedItems[index]?.equipment_id) return null;
-                  return (
-                    <div key={field.id} className="bg-white border border-slate-100 p-4 sm:p-6 rounded-2xl shadow-sm hover:border-emerald-300 transition-all space-y-4 sm:space-y-5 group">
-                      <div className="flex flex-col lg:grid lg:grid-cols-12 gap-4 sm:gap-6 items-end">
-                        <div className="w-full lg:col-span-7 space-y-2 sm:space-y-3 text-left">
-                          <label className="text-[9px] sm:text-[10px] font-black text-slate-300 uppercase tracking-widest ml-2">Layanan Lab</label>
-                          <Controller
-                            control={control}
-                            name={`items.${index}.service_id`}
-                            render={({ field }) => (
-                              <Select value={field.value || ""} onValueChange={(val) => { field.onChange(val); handleServiceChange(index, val); }}>
-                                <SelectTrigger className="h-11 sm:h-12 border-slate-50 bg-slate-50/50 rounded-xl font-bold text-xs sm:text-sm group-hover:bg-white px-4 sm:px-5"><SelectValue placeholder="Pilih Layanan..." /></SelectTrigger>
-                                <SelectContent className="rounded-xl border-emerald-50 max-h-[300px]">{services.map(s => <SelectItem key={s.id} value={s.id} className="text-sm font-bold py-3 px-4">{s.name}</SelectItem>)}</SelectContent>
-                              </Select>
-                            )}
-                          />
-                          
-                          {/* Display Regulation & Parameters */}
-                          {(() => {
-                            const service = services.find(s => s.id === watchedItems[index]?.service_id);
-                            const regulationText = service?.regulation_ref?.name || service?.regulation;
-                            const hasParams = (watchedItems[index]?.parameters?.length ?? 0) > 0;
-                            if (!regulationText && !hasParams) return null;
-                            return (
-                              <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-slate-50/50 rounded-xl border border-slate-100 space-y-3 animate-in fade-in slide-in-from-top-1 duration-300">
-                                {regulationText && <span className="inline-block text-[9px] sm:text-[10px] font-black text-emerald-700 uppercase tracking-tight bg-emerald-50 px-3 py-1 rounded-md border border-emerald-100/50">{regulationText}</span>}
-                                {hasParams && (
-                                  <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                                    {watchedItems[index]?.parameters?.map((param: string, pIdx: number) => (
-                                      <span key={pIdx} className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded-md bg-blue-500 text-[9px] sm:text-[10px] font-bold text-white uppercase tracking-tighter group/param hover:bg-blue-600 transition-all shadow-sm">
-                                        {param}
-                                        <button type="button" onClick={() => handleRemoveParameter(index, pIdx)} className="text-blue-100 hover:text-white transition-colors"><X className="h-2.5 w-2.5 sm:h-3 sm:w-3" /></button>
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
+               {/* 02. Daftar Layanan */}
+               <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="h-5 w-5 rounded-full bg-emerald-600 text-white text-[9px] font-black flex items-center justify-center">2</span>
+                      <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Daftar Layanan Lab</h3>
+                    </div>
+                    <Button type="button" onClick={() => append({ service_id: "", equipment_id: "", qty: 1, price: 0 })} size="sm" className="h-8 rounded-lg bg-emerald-600 text-white font-black text-[9px] uppercase px-4 gap-2">
+                      <PlusCircle className="h-3.5 w-3.5" /> Tambah Baris
+                    </Button>
+                  </div>
+
+                  <div className="space-y-2">
+                     {fields.map((field, index) => {
+                        if (watchedItems[index]?.equipment_id) return null;
+                        return (
+                           <div key={field.id} className="bg-white border border-slate-200/60 p-3 rounded-xl shadow-sm transition-all text-left hover:border-emerald-300 group">
+                              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                                 <div className="md:col-span-7 space-y-1">
+                                    <label className="text-[8px] font-black text-slate-300 uppercase ml-1">Layanan Pengujian</label>
+                                    <Controller
+                                       control={control}
+                                       name={`items.${index}.service_id`}
+                                       render={({ field }) => (
+                                          <Select value={field.value || ""} onValueChange={(val) => { field.onChange(val); handleServiceChange(index, val); }}>
+                                             <SelectTrigger className="h-9 border-slate-100 bg-slate-50 rounded-lg font-bold text-[10px] uppercase">
+                                                <SelectValue placeholder="Pilih layanan..." />
+                                             </SelectTrigger>
+                                             <SelectContent className="rounded-xl max-h-[300px]">
+                                                {Object.entries(groupedServices).map(([category, items]) => (
+                                                   <React.Fragment key={category}>
+                                                      <div className="px-3 py-1 bg-slate-50 text-[9px] font-black text-emerald-600 uppercase tracking-widest border-y border-slate-100 first:mt-0 mt-2">{category}</div>
+                                                      {items.map(s => <SelectItem key={s.id} value={s.id} className="text-[10px] font-bold py-2">{s.name}</SelectItem>)}
+                                                   </React.Fragment>
+                                                ))}
+                                             </SelectContent>
+                                          </Select>
+                                       )}
+                                    />
+                                    {(watchedItems[index]?.parameters?.length ?? 0) > 0 && (
+                                      <div className="flex flex-wrap gap-1 mt-1">
+                                         {watchedItems[index]?.parameters?.map((p: string, pi: number) => (
+                                           <span key={pi} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[8px] font-black border border-emerald-100 uppercase">
+                                             {p} <button type="button" onClick={() => handleRemoveParameter(index, pi)}><X className="h-2 w-2" /></button>
+                                           </span>
+                                         ))}
+                                      </div>
+                                    )}
+                                 </div>
+                                 <div className="md:col-span-2">
+                                    <label className="text-[8px] font-black text-slate-300 uppercase block text-center mb-1">Qty</label>
+                                    <Input type="number" {...register(`items.${index}.qty`)} className="h-9 text-center font-black text-xs bg-slate-50 border-none rounded-lg" />
+                                 </div>
+                                 <div className="md:col-span-2">
+                                    <label className="text-[8px] font-black text-slate-300 uppercase ml-1 mb-1">Harga Unit</label>
+                                    <Input type="number" {...register(`items.${index}.price`)} className="h-9 font-black text-xs text-emerald-700 bg-slate-50 border-none rounded-lg" />
+                                 </div>
+                                 <div className="md:col-span-1 flex justify-end">
+                                    <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="h-8 w-8 text-slate-300 hover:text-rose-500 rounded-lg"><Trash2 className="h-4 w-4" /></Button>
+                                 </div>
                               </div>
-                            );
-                          })()}
-                        </div>
-                        
-                        <div className="w-full flex gap-4 lg:grid lg:col-span-5 items-end">
-                          <div className="flex-1 lg:col-span-4 space-y-2 sm:space-y-3">
-                            <label className="text-[9px] sm:text-[10px] font-black text-slate-300 uppercase tracking-widest text-center w-full block">Qty</label>
-                            <Input type="number" {...register(`items.${index}.qty`)} className="h-11 sm:h-12 text-center font-black text-sm sm:text-base bg-slate-50/50 border-none rounded-xl group-hover:bg-white" />
-                          </div>
-                          <div className="flex-[2] lg:col-span-6 space-y-2 sm:space-y-3 text-left">
-                            <label className="text-[9px] sm:text-[10px] font-black text-slate-300 uppercase tracking-widest ml-2">Harga</label>
-                            <Input type="number" {...register(`items.${index}.price`)} className="h-11 sm:h-12 font-black text-emerald-600 bg-slate-50/50 border-none rounded-xl text-xs sm:text-sm px-4 group-hover:bg-white" />
-                          </div>
-                          <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="h-11 w-11 text-slate-200 hover:text-rose-500 rounded-xl shrink-0"><Trash2 className="h-5 w-5" /></Button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
+                           </div>
+                        );
+                     })}
+                  </div>
+               </div>
+            </div>
 
-            {/* Step 3: Biaya Ops */}
-            <section className="space-y-6 sm:space-y-8">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-4 sm:pb-5">
-                <h4 className="text-xs sm:text-sm font-black text-emerald-600 uppercase tracking-[2px] sm:tracking-[3px] flex items-center gap-3 sm:gap-4">
-                  <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-[10px] sm:text-xs">03</span>
-                  Operasional
-                </h4>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-10">
-                {/* Perdiem */}
-                <div className="bg-white p-5 sm:p-8 rounded-2xl border border-slate-100 space-y-4 sm:space-y-5 shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group/perdiem">
+            {/* Right Side: Ops, Equipment & Calculation (40%) */}
+            <div className="flex-1 lg:flex-[1] overflow-y-auto p-6 sm:p-8 space-y-8 bg-white custom-scrollbar">
+               
+               {/* 03. Operasional */}
+               <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <span className="h-5 w-5 rounded-full bg-emerald-600 text-white text-[9px] font-black flex items-center justify-center">3</span>
+                    <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Biaya Operasional</h3>
+                  </div>
+                  <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-200/60 shadow-sm space-y-4 text-left">
+                     <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                           <span className="font-black text-[10px] text-slate-500 uppercase tracking-wider flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-emerald-500" /> Perdiem</span>
+                           <Button type="button" variant="outline" size="sm" onClick={() => setActiveCatalog('perdiem')} className="h-6 px-2.5 text-[9px] font-black rounded-lg border-emerald-100 text-emerald-700">KATALOG</Button>
+                        </div>
+                        {watchedPerdiemName && <p className="text-[9px] font-bold text-emerald-600 uppercase truncate">{watchedPerdiemName}</p>}
+                        <div className="grid grid-cols-2 gap-3">
+                           <Input type="number" {...register("perdiem_price")} className="h-9 text-xs font-black bg-white border-slate-200 rounded-lg" placeholder="Harga" />
+                           <Input type="number" {...register("perdiem_qty")} className="h-9 text-xs font-black bg-white border-slate-200 rounded-lg text-center" placeholder="Hari" />
+                        </div>
+                     </div>
+                     <div className="space-y-2 pt-4 border-t border-slate-200/60">
+                        <div className="flex items-center justify-between">
+                           <span className="font-black text-[10px] text-slate-500 uppercase tracking-wider flex items-center gap-2"><Car className="h-3.5 w-3.5 text-blue-500" /> Transportasi</span>
+                           <Button type="button" variant="outline" size="sm" onClick={() => setActiveCatalog('transport')} className="h-6 px-2.5 text-[9px] font-black rounded-lg border-blue-100 text-blue-700">KATALOG</Button>
+                        </div>
+                        {watchedTransportName && <p className="text-[9px] font-bold text-blue-600 uppercase truncate">{watchedTransportName}</p>}
+                        <div className="grid grid-cols-2 gap-3">
+                           <Input type="number" {...register("transport_price")} className="h-9 text-xs font-black bg-white border-slate-200 rounded-lg" placeholder="Harga" />
+                           <Input type="number" {...register("transport_qty")} className="h-9 text-xs font-black bg-white border-slate-200 rounded-lg text-center" placeholder="Qty" />
+                        </div>
+                     </div>
+                  </div>
+               </div>
+
+               {/* 04. Sewa Alat Lab */}
+               <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3 sm:gap-4 text-slate-700">
-                      <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-500 group-hover/perdiem:scale-110 transition-transform" />
-                      <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest">Perdiem / Engineer</span>
+                    <div className="flex items-center gap-3">
+                      <span className="h-5 w-5 rounded-full bg-emerald-600 text-white text-[9px] font-black flex items-center justify-center">4</span>
+                      <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Sewa Alat Lab</h3>
                     </div>
-                    <div className="flex flex-col items-center group">
-                      <Button type="button" variant="outline" size="sm" onClick={() => setActiveCatalog('perdiem')} className="h-8 sm:h-9 px-4 sm:px-5 text-[9px] sm:text-[10px] font-black border-emerald-200 text-emerald-700 bg-white rounded-xl shadow-sm hover:bg-emerald-600 hover:text-white transition-all">KATALOG</Button>
-                      <ShortcutLabel>Alt+P</ShortcutLabel>
-                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setActiveCatalog('equipment')} className="h-6 px-2.5 text-[9px] font-black rounded-lg border-amber-200 text-amber-700">PILIH ALAT</Button>
                   </div>
-                  {watchedPerdiemName && <p className="text-[10px] sm:text-[11px] text-emerald-600 font-black bg-emerald-100/50 px-3 py-1.5 rounded-lg w-fit uppercase tracking-tighter shadow-sm">{watchedPerdiemName}</p>}
-                  <div className="grid grid-cols-2 gap-4 sm:gap-5">
-                    <div className="space-y-1.5 sm:space-y-2"><span className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase ml-1">Harga</span><Input type="number" {...register("perdiem_price", { valueAsNumber: true })} className="h-10 sm:h-11 bg-slate-50 border-none group-hover/perdiem:bg-white transition-colors rounded-xl font-black text-xs sm:text-sm px-4" /></div>
-                    <div className="space-y-1.5 sm:space-y-2"><span className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase ml-1 text-center block">Hari</span><Input type="number" {...register("perdiem_qty", { valueAsNumber: true })} className="h-10 sm:h-11 bg-slate-50 border-none group-hover/perdiem:bg-white transition-colors text-center font-black text-xs sm:text-sm rounded-xl px-4" /></div>
-                  </div>
-                </div>
-
-                {/* Transport */}
-                <div className="bg-white p-5 sm:p-8 rounded-2xl border border-slate-100 space-y-4 sm:space-y-5 shadow-sm hover:border-blue-300 hover:shadow-md transition-all group/transport">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3 sm:gap-4 text-slate-700">
-                      <Car className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500 group-hover/transport:scale-110 transition-transform" />
-                      <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest">Transport</span>
-                    </div>
-                    <div className="flex flex-col items-center group">
-                      <Button type="button" variant="outline" size="sm" onClick={() => setActiveCatalog('transport')} className="h-8 sm:h-9 px-4 sm:px-5 text-[9px] sm:text-[10px] font-black border-blue-200 text-blue-700 bg-white rounded-xl shadow-sm hover:bg-blue-600 hover:text-white transition-all">KATALOG</Button>
-                      <ShortcutLabel>Alt+T</ShortcutLabel>
-                    </div>
-                  </div>
-                  {watchedTransportName && <p className="text-[10px] sm:text-[11px] text-blue-600 font-black bg-blue-100/50 px-3 py-1.5 rounded-lg w-fit uppercase tracking-tighter shadow-sm">{watchedTransportName}</p>}
-                  <div className="grid grid-cols-2 gap-4 sm:gap-5">
-                    <div className="space-y-1.5 sm:space-y-2"><span className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase ml-1">Harga</span><Input type="number" {...register("transport_price", { valueAsNumber: true })} className="h-10 sm:h-11 bg-slate-50 border-none group-hover/transport:bg-white transition-colors rounded-xl font-black text-xs sm:text-sm px-4" /></div>
-                    <div className="space-y-1.5 sm:space-y-2"><span className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase ml-1 text-center block">Qty</span><Input type="number" {...register("transport_qty", { valueAsNumber: true })} className="h-10 sm:h-11 bg-slate-50 border-none group-hover/transport:bg-white transition-colors text-center font-black text-xs sm:text-sm rounded-xl px-4" /></div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Equipment */}
-              <div className="bg-white p-5 sm:p-8 rounded-2xl border border-slate-100 space-y-6 sm:space-y-8 shadow-sm hover:border-amber-300 hover:shadow-md transition-all group/equipment">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 sm:gap-4 text-emerald-950">
-                    <Wrench className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600 group-hover/equipment:rotate-12 transition-transform" />
-                    <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest">Sewa Alat</span>
-                  </div>
-                  <div className="flex flex-col items-center group">
-                    <Button type="button" variant="outline" size="sm" onClick={() => setActiveCatalog('equipment')} className="h-8 sm:h-9 px-4 sm:px-6 text-[9px] sm:text-[10px] font-black border-amber-200 text-amber-800 bg-white rounded-xl shadow-sm hover:bg-amber-600 hover:text-white transition-all">KATALOG</Button>
-                    <ShortcutLabel>Alt+E</ShortcutLabel>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  {fields.filter((item: any) => item.equipment_id).length === 0 ? (
-                    <div className="text-center py-8 sm:py-10 bg-white/50 rounded-xl border-2 border-dashed border-slate-200"><span className="text-[10px] sm:text-[11px] text-slate-400 font-black uppercase italic tracking-widest">Kosong</span></div>
-                  ) : (
-                    fields.map((field, index) => {
-                      if (!watchedItems[index]?.equipment_id) return null;
-                      return (
-                        <div key={field.id} className="grid grid-cols-1 sm:grid-cols-12 gap-4 sm:gap-6 items-center bg-white border border-slate-100 p-4 sm:p-5 rounded-2xl shadow-sm group">
-                          <div className="sm:col-span-6 flex items-center gap-3 sm:gap-4"><Wrench className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600" /><span className="text-xs font-black text-emerald-950 uppercase truncate">{watchedItems[index]?.name}</span></div>
-                          <div className="flex gap-3 sm:contents">
-                            <div className="flex-1 sm:col-span-3"><Input type="number" {...register(`items.${index}.price`, { valueAsNumber: true })} className="h-9 sm:h-10 text-xs sm:text-sm font-black bg-slate-50 border-none rounded-lg text-right px-3 sm:px-4" /></div>
-                            <div className="w-16 sm:col-span-2"><Input type="number" {...register(`items.${index}.qty`, { valueAsNumber: true })} className="h-9 sm:h-10 text-xs sm:text-sm font-black text-center bg-slate-50 border-none rounded-lg" /></div>
-                            <div className="sm:col-span-1 flex justify-end"><Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="h-9 w-9 sm:h-10 sm:w-10 text-slate-200 hover:text-rose-500 shrink-0"><XCircle className="h-4 w-4 sm:h-5 sm:w-5" /></Button></div>
-                          </div>
+                  <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-200/60 shadow-sm min-h-[140px] flex flex-col text-left">
+                     {fields.filter(i => i.equipment_id).length === 0 ? (
+                        <div className="flex-1 flex items-center justify-center opacity-20"><span className="text-[9px] font-black uppercase tracking-widest">Kosong</span></div>
+                     ) : (
+                        <div className="space-y-2">
+                           {fields.map((field, index) => {
+                              if (!watchedItems[index]?.equipment_id) return null;
+                              return (
+                                 <div key={field.id} className="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-100 shadow-sm">
+                                    <span className="flex-1 text-[9px] font-black text-slate-700 uppercase truncate px-1">{watchedItems[index]?.name}</span>
+                                    <Input type="number" {...register(`items.${index}.price`)} className="h-8 w-20 text-[10px] font-black border-none bg-slate-50 rounded-lg text-right" />
+                                    <Input type="number" {...register(`items.${index}.qty`)} className="h-8 w-10 text-[10px] font-black border-none bg-slate-50 rounded-lg text-center" />
+                                    <button type="button" onClick={() => remove(index)} className="text-slate-300 hover:text-rose-500 px-1"><XCircle className="h-3.5 w-3.5" /></button>
+                                 </div>
+                              );
+                           })}
                         </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            </section>
-
-            {/* Step 4: Summary */}
-            <section className="space-y-6 sm:space-y-8">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-4 sm:pb-5">
-                <h4 className="text-xs sm:text-sm font-black text-emerald-600 uppercase tracking-[2px] sm:tracking-[3px] flex items-center gap-3 sm:gap-4">
-                  <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-[10px] sm:text-xs">04</span>
-                  Finansial
-                </h4>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 pb-20 sm:pb-0">
-                <div className="space-y-2 sm:space-y-3 text-left">
-                  <label className="text-[10px] sm:text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Diskon (Rp)</label>
-                  <Input type="number" {...register("discount_amount", { valueAsNumber: true })} className="h-11 sm:h-12 font-black text-sm sm:text-base rounded-xl bg-slate-50 border-none shadow-inner px-4 sm:px-5 text-emerald-600" />
-                </div>
-                
-                <button type="button" onClick={() => setValue("use_tax", !watchedUseTax)}
-                  className={cn("p-4 sm:p-5 rounded-2xl border transition-all flex items-center justify-between w-full text-left group", watchedUseTax ? "bg-emerald-50/50 border-emerald-100 shadow-sm" : "bg-slate-50 border-slate-100 shadow-inner hover:bg-slate-100/50")}>
-                  <div className="flex items-center gap-3 sm:gap-4 text-left">
-                    <div className={cn("w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-all duration-300", watchedUseTax ? "bg-emerald-600 text-white shadow-lg scale-110" : "bg-slate-200 text-slate-400")}>
-                      {watchedUseTax ? <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5" /> : <XCircle className="h-4 w-4 sm:h-5 sm:w-5" />}
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-[11px] sm:text-xs font-black text-slate-700 uppercase tracking-widest leading-none">Pajak PPN</span>
-                      <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase mt-1">Tarif 11%</span>
-                    </div>
+                     )}
                   </div>
-                  <div className={cn("h-6 w-6 sm:h-7 sm:w-7 rounded-xl border-2 flex items-center justify-center transition-all duration-300", watchedUseTax ? "bg-emerald-600 border-emerald-600 text-white" : "bg-white border-slate-200")}>{watchedUseTax && <Check className="h-3.5 w-3.5 sm:h-4 sm:w-4 stroke-[4px]" />}</div>
-                </button>
-              </div>
-            </section>
+               </div>
+
+               {/* 05. Summary & Tax */}
+               <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <span className="h-5 w-5 rounded-full bg-emerald-600 text-white text-[9px] font-black flex items-center justify-center">5</span>
+                    <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Ringkasan Tagihan</h3>
+                  </div>
+                  <div className="bg-emerald-950 p-6 rounded-[2rem] text-white shadow-xl relative overflow-hidden text-left">
+                     <div className="absolute top-0 right-0 p-8 opacity-5"><DollarSign className="h-24 w-24" /></div>
+                     <div className="relative z-10 space-y-4">
+                        <div className="space-y-3">
+                           <div className="flex items-center justify-between text-left">
+                              <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest opacity-60">Subtotal</span>
+                              <span className="text-sm font-black font-mono">Rp {subtotal.toLocaleString("id-ID")}</span>
+                           </div>
+                           <div className="flex items-center justify-between text-left border-b border-white/10 pb-3">
+                              <div className="flex flex-col">
+                                 <span className="text-[10px] font-black uppercase tracking-widest leading-none">Pajak PPN 11%</span>
+                                 <span className="text-[8px] text-emerald-400 mt-1 uppercase font-bold">{watchedUseTax ? 'Aktif' : 'Non-Aktif'}</span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                 <span className="text-sm font-black font-mono text-emerald-400">{watchedUseTax ? `Rp ${taxAmount.toLocaleString("id-ID")}` : "Rp 0"}</span>
+                                 <button type="button" onClick={() => setValue("use_tax", !watchedUseTax)} className={cn("h-4 w-8 rounded-full p-0.5 transition-all shadow-inner", watchedUseTax ? "bg-emerald-500" : "bg-white/20")}>
+                                    <div className={cn("h-3 w-3 rounded-full bg-white transition-all", watchedUseTax ? "translate-x-4" : "translate-x-0")} />
+                                 </button>
+                              </div>
+                           </div>
+                        </div>
+
+                        <div className="space-y-1.5 text-left">
+                           <label className="text-[9px] font-black text-emerald-500 uppercase tracking-widest opacity-60 ml-1">Diskon (IDR)</label>
+                           <Input type="number" {...register("discount_amount")} className="h-10 bg-white/5 border-white/10 rounded-xl font-black text-rose-400 text-lg text-right" placeholder="0" />
+                        </div>
+
+                        <div className="bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/10 flex flex-col justify-center shadow-inner">
+                           <p className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.2em] mb-1.5 leading-none">Total Akhir</p>
+                           <p className="text-3xl font-black font-mono text-white tracking-tighter leading-none">Rp {total.toLocaleString("id-ID")}</p>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+            </div>
           </form>
         </div>
 
-        {/* Footer */}
-        <div className="bg-slate-50 border-t border-slate-200 px-6 sm:px-10 py-6 sm:py-8 flex flex-col sm:flex-row items-center justify-between shrink-0 gap-6 sm:gap-0">
-          <div className="flex flex-col items-center sm:items-start gap-1 w-full sm:w-auto border-b sm:border-none pb-4 sm:pb-0">
-            <span className="text-[10px] sm:text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Estimasi Total Tagihan</span>
-            <span className="text-2xl sm:text-3xl font-black text-emerald-950 font-mono tracking-tighter leading-none">Rp {total.toLocaleString("id-ID")}</span>
-          </div>
-          
-          <div className="flex items-center gap-4 w-full sm:w-auto">
-            <Button 
-              type="button" 
-              variant="ghost" 
-              onClick={onClose} 
-              className="flex-1 sm:flex-none font-black text-slate-400 text-xs uppercase px-8 h-14 rounded-2xl hover:bg-slate-200 transition-all border border-transparent hover:border-slate-300"
-            >
-              Batal
-            </Button>
-            
-            <div className="flex-1 sm:flex-none flex flex-col items-center sm:items-end">
+        {/* Footer Fixed */}
+        <div className="px-8 py-5 border-t bg-white shrink-0 flex items-center justify-between shadow-[0_-10px_40px_rgba(0,0,0,0.02)] relative z-50">
+           <div className="text-left flex flex-col">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Total Due</span>
+              <span className="text-2xl font-black text-emerald-950 font-mono tracking-tighter leading-none">Rp {total.toLocaleString("id-ID")}</span>
+           </div>
+           <div className="flex items-center gap-4">
+              <Button type="button" variant="ghost" onClick={onClose} className="font-black text-slate-400 text-[10px] uppercase px-10 h-12 rounded-xl transition-all">Batal</Button>
               <LoadingButton 
                 form="quotation-form" 
                 type="submit" 
                 loading={isSubmitting} 
-                className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-black px-12 h-14 rounded-2xl shadow-xl shadow-emerald-900/20 text-xs tracking-widest uppercase transition-all active:scale-95 flex items-center justify-center gap-3"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-12 h-12 rounded-xl text-[11px] uppercase tracking-widest shadow-2xl shadow-emerald-900/30 transition-all active:scale-95 flex items-center justify-center gap-3"
               >
-                <Check className="h-5 w-5" /> 
-                <span>Simpan Penawaran</span>
+                <Check className="h-5 w-5 stroke-[4px]" /> SIMPAN DATA
               </LoadingButton>
-              <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest mt-2 hidden sm:block opacity-40 italic">Shortcut: ctrl + enter</span>
-            </div>
-          </div>
+           </div>
         </div>
 
+        {/* Catalog Dialogs */}
         <CatalogDialog activeCatalog={activeCatalog} onClose={() => setActiveCatalog(null)} catalogs={operationalCatalogs} equipment={equipment} onSelect={(field: string, val: string, price: any, name: string) => {
           if (field === 'equipment') append({ service_id: "", equipment_id: val, qty: 1, price: Number(price), name });
           else { setValue(`${field}_name` as any, name); setValue(`${field}_price` as any, Number(price)); setValue(`${field}_qty` as any, 1); }
@@ -477,48 +424,27 @@ function CatalogDialog({ activeCatalog, onClose, catalogs, equipment, onSelect }
   if (!activeCatalog) return null;
   const isEquipment = activeCatalog === 'equipment';
   const items = isEquipment ? equipment : catalogs.filter((c: any) => c.category === activeCatalog);
-  const titles: any = { perdiem: 'Perdiem', transport: 'Transport', equipment: 'Alat Lab' };
+  const titles: any = { perdiem: 'Katalog Perdiem', transport: 'Katalog Transport', equipment: 'Katalog Alat Lab' };
   const icons: any = { perdiem: MapPin, transport: Car, equipment: Wrench };
   const Icon = icons[activeCatalog];
 
   return (
     <Dialog open={!!activeCatalog} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[95vw] sm:max-w-[550px] rounded-3xl p-0 overflow-hidden border-none shadow-2xl bg-white h-auto max-h-[85vh] flex flex-col">
-        <div className={cn("p-5 sm:p-8 text-white flex items-center gap-4 sm:gap-5 shrink-0", activeCatalog === 'perdiem' ? 'bg-emerald-600' : activeCatalog === 'transport' ? 'bg-blue-600' : 'bg-amber-600')}>
-          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white/20 flex items-center justify-center border border-white/20 shadow-inner shrink-0">
-            <Icon className="h-6 w-6 sm:h-7 sm:w-7" />
-          </div>
-          <div className="min-w-0">
-            <DialogTitle className="text-base sm:text-lg font-black uppercase tracking-widest leading-none truncate">{titles[activeCatalog]}</DialogTitle>
-            <DialogDescription className="text-[9px] sm:text-[10px] text-white/60 font-bold uppercase mt-1 sm:mt-1.5 tracking-widest truncate">Direktori Sistem</DialogDescription>
-          </div>
+      <DialogContent className="max-w-md w-[90vw] rounded-3xl p-0 overflow-hidden border-none shadow-2xl bg-white">
+        <div className={cn("p-6 text-white flex items-center gap-4", activeCatalog === 'perdiem' ? 'bg-emerald-600' : activeCatalog === 'transport' ? 'bg-blue-600' : 'bg-amber-600')}>
+           <Icon className="h-6 w-6" />
+           <DialogTitle className="text-lg font-black uppercase tracking-tight leading-none">{titles[activeCatalog]}</DialogTitle>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-3 sm:space-y-4 bg-white scrollbar-thin">
-          {items.map((c: any) => (
-            <div 
-              key={c.id} 
-              className={cn(
-                "p-4 sm:p-6 border rounded-2xl cursor-pointer flex justify-between items-center group transition-all duration-300 shadow-sm hover:shadow-md hover:scale-[1.02]",
-                activeCatalog === 'perdiem' ? 'border-slate-100 hover:border-emerald-400 hover:bg-emerald-50/30' : 
-                activeCatalog === 'transport' ? 'border-slate-100 hover:border-blue-400 hover:bg-blue-50/30' : 
-                'border-slate-100 hover:border-amber-400 hover:bg-amber-50/30'
-              )}
-              onClick={() => onSelect(activeCatalog, c.id, c.price, c.name)}
-            >
-              <div className="space-y-1 min-w-0 flex-1 pr-4 text-left">
-                <p className="font-black text-emerald-950 uppercase tracking-tighter text-sm sm:text-base truncate">{c.name}</p>
-                <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-widest leading-none truncate">{isEquipment ? c.specification : c.location || c.unit}</p>
-              </div>
-              <span className={cn(
-                "font-black border px-3 sm:px-5 py-2 sm:py-3 rounded-xl transition-all text-xs sm:text-sm shadow-inner shrink-0",
-                activeCatalog === 'perdiem' ? 'text-emerald-700 bg-emerald-50 border-emerald-100 group-hover:bg-white group-hover:border-emerald-200' :
-                activeCatalog === 'transport' ? 'text-blue-700 bg-blue-50 border-blue-100 group-hover:bg-white group-hover:border-blue-200' :
-                'text-amber-700 bg-amber-50 border-amber-100 group-hover:bg-white group-hover:border-amber-200'
-              )}>
-                Rp {Number(c.price).toLocaleString("id-ID")}
-              </span>
-            </div>
-          ))}
+        <div className="max-h-[60vh] overflow-y-auto p-4 space-y-2 custom-scrollbar bg-slate-50/50">
+           {items.map((c: any) => (
+             <div key={c.id} onClick={() => onSelect(activeCatalog, c.id, c.price, c.name)} className="p-4 rounded-xl border border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/30 cursor-pointer flex justify-between items-center transition-all group shadow-sm hover:shadow-md">
+                <div className="text-left min-w-0 flex-1 pr-4">
+                   <p className="text-[11px] font-black text-slate-800 uppercase truncate">{c.name}</p>
+                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5 truncate">{isEquipment ? c.specification : c.location || c.unit}</p>
+                </div>
+                <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-100 shadow-inner shrink-0">Rp {Number(c.price).toLocaleString("id-ID")}</span>
+             </div>
+           ))}
         </div>
       </DialogContent>
     </Dialog>

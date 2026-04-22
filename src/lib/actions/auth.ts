@@ -16,7 +16,12 @@ export async function login(formData: FormData) {
       redirect: false,
     })
   } catch (error: any) {
-    return { error: error.message || "Login gagal" }
+    // Handle auth errors and translate to user-friendly Indonesian messages
+    const message = error.message || "";
+    if (message.includes("CredentialsSignin")) {
+      return { error: "Email atau password yang Anda masukkan salah" };
+    }
+    return { error: "Terjadi kesalahan saat login. Silakan coba lagi." };
   }
 
   // Ambil profile user

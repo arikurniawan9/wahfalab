@@ -43,7 +43,7 @@ import {
   MapPin
 } from "lucide-react";
 import { LoadingOverlay, LoadingButton, TableSkeleton } from "@/components/ui";
-import { getUsers, createOrUpdateUser, deleteUser, deleteManyUsers } from "@/lib/actions/users";
+import { createOrUpdateUser, deleteUser, deleteManyUsers } from "@/lib/actions/users";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 // TODO: Replace Cloud Storage uploads with API endpoints/file upload utility
@@ -123,11 +123,22 @@ export default function UserManagementPage() {
     }
   });
 
-  const loadUsers = async () => {
+  const loadUsers = async (pageOverride?: number) => {
     setLoading(true);
     try {
+      const activePage = pageOverride ?? page;
+      const params = new URLSearchParams({
+        page: String(activePage),
+        limit: String(limit),
+        search,
+      });
+
       const [result, user] = await Promise.all([
-        getUsers(page, limit, search, filterRole, 'client'),
+        fetch(`/api/admin/users?${params.toString()}`, { cache: "no-store" }).then(async (res) => {
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.error || "Gagal memuat data");
+          return json;
+        }),
         getCurrentUser()
       ]);
       setData(result);
@@ -142,13 +153,40 @@ export default function UserManagementPage() {
     return () => clearTimeout(timer);
   }, [page, limit, search, filterRole]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isTyping =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        !!target?.isContentEditable;
+
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.key.toLowerCase() === "n") {
+        if (isTyping) return;
+        e.preventDefault();
+        reset();
+        setIsRegDialogOpen(true);
+      }
+
+      if (e.key === "Escape" && isRegDialogOpen) {
+        setIsRegDialogOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isRegDialogOpen, reset]);
+
   const onRegisterSubmit = async (formData: any) => {
     setSubmitting(true);
     try {
-      await createOrUpdateUser({ ...formData, password: '123456', permissions: {} });
+      const result = await createOrUpdateUser({ ...formData, password: '123456', permissions: {} });
+      if (result.error) throw new Error(result.error);
       setIsRegDialogOpen(false);
       reset();
-      loadUsers();
+      setPage(1);
+      await loadUsers(1);
       toast.success("Staff baru terdaftar", { description: "Password akses default: 123456" });
     } catch (error: any) { toast.error(error.message); } 
     finally { setSubmitting(false); }
@@ -284,7 +322,7 @@ export default function UserManagementPage() {
           <div className="relative flex-1 w-full group"><Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors" /><Input placeholder="Cari nama, email, atau penugasan..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-12 h-12 bg-white border-none rounded-2xl font-bold text-sm focus-visible:ring-emerald-500 transition-all shadow-sm" /></div>
           <div className="flex gap-3 w-full md:w-auto">
             <Select value={limit.toString()} onValueChange={(val) => { setLimit(parseInt(val)); setPage(1); }}><SelectTrigger className="w-full md:w-32 h-12 rounded-2xl border-none bg-white font-black uppercase text-[9px] tracking-widest shadow-sm"><ListTree className="h-3.5 w-3.5 mr-2 text-slate-400" /><SelectValue placeholder="Limit" /></SelectTrigger><SelectContent className="rounded-2xl border-none shadow-2xl"><SelectItem value="10" className="text-[10px] font-bold uppercase tracking-widest">10 Baris</SelectItem><SelectItem value="25" className="text-[10px] font-bold uppercase tracking-widest">25 Baris</SelectItem><SelectItem value="50" className="text-[10px] font-bold uppercase tracking-widest">50 Baris</SelectItem></SelectContent></Select>
-            <Button size="icon" onClick={() => { reset(); setIsRegDialogOpen(true); }} className="h-12 w-12 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xl active:scale-95 transition-all" title="Registrasi Staff Baru"><UserPlus className="h-5 w-5" /></Button>
+            <Button size="icon" onClick={() => { reset(); setIsRegDialogOpen(true); }} className="relative h-12 w-12 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xl active:scale-95 transition-all" title="Registrasi Staff Baru (Alt+N)"><UserPlus className="h-5 w-5" /><span className="absolute -top-2 -right-2 hidden md:flex items-center rounded-md bg-slate-900 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-white shadow-lg">Alt+N</span></Button>
           </div>
         </div>
 
@@ -461,6 +499,7 @@ export default function UserManagementPage() {
           </div>
 
           <form onSubmit={handleSubmit(onRegisterSubmit)} className="p-8 space-y-8 bg-white">
+            <input type="hidden" {...register("role")} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
               <div className="space-y-5">
                 <div className="flex items-center gap-2 border-b border-slate-50 pb-2"><Contact2 className="h-3.5 w-3.5 text-emerald-600" /><span className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Main Profile</span></div>

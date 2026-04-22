@@ -364,6 +364,63 @@ export async function submitPaymentProof(invoiceId: string, proofUrl: string, re
   }
 }
 
+export async function getPendingInvoiceRequests(page = 1, limit = 10, search?: string) {
+  try {
+    const session = await auth()
+    if (!session?.user) return { error: 'Unauthorized' }
+
+    const profile = await prisma.profile.findUnique({
+      where: { email: session.user.email! },
+      select: { role: true }
+    })
+
+    if (!profile || !['admin', 'finance'].includes(profile.role)) {
+      return { error: 'Forbidden' }
+    }
+
+    const skip = (page - 1) * limit
+    const where: any = {
+      notes: { contains: '[INVOICE_REQUESTED]' },
+      invoice: null
+    }
+
+    if (search) {
+      where.OR = [
+        { tracking_code: { contains: search, mode: 'insensitive' as const } },
+        { quotation: { quotation_number: { contains: search, mode: 'insensitive' as const } } },
+        { quotation: { profile: { full_name: { contains: search, mode: 'insensitive' as const } } } },
+        { quotation: { profile: { company_name: { contains: search, mode: 'insensitive' as const } } } }
+      ]
+    }
+
+    const [items, total] = await Promise.all([
+      prisma.jobOrder.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          quotation: {
+            include: {
+              profile: true
+            }
+          }
+        },
+        orderBy: { created_at: 'desc' }
+      }),
+      prisma.jobOrder.count({ where })
+    ])
+
+    return serializeData({
+      items,
+      total,
+      pages: Math.ceil(total / limit)
+    })
+  } catch (error: any) {
+    console.error('Get pending invoice requests error:', error)
+    return { error: error.message }
+  }
+}
+
 export async function uploadPaymentProofFile(invoiceId: string, file: File) {
   try {
     const session = await auth()
