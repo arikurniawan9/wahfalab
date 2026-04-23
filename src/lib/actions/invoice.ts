@@ -1,9 +1,11 @@
 'use server'
 
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
 import { auth } from '@/lib/auth'
+import { isFinancePeriodLocked } from '@/lib/actions/finance'
 import { STORAGE_BUCKETS, uploadToSupabaseStorage } from '@/lib/supabase/storage'
 
 /**
@@ -214,9 +216,15 @@ export async function updateInvoiceStatus(invoiceId: string, status: 'draft' | '
       }
     })
 
-    revalidatePath('/finance')
-    revalidatePath('/finance/invoices')
-    revalidatePath('/finance/invoices/[id]')
+    const paths = [
+      '/finance',
+      '/finance/invoices',
+      '/finance/invoices/[id]',
+      '/admin/finance',
+      '/admin/finance/invoices',
+      '/admin/finance/invoices/[id]'
+    ]
+    paths.forEach((path) => revalidatePath(path))
 
     return serializeData(invoice)
   } catch (error: any) {
@@ -273,10 +281,15 @@ export async function sendInvoiceToCustomer(invoiceId: string, customerEmail: st
       }
     })
 
-    revalidatePath('/finance')
-    revalidatePath('/finance/invoices')
-    revalidatePath('/dashboard')
-    revalidatePath('/api/notifications')
+    const paths = [
+      '/finance',
+      '/finance/invoices',
+      '/admin/finance',
+      '/admin/finance/invoices',
+      '/dashboard',
+      '/api/notifications'
+    ]
+    paths.forEach((path) => revalidatePath(path))
 
     return {
       success: true,
@@ -469,6 +482,10 @@ export async function verifyPayment(paymentId: string, isApproved: boolean, bank
       select: { id: true, role: true }
     })
 
+    if (!profile || !['admin', 'finance'].includes(profile.role)) {
+      return { error: 'Forbidden' }
+    }
+
     const payment = await prisma.payment.findUnique({
       where: { id: paymentId },
       include: { 
@@ -487,77 +504,93 @@ export async function verifyPayment(paymentId: string, isApproved: boolean, bank
     })
 
     if (!payment || !payment.invoice) return { error: 'Data pembayaran tidak lengkap' }
-
+    if (isApproved && !bankAccountId) return { error: 'Bank tujuan wajib dipilih untuk pembayaran transfer' }
     if (isApproved) {
-      // 1. Update Payment Status
-      await prisma.payment.update({
-        where: { id: paymentId },
-        data: {
-          payment_status: 'paid',
-          paid_at: new Date(),
-          handled_by: profile?.id,
-          bank_account_id: bankAccountId
+      const periodLock = await isFinancePeriodLocked(new Date()) as any
+      if (periodLock?.isLocked) {
+        const reasonText = periodLock.reason ? ` Alasan: ${periodLock.reason}.` : ''
+        return {
+          error: `Periode ${periodLock.period} sedang dikunci.${reasonText} Verifikasi pembayaran tidak dapat diposting.`
         }
-      })
-
-      // 2. Update Invoice Status
-      await prisma.invoice.update({
-        where: { id: payment.invoice_id! },
-        data: { status: 'paid', paid_at: new Date() }
-      })
-
-      // 3. Create Financial Record (Income)
-      await prisma.financialRecord.create({
-        data: {
-          type: 'income',
-          category: 'lab_service',
-          amount: payment.amount,
-          description: `Pemasukan Lab: Invoice ${payment.invoice_number}`,
-          reference_id: payment.invoice_id,
-          recorded_by: profile?.id,
-          bank_account_id: bankAccountId,
-          transaction_date: new Date()
-        }
-      })
-
-      // 4. Update Bank Balance if bank selected
-      if (bankAccountId) {
-        await prisma.bankAccount.update({
-          where: { id: bankAccountId },
-          data: { balance: { increment: payment.amount } }
-        })
       }
-
-      // 4. Notify Customer
-      await prisma.notification.create({
-        data: {
-          user_id: payment.invoice.job_order.quotation.profile.id,
-          type: 'payment_received' as any,
-          title: 'Pembayaran Dikonfirmasi',
-          message: `Pembayaran Anda untuk Invoice ${payment.invoice_number} telah dikonfirmasi. Terima kasih!`,
-          link: '/dashboard/orders'
-        }
-      })
-    } else {
-      // Rejected
-      await prisma.payment.update({
-        where: { id: paymentId },
-        data: { payment_status: 'cancelled' }
-      })
-
-      await prisma.notification.create({
-        data: {
-          user_id: payment.invoice.job_order.quotation.profile.id,
-          type: 'approval_decided' as any,
-          title: 'Pembayaran Ditolak',
-          message: `Bukti transfer untuk Invoice ${payment.invoice_number} ditolak. Alasan: ${notes || 'Data tidak valid'}. Silakan upload ulang.`,
-          link: '/dashboard/orders'
-        }
-      })
     }
 
-    revalidatePath('/finance/payments')
-    revalidatePath('/dashboard/orders')
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      if (isApproved) {
+        await tx.payment.update({
+          where: { id: paymentId },
+          data: {
+            payment_status: 'paid',
+            paid_at: new Date(),
+            handled_by: profile.id,
+            bank_account_id: bankAccountId
+          }
+        })
+
+        await tx.invoice.update({
+          where: { id: payment.invoice_id! },
+          data: { status: 'paid', paid_at: new Date() }
+        })
+
+        await tx.financialRecord.create({
+          data: {
+            type: 'income',
+            category: 'lab_service',
+            amount: payment.amount,
+            description: `Pemasukan Lab: Invoice ${payment.invoice_number}`,
+            reference_id: payment.invoice_id,
+            recorded_by: profile.id,
+            bank_account_id: bankAccountId,
+            transaction_date: new Date()
+          }
+        })
+
+        if (bankAccountId) {
+          await tx.bankAccount.update({
+            where: { id: bankAccountId },
+            data: { balance: { increment: payment.amount } }
+          })
+        }
+
+        await tx.notification.create({
+          data: {
+            user_id: payment.invoice.job_order.quotation.profile.id,
+            type: 'payment_received' as any,
+            title: 'Pembayaran Dikonfirmasi',
+            message: `Pembayaran Anda untuk Invoice ${payment.invoice_number} telah dikonfirmasi. Terima kasih!`,
+            link: '/dashboard/orders'
+          }
+        })
+      } else {
+        await tx.payment.update({
+          where: { id: paymentId },
+          data: { payment_status: 'cancelled' }
+        })
+
+        await tx.notification.create({
+          data: {
+            user_id: payment.invoice.job_order.quotation.profile.id,
+            type: 'approval_decided' as any,
+            title: 'Pembayaran Ditolak',
+            message: `Bukti transfer untuk Invoice ${payment.invoice_number} ditolak. Alasan: ${notes || 'Data tidak valid'}. Silakan upload ulang.`,
+            link: '/dashboard/orders'
+          }
+        })
+      }
+    })
+
+    const paths = [
+      '/finance/payments',
+      '/admin/finance/payments',
+      '/dashboard/orders',
+      '/finance',
+      '/admin/finance',
+      '/finance/transactions',
+      '/admin/finance/transactions',
+      '/finance/cashflow',
+      '/admin/finance/cashflow'
+    ]
+    paths.forEach((path) => revalidatePath(path))
 
     return { success: true }
   } catch (error: any) {

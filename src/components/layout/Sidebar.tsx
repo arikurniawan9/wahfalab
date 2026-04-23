@@ -33,7 +33,11 @@ import {
   ListTree,
   Activity,
   Database,
-  Settings
+  Settings,
+  ArrowUpRight,
+  ArrowDownRight,
+  Banknote,
+  Wallet
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -87,6 +91,12 @@ export const adminMenuItems = () => [
     group: "Keuangan",
     icon: CreditCard,
     items: [
+      { icon: Banknote, label: "Dashboard Keuangan", href: "/admin/finance", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
+      { icon: Building2, label: "Daftar Bank", href: "/admin/finance/settings/banks", color: "text-sky-400", bgColor: "bg-sky-500/10" },
+      { icon: Wallet, label: "Kas Tunai", href: "/admin/finance/settings/cash", color: "text-amber-400", bgColor: "bg-amber-500/10" },
+      { icon: ArrowUpRight, label: "Pemasukan", href: "/admin/finance/income", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
+      { icon: ArrowDownRight, label: "Pengeluaran", href: "/admin/finance/expense", color: "text-rose-400", bgColor: "bg-rose-500/10" },
+      { icon: History, label: "Riwayat Transaksi", href: "/admin/finance/transactions", color: "text-violet-400", bgColor: "bg-violet-500/10" },
       { icon: CreditCard, label: "Verifikasi Bayar", href: "/admin/finance/payments", color: "text-green-400", bgColor: "bg-green-500/10" },
       { icon: Receipt, label: "Laporan Invoice", href: "/admin/finance/invoices", color: "text-pink-400", bgColor: "bg-pink-500/10" },
       { icon: FileBarChart, label: "Arus Kas", href: "/admin/finance/cashflow", color: "text-blue-400", bgColor: "bg-blue-500/10" },

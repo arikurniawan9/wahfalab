@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,8 +18,10 @@ import {
   Pencil,
   Trash2,
   Wallet,
+  Banknote,
   CheckCircle,
-  Loader2
+  Loader2,
+  Coins
 } from "lucide-react";
 import {
   Dialog,
@@ -31,6 +35,7 @@ import { ChemicalLoader, PageSkeleton, LoadingOverlay } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 export default function BankManagementPage() {
+  const pathname = usePathname();
   const [banks, setBanks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
@@ -114,6 +119,15 @@ export default function BankManagementPage() {
     }).format(amount);
   };
 
+  const totalBalance = banks.reduce((sum, bank) => sum + Number(bank.balance || 0), 0);
+  const activeBanks = banks.filter((bank) => bank.is_active !== false);
+  const highestBank = banks.length > 0
+    ? banks.reduce((top, bank) => Number(bank.balance || 0) > Number(top.balance || 0) ? bank : top, banks[0])
+    : null;
+  const basePath = pathname.startsWith('/admin/')
+    ? '/admin/finance/settings/banks'
+    : '/finance/settings/banks';
+
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -134,6 +148,51 @@ export default function BankManagementPage() {
         </Button>
       </div>
 
+      {!loading && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="rounded-[24px] border-emerald-100 shadow-sm bg-emerald-50/60">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Total Saldo Bank</p>
+                <p className="mt-2 text-2xl font-black text-emerald-950">{formatCurrency(totalBalance)}</p>
+              </div>
+              <div className="h-12 w-12 rounded-2xl bg-white flex items-center justify-center shadow-sm">
+                <Banknote className="h-6 w-6 text-emerald-600" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-[24px] border-sky-100 shadow-sm bg-sky-50/60">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-sky-700">Rekening Aktif</p>
+                <p className="mt-2 text-2xl font-black text-sky-950">{activeBanks.length}</p>
+              </div>
+              <div className="h-12 w-12 rounded-2xl bg-white flex items-center justify-center shadow-sm">
+                <CheckCircle className="h-6 w-6 text-sky-600" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-[24px] border-violet-100 shadow-sm bg-violet-50/60">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-violet-700">Bank Terbesar</p>
+                <p className="mt-2 text-sm font-black text-violet-950">
+                  {highestBank ? highestBank.bank_name : '-'}
+                </p>
+                <p className="text-[10px] font-bold text-violet-700/70 mt-1">
+                  {highestBank ? formatCurrency(Number(highestBank.balance || 0)) : 'Belum ada saldo'}
+                </p>
+              </div>
+              <div className="h-12 w-12 rounded-2xl bg-white flex items-center justify-center shadow-sm">
+                <Wallet className="h-6 w-6 text-violet-600" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {loading ? (
         <div className="min-h-[60vh] flex flex-col items-center justify-center">
           <ChemicalLoader />
@@ -146,21 +205,34 @@ export default function BankManagementPage() {
             </div>
           ) : (
             banks.map((bank) => (
-              <Card key={bank.id} className="border-slate-200 rounded-[24px] shadow-sm hover:shadow-md transition-all group overflow-hidden">
+                <Card key={bank.id} className={cn(
+                  "border-slate-200 rounded-[24px] shadow-sm hover:shadow-md transition-all group overflow-hidden",
+                  bank.account_number === 'CASH-001' && "border-amber-200 bg-amber-50/60"
+                )}>
                 <div className="p-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-white flex items-center justify-center shadow-sm border border-slate-200">
-                      <Building className="h-5 w-5 text-emerald-600" />
+                    <div className={cn(
+                      "h-10 w-10 rounded-xl bg-white flex items-center justify-center shadow-sm border",
+                      bank.account_number === 'CASH-001' ? "border-amber-200" : "border-slate-200"
+                    )}>
+                      {bank.account_number === 'CASH-001' ? <Coins className="h-5 w-5 text-amber-600" /> : <Building className="h-5 w-5 text-emerald-600" />}
                     </div>
                     <div>
-                      <h3 className="font-bold text-slate-900">{bank.bank_name}</h3>
+                      <h3 className={cn("font-bold", bank.account_number === 'CASH-001' ? "text-amber-950" : "text-slate-900")}>{bank.bank_name}</h3>
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{bank.account_number}</p>
                     </div>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button variant="ghost" size="icon" onClick={() => handleOpenModal(bank)} className="h-8 w-8 text-blue-600">
-                      <Pencil className="h-4 w-4" />
-                    </Button>
+                    {bank.account_number !== 'CASH-001' && (
+                      <Button variant="ghost" size="icon" onClick={() => handleOpenModal(bank)} className="h-8 w-8 text-blue-600">
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <Link href={bank.account_number === 'CASH-001' ? `${basePath.replace('/banks', '/cash')}` : `${basePath}/${bank.id}`} className="inline-flex">
+                      <Button variant="ghost" size="icon" className={cn("h-8 w-8", bank.account_number === 'CASH-001' ? "text-amber-600" : "text-emerald-600")}>
+                        <History className="h-4 w-4" />
+                      </Button>
+                    </Link>
                   </div>
                 </div>
                 <CardContent className="p-6 space-y-4">
@@ -169,8 +241,23 @@ export default function BankManagementPage() {
                     <p className="text-sm font-bold text-slate-800">{bank.account_holder}</p>
                   </div>
                   <div className="pt-2 border-t border-slate-100">
-                    <Label className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Saldo Saat Ini</Label>
-                    <p className="text-xl font-black text-emerald-900">{formatCurrency(Number(bank.balance))}</p>
+                    <Label className={cn("text-[9px] font-black uppercase tracking-widest", bank.account_number === 'CASH-001' ? "text-amber-600" : "text-emerald-600")}>Saldo Saat Ini</Label>
+                    <p className={cn("text-xl font-black", bank.account_number === 'CASH-001' ? "text-amber-900" : "text-emerald-900")}>{formatCurrency(Number(bank.balance))}</p>
+                    {bank.account_number === 'CASH-001' && (
+                      <Badge className="mt-2 bg-amber-100 text-amber-800 border-none text-[9px] font-black uppercase">
+                        Rekening Sistem
+                      </Badge>
+                    )}
+                    <div className="mt-3">
+                      <Link href={bank.account_number === 'CASH-001' ? `${basePath.replace('/banks', '/cash')}` : `${basePath}/${bank.id}`}>
+                        <Button variant="outline" className={cn(
+                          "h-9 rounded-xl text-[10px] font-black uppercase tracking-widest",
+                          bank.account_number === 'CASH-001' ? "border-amber-200 text-amber-700" : "border-emerald-200 text-emerald-700"
+                        )}>
+                          {bank.account_number === 'CASH-001' ? 'Ringkasan Kas' : 'Lihat Mutasi'}
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

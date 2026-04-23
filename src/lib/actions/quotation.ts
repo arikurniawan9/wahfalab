@@ -727,26 +727,3 @@ export async function updateQuotation(id: string, formData: any) {
   }
 }
 
-export async function processPayment(id: string, method: string) {
-  try {
-    const quotation = await prisma.quotation.update({
-      where: { id },
-      data: { status: 'paid' }
-    })
-
-    await prisma.jobOrder.create({
-      data: {
-        quotation_id: id,
-        tracking_code: `JOB-${Date.now()}`,
-        status: 'scheduled'
-      }
-    })
-
-    revalidatePath('/admin/quotations')
-    revalidatePath('/operator/jobs')
-    return { success: true }
-  } catch (error) {
-    console.error('Payment Error:', error)
-    throw new Error('Gagal memproses pembayaran')
-  }
-}

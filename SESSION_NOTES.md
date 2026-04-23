@@ -142,3 +142,154 @@ Gunakan prompt ini untuk melanjutkan sesi:
 ```text
 Lanjutkan proyek wahfalab dari SESSION_NOTES.md dan fokus ke area admin dan finance. Verifikasi alur invoice request sampai invoice terbit, lalu lanjutkan membereskan error TypeScript yang masih tersisa.
 ```
+
+## Update Sesi Hari Ini (2026-04-23)
+
+- Alur finance admin sudah diperkaya dengan:
+  - daftar bank
+  - pemasukan/pengeluaran manual
+  - mutasi per rekening
+  - filter tanggal
+  - filter jenis transaksi
+  - export CSV, Excel, dan PDF
+- PDF mutasi rekening sudah memakai kop surat WahfaLab.
+- `Kas Tunai` dipisahkan dari rekening bank biasa dan dibuat menjadi halaman khusus.
+- Transaksi cash sekarang dicatat ke `Kas Tunai`, sehingga audit kas fisik lebih jelas.
+- Sidebar admin sudah diberi shortcut langsung ke:
+  - `Daftar Bank`
+  - `Kas Tunai`
+- Semua perubahan terakhir sudah lolos `npx tsc --noEmit`.
+
+## Saran Lanjutan Setelah Istirahat
+
+1. Tambahkan dashboard ringkas khusus `Kas Tunai` yang fokus ke saldo awal, saldo akhir, dan mutasi harian.
+2. Tambahkan export mutasi per rekening ke PDF/Excel dari halaman riwayat transaksi umum.
+3. Rapikan urutan menu finance admin supaya alurnya lebih natural untuk staf keuangan.
+4. Lanjut audit halaman admin satu per satu untuk memastikan tidak ada label yang masih rancu.
+
+## Progress Lanjutan (2026-04-23)
+
+- Poin 1 sudah dikerjakan:
+  - halaman `Kas Tunai` sekarang menampilkan blok audit periode:
+    - saldo awal periode
+    - mutasi periode
+    - saldo akhir periode
+  - ditambahkan tabel `Mutasi Harian Kas Tunai` berisi:
+    - saldo awal per hari
+    - kas masuk
+    - kas keluar
+    - net movement
+    - saldo akhir per hari
+    - jumlah transaksi
+- Perhitungan audit harian sudah dipindahkan ke server action `getBankLedgerDetails()` agar konsisten.
+- `getBankLedgerDetails()` sekarang menerima `id` rekening maupun `account_number` (termasuk `CASH-001`), jadi halaman kas tidak tergantung id hardcoded.
+- Verifikasi tipe: `npx tsc --noEmit` lulus.
+
+## Next Step Setelah Progress Ini
+
+1. Lanjut poin 2: tambah export PDF/Excel dari halaman riwayat transaksi umum (bukan hanya mutasi per rekening).
+2. Lanjut poin 3: rapikan urutan menu finance admin sesuai alur kerja staf.
+3. Lanjut poin 4: audit label dan copywriting halaman admin yang masih rancu.
+
+## Progress Tambahan (2026-04-23)
+
+- Poin 2 sudah dikerjakan:
+  - halaman `Riwayat Transaksi` sekarang memiliki export:
+    - `Download Excel`
+    - `Download PDF`
+  - export mengikuti filter aktif:
+    - jenis transaksi (`semua`/`pemasukan`/`pengeluaran`)
+    - rekening bank
+  - data export diambil dari dataset terfilter (bukan hanya row tabel saat ini).
+- Ditambahkan komponen PDF baru:
+  - `src/components/pdf/TransactionLedgerPDF.tsx`
+- Verifikasi tipe ulang: `npx tsc --noEmit` lulus.
+
+## Next Focus Terbaru
+
+1. Lanjut poin 3: rapikan urutan menu finance admin sesuai alur kerja staf.
+2. Lanjut poin 4: audit label dan copywriting halaman admin yang masih rancu.
+
+## Progress Tambahan 2 (2026-04-23)
+
+- Poin 3 (sebagian) sudah dikerjakan:
+  - urutan menu `Keuangan` di sidebar admin dirapikan menjadi lebih natural untuk alur operasional harian:
+    1. Dashboard Keuangan
+    2. Daftar Bank
+    3. Kas Tunai
+    4. Pemasukan
+    5. Pengeluaran
+    6. Riwayat Transaksi
+  - menu lain (`Verifikasi Bayar`, `Laporan Invoice`, `Arus Kas`) tetap tersedia dan diposisikan setelah alur inti.
+- Verifikasi tipe ulang: `npx tsc --noEmit` lulus.
+
+## Fokus Tersisa
+
+1. Lanjut poin 4: audit label dan copywriting halaman admin yang masih rancu.
+
+## Progress UI Responsif (2026-04-23)
+
+- Halaman mutasi rekening per bank dirapikan ulang untuk mobile:
+  - header disamakan gaya visualnya dengan halaman kategori/katalog (premium gradient + icon + refresh).
+  - panel filter dan aksi export dibuat lebih responsif (stack di mobile, tetap ringkas di desktop).
+  - kartu transaksi mobile diperbaiki agar teks panjang dan nominal tidak pecah.
+- Halaman `Kas Tunai` (`/finance/settings/cash` dan alias admin) dirapikan:
+  - header premium gradient + tombol kembali/refresh.
+  - link kembali sekarang adaptif sesuai route (`/finance/...` atau `/admin/finance/...`).
+  - blok filter/aksi export dibuat lebih mobile-friendly.
+  - ditambahkan mode kartu untuk mutasi transaksi di mobile (desktop tetap tabel).
+  - mutasi harian juga punya tampilan kartu di mobile.
+- Verifikasi tipe setelah perubahan UI: `npx tsc --noEmit` lulus.
+
+## Progress Cash Closing (2026-04-23)
+
+- Fitur `Penutupan Kas Harian` sudah ditambahkan di halaman `Kas Tunai`:
+  - input tanggal closing
+  - input saldo fisik akhir hari
+  - hitung otomatis selisih vs saldo sistem
+  - alasan selisih (wajib jika ada selisih)
+  - catatan penutupan
+  - dukungan update jika tanggal closing yang sama sudah pernah disimpan
+- Ditambahkan `Riwayat Closing Kas` (mobile card + desktop table) berisi:
+  - tanggal
+  - saldo sistem
+  - saldo fisik
+  - selisih
+  - PIC
+  - alasan selisih
+- Backend `cash closing` ditambahkan melalui server action finance:
+  - `getCashClosingEntries(limit)`
+  - `saveCashClosing(...)`
+  - penyimpanan memakai entri `audit_logs` dengan `entity_type = cash_closing` agar bisa jalan tanpa migrasi schema baru.
+- Verifikasi tipe setelah implementasi `cash closing`: `npx tsc --noEmit` lulus.
+
+## Progress Period Lock (2026-04-23)
+
+- Backend lock periode keuangan sudah diselesaikan:
+  - guard posting ditambahkan di `createFinancialRecord()` agar transaksi manual ditolak jika bulan terkunci.
+  - guard posting ditambahkan di:
+    - `processPayment()` (operator bayar invoice)
+    - `verifyPayment()` saat approval finance
+  - jika periode terkunci, sistem mengembalikan error informatif berisi periode dan alasan lock.
+- UI `Kas Tunai` sudah ditambah panel `Lock Periode Akuntansi`:
+  - input periode (`YYYY-MM`)
+  - alasan lock
+  - tombol `Lock` dan `Unlock`
+  - status periode terpilih
+  - histori lock periode (mobile card + desktop table)
+- Verifikasi tipe akhir setelah integrasi period lock: `npx tsc --noEmit` lulus.
+
+## Progress Period Lock Lanjutan (2026-04-23)
+
+- UX posting di halaman transaksi manual ditingkatkan:
+  - halaman `Pemasukan` dan `Pengeluaran` sekarang menampilkan status lock periode berdasarkan tanggal transaksi yang dipilih.
+  - tombol simpan otomatis nonaktif saat periode terkunci.
+  - tampil alasan lock langsung di form agar user tahu penyebab blokir sebelum submit.
+- Dashboard keuangan juga ditingkatkan:
+  - ditambah badge status lock periode berjalan di area header.
+  - modal quick transaction menampilkan status lock berdasarkan tanggal input.
+  - tombol `Simpan Transaksi` di modal nonaktif jika periode terkunci.
+- Riwayat lock di halaman `Kas Tunai` ditambah kontrol operasional:
+  - filter cepat histori lock: 3 / 6 / 12 bulan.
+  - export `CSV` untuk histori lock periode sesuai filter aktif.
+- Verifikasi tipe setelah semua peningkatan UX period lock: `npx tsc --noEmit` lulus.

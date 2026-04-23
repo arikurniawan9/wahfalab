@@ -1,15 +1,17 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { pdf } from "@react-pdf/renderer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   History,
   Search,
-  Filter,
-  Download,
+  FileSpreadsheet,
+  FileText,
   ArrowUpRight,
   ArrowDownRight,
   FlaskConical,
@@ -20,9 +22,11 @@ import {
   Wallet,
   Calendar
 } from "lucide-react";
-import { getFinancialRecords } from "@/lib/actions/finance";
+import { getFinancialRecords, getBankAccounts } from "@/lib/actions/finance";
+import { getCompanyProfile } from "@/lib/actions/company";
 import { ChemicalLoader, PageSkeleton } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 const categoryIcons: Record<string, any> = {
   lab_service: FlaskConical,
@@ -39,21 +43,38 @@ export default function TransactionsHistoryPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<any>("all");
+  const [filterBank, setFilterBank] = useState<string>("all");
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const [exporting, setExporting] = useState<null | "excel" | "pdf">(null);
 
   useEffect(() => {
     loadData();
-  }, [page, filterType]);
+  }, [page, filterType, filterBank]);
+
+  useEffect(() => {
+    loadBanks();
+  }, []);
 
   async function loadData() {
     setLoading(true);
     try {
       const type = filterType === "all" ? undefined : filterType;
-      const result = await getFinancialRecords(page, 15, type);
+      const bankAccountId = filterBank === "all" ? undefined : filterBank;
+      const result = await getFinancialRecords(page, 15, type, undefined, bankAccountId);
       setData(result);
     } catch (error) {
       console.error("Load transactions error:", error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadBanks() {
+    try {
+      const banks = await getBankAccounts();
+      setBankAccounts(banks);
+    } catch (error) {
+      console.error("Load banks error:", error);
     }
   }
 
@@ -75,6 +96,124 @@ export default function TransactionsHistoryPage() {
     });
   };
 
+  const getFilteredExportItems = async () => {
+    const type = filterType === "all" ? undefined : filterType;
+    const bankAccountId = filterBank === "all" ? undefined : filterBank;
+    const result = await getFinancialRecords(1, 5000, type, undefined, bankAccountId);
+
+    if (result?.error) {
+      throw new Error(result.error);
+    }
+
+    return (result?.items || []) as Array<any>;
+  };
+
+  const getExportMeta = () => {
+    const bankName = filterBank === "all"
+      ? "semua-rekening"
+      : (bankAccounts.find((bank) => bank.id === filterBank)?.account_number || "rekening");
+    const typeName = filterType === "all" ? "semua" : filterType;
+    const stamp = new Date().toISOString().slice(0, 10);
+
+    return {
+      typeLabel: filterType === "all" ? "Semua" : filterType === "income" ? "Pemasukan" : "Pengeluaran",
+      bankLabel: filterBank === "all"
+        ? "Semua Rekening"
+        : `${bankAccounts.find((bank) => bank.id === filterBank)?.bank_name || "Rekening"} - ${bankAccounts.find((bank) => bank.id === filterBank)?.account_number || "-"}`,
+      filenameBase: `riwayat-transaksi-${typeName}-${bankName}-${stamp}`
+    };
+  };
+
+  const downloadExcel = async () => {
+    setExporting("excel");
+    try {
+      const [XLSX, items] = await Promise.all([
+        import("xlsx"),
+        getFilteredExportItems()
+      ]);
+
+      if (items.length === 0) {
+        toast.info("Tidak ada data transaksi untuk diexport");
+        return;
+      }
+
+      const rows = items.map((tr: any) => ({
+        Tanggal: new Date(tr.transaction_date).toISOString(),
+        Jenis: tr.type === "income" ? "Pemasukan" : "Pengeluaran",
+        Kategori: String(tr.category || "").replace(/_/g, " "),
+        Deskripsi: tr.description,
+        Jumlah: Number(tr.amount || 0),
+        Rekening: tr.bank_account ? `${tr.bank_account.bank_name} - ${tr.bank_account.account_number}` : "-",
+        Handler: tr.handler?.full_name || "System"
+      }));
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), "Riwayat");
+      XLSX.writeFile(workbook, `${getExportMeta().filenameBase}.xlsx`);
+      toast.success("Export Excel berhasil");
+    } catch (error: any) {
+      console.error("Export excel failed", error);
+      toast.error(error?.message || "Gagal export Excel");
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const downloadPdf = async () => {
+    setExporting("pdf");
+    try {
+      const [items, company, TransactionLedgerPDF] = await Promise.all([
+        getFilteredExportItems(),
+        getCompanyProfile(),
+        import("@/components/pdf/TransactionLedgerPDF")
+      ]);
+
+      if (items.length === 0) {
+        toast.info("Tidak ada data transaksi untuk diexport");
+        return;
+      }
+
+      const totalIncome = items
+        .filter((item) => item.type === "income")
+        .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+      const totalExpense = items
+        .filter((item) => item.type === "expense")
+        .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+      const meta = getExportMeta();
+
+      const blob = await pdf(
+        <TransactionLedgerPDF.TransactionLedgerPDF
+          company={company}
+          filters={{
+            type: meta.typeLabel,
+            bank: meta.bankLabel,
+            generatedAt: new Date().toISOString()
+          }}
+          summary={{
+            totalIncome,
+            totalExpense,
+            netMovement: totalIncome - totalExpense,
+            transactionCount: items.length
+          }}
+          transactions={items}
+        />
+      ).toBlob();
+
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${meta.filenameBase}.pdf`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      toast.success("Export PDF berhasil");
+    } catch (error: any) {
+      console.error("Export pdf failed", error);
+      toast.error(error?.message || "Gagal export PDF");
+    } finally {
+      setExporting(null);
+    }
+  };
+
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
       {/* Header */}
@@ -88,9 +227,26 @@ export default function TransactionsHistoryPage() {
             Buku besar digital untuk semua arus kas WahfaLab
           </p>
         </div>
-        <Button variant="outline" className="rounded-xl border-emerald-200 text-emerald-600 font-bold text-xs uppercase tracking-widest h-12 px-6">
-          <Download className="mr-2 h-4 w-4" /> Download Laporan Excel
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button
+            variant="outline"
+            onClick={downloadExcel}
+            disabled={exporting !== null}
+            className="rounded-xl border-emerald-200 text-emerald-600 font-bold text-xs uppercase tracking-widest h-12 px-6"
+          >
+            <FileSpreadsheet className="mr-2 h-4 w-4" />
+            {exporting === "excel" ? "Exporting..." : "Download Excel"}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={downloadPdf}
+            disabled={exporting !== null}
+            className="rounded-xl border-slate-300 text-slate-700 font-bold text-xs uppercase tracking-widest h-12 px-6"
+          >
+            <FileText className="mr-2 h-4 w-4" />
+            {exporting === "pdf" ? "Exporting..." : "Download PDF"}
+          </Button>
+        </div>
       </div>
 
       {/* Control Panel */}
@@ -132,9 +288,21 @@ export default function TransactionsHistoryPage() {
                 Pengeluaran
               </Button>
             </div>
-            <Button variant="outline" className="h-12 w-12 p-0 rounded-2xl border-slate-200">
-              <Filter className="h-4 w-4 text-slate-500" />
-            </Button>
+              <div className="min-w-[220px]">
+                <Select value={filterBank} onValueChange={(v) => { setFilterBank(v); setPage(1); }}>
+                <SelectTrigger className="h-12 rounded-2xl border-slate-200 bg-white">
+                  <SelectValue placeholder="Filter Bank" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Bank</SelectItem>
+                  {bankAccounts.map((bank) => (
+                    <SelectItem key={bank.id} value={bank.id}>
+                      {bank.bank_name} - {bank.account_number}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -200,6 +368,12 @@ export default function TransactionsHistoryPage() {
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
                               Handler: {tr.handler?.full_name || 'System Auto-Log'}
                             </p>
+                            {tr.bank_account && (
+                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 flex items-center gap-1">
+                                <Building className="h-3 w-3 text-emerald-500" />
+                                Rekening: {tr.bank_account.bank_name} - {tr.bank_account.account_number}
+                              </p>
+                            )}
                           </td>
                           <td className="p-6">
                             <div className="flex items-center gap-2 text-slate-500">

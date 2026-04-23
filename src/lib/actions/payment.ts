@@ -1,9 +1,12 @@
 'use server'
 
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
 import { generateInvoiceNumber } from '@/lib/utils/generateNumber'
+import { auth } from '@/lib/auth'
+import { getCashAccount, isFinancePeriodLocked } from '@/lib/actions/finance'
 
 /**
  * Generate invoice when job order is completed
@@ -68,9 +71,19 @@ export async function generateInvoice(jobOrderId: string) {
 export async function processPayment(
   paymentId: string,
   paymentMethod: 'cash' | 'transfer',
-  transferReference?: string
+  transferReference?: string,
+  bankAccountId?: string
 ) {
   try {
+    const session = await auth()
+    if (!session?.user) return { error: 'Unauthorized' }
+    const profile = await prisma.profile.findUnique({
+      where: { email: session.user.email! },
+      select: { id: true }
+    })
+
+    if (!profile) return { error: 'Profile pengguna tidak ditemukan' }
+
     const payment = await prisma.payment.findUnique({
       where: { id: paymentId },
       include: {
@@ -86,27 +99,81 @@ export async function processPayment(
       return { error: 'Tagihan sudah lunas' }
     }
 
-    // Update payment
-    const updatedPayment = await prisma.payment.update({
-      where: { id: paymentId },
-      data: {
-        payment_method: paymentMethod,
-        transfer_reference: transferReference,
-        payment_status: 'paid',
-        paid_at: new Date()
+    if (paymentMethod === 'transfer' && !bankAccountId) {
+      return { error: 'Mohon pilih bank tujuan untuk pembayaran transfer' }
+    }
+
+    const resolvedBankAccountId = paymentMethod === 'cash'
+      ? ((await getCashAccount()) as any)?.id
+      : bankAccountId
+    const periodLock = await isFinancePeriodLocked(new Date()) as any
+
+    if (periodLock?.isLocked) {
+      const reasonText = periodLock.reason ? ` Alasan: ${periodLock.reason}.` : ''
+      return {
+        error: `Periode ${periodLock.period} sedang dikunci.${reasonText} Proses pembayaran tidak dapat diposting.`
       }
+    }
+
+    const updatedPayment = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const paymentUpdate = await tx.payment.update({
+        where: { id: paymentId },
+        data: {
+          payment_method: paymentMethod,
+          transfer_reference: transferReference,
+          payment_status: 'paid',
+          paid_at: new Date(),
+          bank_account_id: resolvedBankAccountId
+        }
+      })
+
+      await tx.jobOrder.update({
+        where: { id: payment.job_order_id },
+        data: {
+          status: 'paid'
+        }
+      })
+
+      await tx.financialRecord.create({
+        data: {
+          type: 'income',
+          category: 'lab_service',
+          amount: payment.amount,
+          description: `Pemasukan Lab: Invoice ${payment.invoice_number}`,
+          bank_account_id: resolvedBankAccountId,
+          reference_id: payment.id,
+          transaction_date: new Date(),
+          recorded_by: profile.id
+        }
+      })
+
+      if (resolvedBankAccountId) {
+        await tx.bankAccount.update({
+          where: { id: resolvedBankAccountId },
+          data: {
+            balance: { increment: payment.amount }
+          }
+        })
+      }
+
+      return paymentUpdate
     })
 
-    // Update job order status to paid
-    await prisma.jobOrder.update({
-      where: { id: payment.job_order_id },
-      data: {
-        status: 'paid'
-      }
-    })
-
-    revalidatePath('/operator')
-    revalidatePath('/dashboard')
+    const paths = [
+      '/operator',
+      '/dashboard',
+      '/finance',
+      '/finance/transactions',
+      '/finance/income',
+      '/finance/cashflow',
+      '/finance/payments',
+      '/admin/finance',
+      '/admin/finance/transactions',
+      '/admin/finance/income',
+      '/admin/finance/cashflow',
+      '/admin/finance/payments'
+    ]
+    paths.forEach((path) => revalidatePath(path))
 
     return { success: true, payment: updatedPayment }
   } catch (error) {

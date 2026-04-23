@@ -20,7 +20,8 @@ import {
   User,
   Package,
   Wrench,
-  Building
+  Building,
+  Lock
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -41,7 +42,7 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
-import { createFinancialRecord, getFinancialSummary, getMonthlyTrend, getFinancialRecords, getBankAccounts } from "@/lib/actions/finance";
+import { createFinancialRecord, getFinancialSummary, getMonthlyTrend, getFinancialRecords, getBankAccounts, isFinancePeriodLocked } from "@/lib/actions/finance";
 import { getInvoiceStats } from "@/lib/actions/invoice";
 import { ChemicalLoader, PageSkeleton, LoadingOverlay } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -65,6 +66,7 @@ export default function FinanceDashboardPage() {
   const [trend, setTrend] = useState<any[]>([]);
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const [dashboardPeriodLock, setDashboardPeriodLock] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
 
@@ -78,20 +80,28 @@ export default function FinanceDashboardPage() {
     bank_account_id: '',
     date: new Date().toISOString().split('T')[0]
   });
+  const [modalPeriodLock, setModalPeriodLock] = useState<any>(null);
+  const [checkingModalPeriodLock, setCheckingModalPeriodLock] = useState(false);
 
   useEffect(() => {
     loadAllData();
   }, []);
 
+  useEffect(() => {
+    if (!isModalOpen) return;
+    void loadModalPeriodLockStatus(formData.date);
+  }, [isModalOpen, formData.date]);
+
   async function loadAllData() {
     setLoading(true);
     try {
-      const [sum, stats, history, monthly, banks] = await Promise.all([
+      const [sum, stats, history, monthly, banks, lockStatus] = await Promise.all([
         getFinancialSummary(),
         getInvoiceStats(),
         getFinancialRecords(1, 5),
         getMonthlyTrend(6),
-        getBankAccounts()
+        getBankAccounts(),
+        isFinancePeriodLocked(new Date())
       ]);
 
       setSummary(sum);
@@ -99,6 +109,7 @@ export default function FinanceDashboardPage() {
       setRecentTransactions(history.items || []);
       setTrend(monthly);
       setBankAccounts(banks);
+      setDashboardPeriodLock(lockStatus || null);
     } catch (error) {
       console.error("Load dashboard data error:", error);
     } finally {
@@ -106,15 +117,41 @@ export default function FinanceDashboardPage() {
     }
   }
 
+  async function loadModalPeriodLockStatus(targetDate: string) {
+    setCheckingModalPeriodLock(true);
+    try {
+      const status = await isFinancePeriodLocked(targetDate);
+      setModalPeriodLock(status || null);
+    } catch (error) {
+      setModalPeriodLock(null);
+    } finally {
+      setCheckingModalPeriodLock(false);
+    }
+  }
+
+  const formatPeriodLabel = (period?: string) => {
+    if (!period) return "-";
+    try {
+      return new Date(`${period}-01T00:00:00`).toLocaleDateString("id-ID", {
+        month: "long",
+        year: "numeric"
+      });
+    } catch (error) {
+      return period;
+    }
+  };
+
   const handleOpenModal = (type: 'income' | 'expense') => {
+    const today = new Date().toISOString().split('T')[0];
     setModalType(type);
     setFormData({
       amount: '',
       description: '',
       category: 'other',
       bank_account_id: '',
-      date: new Date().toISOString().split('T')[0]
+      date: today
     });
+    void loadModalPeriodLockStatus(today);
     setIsModalOpen(true);
   };
 
@@ -122,6 +159,12 @@ export default function FinanceDashboardPage() {
     e.preventDefault();
     if (!formData.amount || !formData.description || !formData.bank_account_id) {
       toast.error("Mohon lengkapi data transaksi dan pilih Bank");
+      return;
+    }
+    if (modalPeriodLock?.isLocked) {
+      toast.error(
+        `Periode ${formatPeriodLabel(modalPeriodLock.period)} terkunci.${modalPeriodLock.reason ? ` Alasan: ${modalPeriodLock.reason}` : ""}`
+      );
       return;
     }
 
@@ -183,20 +226,34 @@ export default function FinanceDashboardPage() {
             Overview Arus Kas & Analisis Keuangan Laboratorium
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button 
-            onClick={() => handleOpenModal('income')}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-5 rounded-xl shadow-md shadow-emerald-200 text-xs"
+        <div className="flex flex-col items-stretch md:items-end gap-2">
+          <div className="flex gap-2">
+            <Button 
+              onClick={() => handleOpenModal('income')}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-5 rounded-xl shadow-md shadow-emerald-200 text-xs"
+            >
+              <PlusCircle className="mr-2 h-4 w-4" /> Pemasukan
+            </Button>
+            <Button 
+              onClick={() => handleOpenModal('expense')}
+              variant="outline" 
+              className="border-red-200 text-red-600 hover:bg-red-50 font-bold h-10 px-5 rounded-xl text-xs"
+            >
+              <PlusCircle className="mr-2 h-4 w-4" /> Pengeluaran
+            </Button>
+          </div>
+          <Badge
+            className={cn(
+              "text-[9px] font-bold uppercase tracking-widest w-fit border",
+              dashboardPeriodLock?.isLocked
+                ? "bg-rose-50 text-rose-700 border-rose-100"
+                : "bg-emerald-50 text-emerald-700 border-emerald-100"
+            )}
           >
-            <PlusCircle className="mr-2 h-4 w-4" /> Pemasukan
-          </Button>
-          <Button 
-            onClick={() => handleOpenModal('expense')}
-            variant="outline" 
-            className="border-red-200 text-red-600 hover:bg-red-50 font-bold h-10 px-5 rounded-xl text-xs"
-          >
-            <PlusCircle className="mr-2 h-4 w-4" /> Pengeluaran
-          </Button>
+            {dashboardPeriodLock?.isLocked
+              ? `Periode ${formatPeriodLabel(dashboardPeriodLock?.period)} terkunci`
+              : `Periode ${formatPeriodLabel(dashboardPeriodLock?.period)} terbuka`}
+          </Badge>
         </div>
       </div>
 
@@ -356,6 +413,11 @@ export default function FinanceDashboardPage() {
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
                           {tr.category.replace('_', ' ')} • {new Date(tr.transaction_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
                         </p>
+                        {tr.bank_account && (
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                            Bank: {tr.bank_account.bank_name} - {tr.bank_account.account_number}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="text-right">
@@ -486,12 +548,34 @@ export default function FinanceDashboardPage() {
                   onChange={(e) => setFormData({...formData, date: e.target.value})}
                   className="h-12 rounded-xl border-slate-100 bg-slate-50 focus:ring-emerald-500"
                 />
+                <div className={cn(
+                  "rounded-xl border px-3 py-2.5 text-[10px]",
+                  checkingModalPeriodLock
+                    ? "border-slate-200 bg-slate-50 text-slate-500"
+                    : modalPeriodLock?.isLocked
+                      ? "border-rose-100 bg-rose-50 text-rose-700"
+                      : "border-emerald-100 bg-emerald-50 text-emerald-700"
+                )}>
+                  {checkingModalPeriodLock ? (
+                    <p className="font-bold">Memeriksa status lock periode...</p>
+                  ) : modalPeriodLock?.isLocked ? (
+                    <div className="space-y-1">
+                      <p className="font-black uppercase tracking-widest flex items-center gap-1">
+                        <Lock className="h-3 w-3" /> Periode {formatPeriodLabel(modalPeriodLock.period)} terkunci
+                      </p>
+                      <p className="font-medium">{modalPeriodLock.reason || "Periode ditutup oleh admin/finance."}</p>
+                    </div>
+                  ) : (
+                    <p className="font-bold">Periode {formatPeriodLabel(modalPeriodLock?.period)} terbuka untuk posting.</p>
+                  )}
+                </div>
               </div>
             </div>
 
             <DialogFooter className="pt-4">
               <Button 
                 type="submit"
+                disabled={processing || checkingModalPeriodLock || Boolean(modalPeriodLock?.isLocked)}
                 className={cn(
                   "w-full text-white font-bold h-14 rounded-2xl shadow-lg uppercase tracking-widest text-xs",
                   modalType === 'income' ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100" : "bg-rose-600 hover:bg-rose-700 shadow-rose-100"

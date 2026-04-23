@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { getAllPayments, processPayment } from "@/lib/actions/payment";
+import { getBankAccounts } from "@/lib/actions/finance";
 import { ChemicalLoader } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
@@ -68,10 +69,13 @@ export default function OperatorPaymentsPage() {
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "transfer">("cash");
   const [transferReference, setTransferReference] = useState("");
+  const [bankAccountId, setBankAccountId] = useState("");
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
     loadData();
+    loadBanks();
   }, [page, filterStatus]);
 
   async function loadData() {
@@ -81,8 +85,20 @@ export default function OperatorPaymentsPage() {
     setLoading(false);
   }
 
+  async function loadBanks() {
+    try {
+      const banks = await getBankAccounts();
+      setBankAccounts(banks);
+    } catch (error) {
+      console.error("Load banks error:", error);
+    }
+  }
+
   const handleProcessPayment = (payment: any) => {
     setSelectedPayment(payment);
+    setPaymentMethod("cash");
+    setTransferReference("");
+    setBankAccountId("");
     setIsPaymentModalOpen(true);
   };
 
@@ -94,12 +110,18 @@ export default function OperatorPaymentsPage() {
       return;
     }
 
+    if (paymentMethod === "transfer" && !bankAccountId) {
+      toast.error("Mohon pilih bank tujuan");
+      return;
+    }
+
     setProcessing(true);
     try {
       const result = await processPayment(
         selectedPayment.id,
         paymentMethod,
-        paymentMethod === "transfer" ? transferReference : undefined
+        paymentMethod === "transfer" ? transferReference : undefined,
+        bankAccountId || undefined
       );
 
       if (result.error) throw new Error(result.error);
@@ -131,6 +153,9 @@ export default function OperatorPaymentsPage() {
       minute: '2-digit'
     });
   };
+
+  const selectedBank = bankAccounts.find((bank) => bank.id === bankAccountId);
+  const cashAccount = bankAccounts.find((bank) => bank.bank_name === 'Kas Tunai');
 
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto">
@@ -401,23 +426,72 @@ export default function OperatorPaymentsPage() {
                     <SelectItem value="transfer">🏦 Transfer Bank</SelectItem>
                   </SelectContent>
                 </Select>
+                {paymentMethod === 'cash' && (
+                  <div className="rounded-xl border border-amber-100 bg-amber-50/70 p-3 mt-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">Rekening Otomatis</p>
+                    <p className="text-sm font-black text-amber-950 mt-1">
+                      {cashAccount ? `${cashAccount.bank_name} - ${cashAccount.account_number}` : 'Kas Tunai'}
+                    </p>
+                    <p className="text-xs text-amber-700/70 mt-1">
+                      Pembayaran cash akan dicatat ke rekening ini agar saldo kas tetap terkontrol.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Transfer Reference */}
               {paymentMethod === "transfer" && (
-                <div className="space-y-2">
-                  <Label htmlFor="reference" className="text-sm font-medium">
-                    Nomor Referensi Transfer
-                  </Label>
-                  <Input
-                    id="reference"
-                    value={transferReference}
-                    onChange={(e) => setTransferReference(e.target.value)}
-                    placeholder="Contoh: TRF123456789"
-                  />
-                  <p className="text-xs text-slate-500">
-                    Masukkan nomor referensi/nomor transaksi transfer
-                  </p>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Rekening Bank</Label>
+                    <Select value={bankAccountId} onValueChange={setBankAccountId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pilih bank tujuan" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {bankAccounts.map(bank => (
+                          <SelectItem key={bank.id} value={bank.id}>
+                            {bank.bank_name} - {bank.account_number}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-slate-500">
+                      Pilih rekening tujuan agar saldo bank otomatis bertambah saat pembayaran diproses.
+                    </p>
+                    {selectedBank && (
+                      <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3 mt-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Saldo Rekening</p>
+                            <p className="text-sm font-black text-emerald-950 mt-1">
+                              {selectedBank.bank_name} - {selectedBank.account_number}
+                            </p>
+                            <p className="text-[10px] font-bold text-emerald-700/70 mt-1">
+                              {selectedBank.account_holder}
+                            </p>
+                          </div>
+                          <Badge className="bg-white text-emerald-700 border border-emerald-200 px-3 py-1 rounded-full text-[10px] font-black">
+                            {formatCurrency(Number(selectedBank.balance || 0))}
+                          </Badge>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="reference" className="text-sm font-medium">
+                      Nomor Referensi Transfer
+                    </Label>
+                    <Input
+                      id="reference"
+                      value={transferReference}
+                      onChange={(e) => setTransferReference(e.target.value)}
+                      placeholder="Contoh: TRF123456789"
+                    />
+                    <p className="text-xs text-slate-500">
+                      Masukkan nomor referensi/nomor transaksi transfer
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
