@@ -687,15 +687,23 @@ export async function createSamplingAssignment(data: {
   }
 }
 
-export async function getAllSamplingAssignments(page = 1, limit = 10, search = "") {
+export async function getAllSamplingAssignments(page = 1, limit = 10, search = "", status: string = "all") {
   const skip = (page - 1) * limit
-  const where = search ? {
-    OR: [
+  const where: any = {}
+
+  if (status && status !== 'all') {
+    where.status = status
+  }
+
+  if (search) {
+    where.OR = [
       { location: { contains: search, mode: 'insensitive' as const } },
       { job_order: { tracking_code: { contains: search, mode: 'insensitive' as const } } },
-      { field_officer: { full_name: { contains: search, mode: 'insensitive' as const } } }
+      { field_officer: { full_name: { contains: search, mode: 'insensitive' as const } } },
+      { job_order: { quotation: { profile: { full_name: { contains: search, mode: 'insensitive' as const } } } } },
+      { job_order: { quotation: { profile: { company_name: { contains: search, mode: 'insensitive' as const } } } } }
     ]
-  } : {}
+  }
 
   const [assignments, total] = await Promise.all([
     prisma.samplingAssignment.findMany({

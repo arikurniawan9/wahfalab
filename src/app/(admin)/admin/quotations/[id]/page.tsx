@@ -153,17 +153,19 @@ export default function QuotationDetailPage() {
             </Button>
           </Link>
           <div className="space-y-1">
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">{quotation.quotation_number}</h1>
+            <div className="flex flex-col gap-1">
               <Badge className={cn("px-4 py-1 rounded-full font-black text-[10px] uppercase tracking-widest border", statusCfg.color)}>
                 <statusCfg.icon className="h-3 w-3 mr-2" /> {statusCfg.label}
               </Badge>
-            </div>
-            {quotation.title && (
-              <p className="text-emerald-700 text-sm font-black uppercase tracking-tight mb-1 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-100 w-fit">
-                {quotation.title}
+              {quotation.title && (
+                <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">
+                  {quotation.title}
+                </h1>
+              )}
+              <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">
+                {quotation.quotation_number}
               </p>
-            )}
+            </div>
             <p className="text-slate-400 text-[11px] font-bold uppercase tracking-widest flex items-center gap-2">
               <Calendar className="h-3.5 w-3.5" /> Diterbitkan: {new Date(quotation.date).toLocaleDateString("id-ID", { day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
@@ -392,7 +394,7 @@ export default function QuotationDetailPage() {
                 </div>
 
                 <div className="pt-4 border-t border-dashed border-slate-100">
-                  <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest block mb-3">Lokasi Pengiriman</span>
+                  <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest block mb-3">Alamat Klien</span>
                   <a 
                     href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(quotation.profile.address || "")}`}
                     target="_blank"
@@ -411,6 +413,20 @@ export default function QuotationDetailPage() {
                       </span>
                     </div>
                   </a>
+                </div>
+
+                <div className="pt-4 border-t border-dashed border-slate-100">
+                  <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest block mb-3">Lokasi Sampling</span>
+                  <div className="flex items-start gap-3 p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                    <div className="h-8 w-8 rounded-lg bg-white text-emerald-600 flex items-center justify-center shrink-0 border border-slate-100 shadow-sm">
+                      <MapPin className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <p className="text-[10px] font-bold text-slate-600 leading-relaxed line-clamp-2 uppercase italic tracking-tighter">
+                        {quotation.sampling_location || "Lokasi sampling belum diatur"}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </CardContent>

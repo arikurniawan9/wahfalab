@@ -45,6 +45,7 @@ import { useForm, useFieldArray, Controller } from "react-hook-form";
 interface QuotationForm {
   quotation_number: string;
   title: string;
+  sampling_location: string;
   user_id: string;
   subtotal: number;
   discount_amount: number;
@@ -93,6 +94,7 @@ export default function OperatorCreateQuotationPage() {
     defaultValues: {
       quotation_number: "",
       title: "",
+      sampling_location: "",
       user_id: "",
       subtotal: 0,
       discount_amount: 0,
@@ -215,6 +217,7 @@ export default function OperatorCreateQuotationPage() {
       const formData = {
         quotation_number: data.quotation_number,
         title: data.title,
+        sampling_location: data.sampling_location,
         user_id: data.user_id, // ← Gunakan user_id dari form (klien yang dipilih)
         subtotal: subtotal,
         discount_amount: data.discount_amount,
@@ -361,6 +364,15 @@ export default function OperatorCreateQuotationPage() {
                 <div className="md:col-span-2 space-y-1.5">
                   <label className="text-[10px] font-bold text-slate-500 uppercase">Judul Pengujian / Perihal</label>
                   <Input {...register("title")} placeholder="Contoh: Pengujian air di sumur ke 9" className="h-9 border-slate-300 bg-white text-xs" />
+                </div>
+                <div className="md:col-span-2 space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Lokasi Sampling</label>
+                  <textarea
+                    {...register("sampling_location")}
+                    rows={3}
+                    placeholder="Lokasi sampling / titik pengambilan contoh..."
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none shadow-sm resize-none"
+                  />
                 </div>
               </div>
             </div>

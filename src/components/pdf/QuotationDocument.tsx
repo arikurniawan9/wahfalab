@@ -21,80 +21,100 @@ Font.register({
 
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 30,
-    paddingBottom: 45,
-    paddingHorizontal: 40,
+    paddingTop: 26,
+    paddingBottom: 42,
+    paddingHorizontal: 30,
     fontSize: 9,
     fontFamily: "Helvetica",
     color: "#333",
   },
   // Header
   header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 15, // reduced
-    borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-    paddingBottom: 8, // reduced
+    marginBottom: 10,
   },
-  headerLeft: {
+  headerBrandRow: {
     flexDirection: "row",
     alignItems: "center",
-    width: "60%",
+    marginBottom: 8,
   },
   logo: {
-    width: 50,
-    height: "auto",
+    width: 78,
+    height: 36,
+    objectFit: "contain",
   },
   companyName: {
-    fontSize: 13,
+    fontSize: 20,
     fontWeight: "bold",
-    color: "#064e3b",
+    color: "#4b5563",
+    marginLeft: 4,
+    letterSpacing: -0.3,
   },
-  companySub: {
-    fontSize: 7,
-    color: "#666",
-    marginTop: 1,
-    lineHeight: 1.2, // added
-  },
-  headerText: {
-    marginLeft: 8,
-  },
-  headerRight: {
-    width: "40%",
-    textAlign: "right",
+  quotationBar: {
+    backgroundColor: "#067a62",
+    height: 18,
+    justifyContent: "center",
+    marginBottom: 14,
+    paddingHorizontal: 8,
   },
   quotationTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "bold",
-    color: "#059669",
-    marginBottom: 3, // reduced
+    color: "#ffffff",
+    textAlign: "right",
+    fontStyle: "italic",
+    letterSpacing: 0.4,
   },
-  headerInfo: {
-    fontSize: 8,
-    lineHeight: 1.3, // reduced
-  },
-  // Recipient Info
-  recipientSection: {
-    marginBottom: 8, // reduced
+  headerInfoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 2,
     fontSize: 9,
   },
-  recipientRow: {
+  headerLeft: {
+    width: "58%",
+    fontSize: 9,
+  },
+  headerRight: {
+    width: "42%",
+    fontSize: 9,
+    alignItems: "flex-end",
+  },
+  leftLabel: {
+    width: 76,
+    fontWeight: "bold",
+  },
+  leftValue: {
+    flex: 1,
+    fontWeight: "bold",
+    color: "#111827",
+  },
+  rightLabel: {
+    width: 52,
+    textAlign: "right",
+    fontWeight: "bold",
+  },
+  rightValue: {
+    width: 120,
+    textAlign: "right",
+    color: "#111827",
+  },
+  recipientBlock: {
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  perihalRow: {
     flexDirection: 'row',
-    lineHeight: 1, // extremely tight
-  },
-  recipientLabel: {
-    width: '14%', 
-  },
-  recipientValue: {
-    width: '86%',
+    marginTop: 0,
+    marginBottom: 0,
+    alignItems: "flex-start",
   },
   // Body
   perihal: {
-    marginTop: 5,
-    marginBottom: 5,
-    lineHeight: 1,
+    marginTop: 0,
+    marginBottom: 0,
+    lineHeight: 1.1,
+    fontWeight: "bold",
   },
   openingText: {
     marginBottom: 2,
@@ -254,43 +274,57 @@ qrPlaceholder: {
 
 export const QuotationDocument = ({ data }: any) => {
   return (
-    <Document>
+      <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
-          <View style={styles.headerLeft}>
+          <View style={styles.headerBrandRow}>
             <Image src="/logo-wahfalab.png" style={styles.logo} />
-            <View style={styles.headerText}>
-                <Text style={styles.companyName}>PT. WAHFA LAB INDONESIA</Text>
-                <Text style={styles.companySub}>Laboratorium Pengujian Lingkungan & Kalibrasi Terakreditasi</Text>
+            <Text style={styles.companyName}>Wahfalab</Text>
+          </View>
+
+          <View style={styles.quotationBar}>
+            <Text style={styles.quotationTitle}>QUOTATION</Text>
+          </View>
+
+          <View style={styles.headerInfoRow}>
+              <View style={styles.headerLeft}>
+                <View style={styles.headerInfoRow}>
+                  <Text style={styles.leftLabel}>Kepada Yth</Text>
+                  <Text style={styles.leftValue}>: {data.profile?.company_name || "PT. ABCD"}</Text>
+                </View>
+                <View style={styles.headerInfoRow}>
+                  <Text style={styles.leftLabel}>Nama</Text>
+                  <Text style={styles.leftValue}>: {data.profile?.full_name || "Bpk/Ibu"}</Text>
+                </View>
+                <View style={styles.headerInfoRow}>
+                  <Text style={styles.leftLabel}>Alamat</Text>
+                  <Text style={styles.leftValue}>: {data.profile?.address || "Jl."}</Text>
+                </View>
+                <View style={styles.headerInfoRow}>
+                  <Text style={styles.leftLabel}>Lokasi Sampling</Text>
+                  <Text style={styles.leftValue}>: {data.sampling_location || data.title || "-"}</Text>
+                </View>
+              </View>
+
+            <View style={{ ...styles.headerRight, width: "40%" }}>
+              <View style={styles.headerInfoRow}>
+                <Text style={styles.rightLabel}>Tanggal</Text>
+                <Text style={styles.rightValue}>: {new Date(data.date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</Text>
+              </View>
+              <View style={styles.headerInfoRow}>
+                <Text style={styles.rightLabel}>Nomor</Text>
+                <Text style={styles.rightValue}>: {data.quotation_number}</Text>
+              </View>
             </View>
           </View>
-          <View style={styles.headerRight}>
-            <Text style={styles.quotationTitle}>QUOTATION</Text>
-            <Text style={styles.headerInfo}>Tanggal: {new Date(data.date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</Text>
-            <Text style={styles.headerInfo}>Nomor: {data.quotation_number}</Text>
-          </View>
         </View>
 
-        <View style={styles.recipientSection}>
-          <View style={styles.recipientRow}>
-            <Text style={styles.recipientLabel}>Kepada Yth</Text>
-            <Text style={styles.recipientValue}>: </Text>
-          </View>
-          <View style={styles.recipientRow}>
-            <Text style={styles.recipientLabel}>Nama</Text>
-            <Text style={styles.recipientValue}>: {data.profile?.company_name || "Personal"}</Text>
-          </View>
-          <View style={styles.recipientRow}>
-            <Text style={styles.recipientLabel}>Up</Text>
-            <Text style={styles.recipientValue}>: {data.profile?.full_name || "Bpk/Ibu"}</Text>
-          </View>
-          <View style={styles.recipientRow}>
-            <Text style={styles.recipientLabel}>Alamat</Text>
-            <Text style={styles.recipientValue}>: {data.profile?.address || "-"}</Text>
+        <View style={styles.recipientBlock}>
+          <View style={styles.perihalRow}>
+            <Text style={styles.leftLabel}>Perihal</Text>
+            <Text style={styles.leftValue}>: {data.title || "Penawaran Jasa Pengujian Lingkungan"}</Text>
           </View>
         </View>
-
-        <Text style={styles.perihal}>Perihal: {data.title || "Penawaran Jasa Pengujian Lingkungan"}</Text>
 
         <Text style={styles.openingText}>Dengan Hormat,</Text>
         <Text style={styles.openingText}>

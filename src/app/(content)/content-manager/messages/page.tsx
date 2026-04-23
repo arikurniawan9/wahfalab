@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { 
   Card, 
   CardContent, 
@@ -36,11 +36,7 @@ export default function MessagesManagerPage() {
   const [messages, setMessages] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
 
-  useEffect(() => {
-    loadMessages();
-  }, []);
-
-  async function loadMessages() {
+  const loadMessages = useCallback(async () => {
     setLoading(true);
     const result = await getContactMessages();
     if (result.error) {
@@ -49,7 +45,15 @@ export default function MessagesManagerPage() {
       setMessages(result);
     }
     setLoading(false);
-  }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void loadMessages();
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [loadMessages]);
 
   const handleMarkAsRead = async (id: string) => {
     const result = await markMessageAsRead(id);

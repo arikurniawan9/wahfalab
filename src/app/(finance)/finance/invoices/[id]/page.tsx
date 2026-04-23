@@ -40,6 +40,7 @@ import {
   DialogFooter
 } from "@/components/ui/dialog";
 import { ChemicalLoader, LoadingOverlay, LoadingButton } from "@/components/ui";
+type InvoicePdfData = React.ComponentProps<typeof InvoicePDF>["data"];
 
 const statusColors: Record<string, string> = {
   draft: "bg-slate-100 text-slate-700 border-slate-200",
@@ -102,41 +103,52 @@ export default function InvoiceDetailPage() {
         npwp: '01.234.567.8-901.000'
       };
 
-      const items = invoice.job_order?.quotation?.items?.map((item: any) => ({
-        service_name: item.service?.name || item.equipment?.name || 'Layanan',
-        parameters: item.parameter_snapshot || (item.service?.parameters ? 
-          (typeof item.service.parameters === 'string' ? 
-            JSON.parse(item.service.parameters).map((p: any) => p.name).join(", ") : 
-            item.service.parameters.map((p: any) => p.name).join(", ")
-          ) : null),
-        regulation: item.service?.regulation || item.service?.regulation_ref?.name,
-        quantity: item.qty || 1,
-        unit_price: Number(item.price_snapshot || 0),
-        subtotal: (item.qty || 1) * Number(item.price_snapshot || 0)
-      })) || [];
-
-      const pdfData = {
+      const invoicePdfData: InvoicePdfData = {
         invoice_number: invoice.invoice_number,
-        quotation_number: invoice.job_order?.quotation?.quotation_number,
-        tracking_code: invoice.job_order?.tracking_code || '-',
-        issue_date: invoice.created_at,
-        due_date: invoice.due_date,
-        amount: Number(invoice.amount),
-        payment_status: invoice.status,
-        payment_method: invoice.payment_method,
+        amount: Number(invoice.amount || 0),
+        status: String(invoice.status || "draft"),
+        due_date: String(invoice.due_date || new Date().toISOString()),
         paid_at: invoice.paid_at,
-        customer: {
-          full_name: invoice.job_order?.quotation?.profile?.full_name,
-          company_name: invoice.job_order?.quotation?.profile?.company_name,
-          email: invoice.job_order?.quotation?.profile?.email,
-          phone: invoice.job_order?.quotation?.profile?.phone,
-          address: invoice.job_order?.quotation?.profile?.address
-        },
-        items,
-        company: companyProfile
+        created_at: String(invoice.created_at || new Date().toISOString()),
+        notes: invoice.notes || null,
+        job_order: {
+          tracking_code: invoice.job_order?.tracking_code || "-",
+          quotation: {
+            quotation_number: invoice.job_order?.quotation?.quotation_number || "-",
+            subtotal: Number(invoice.job_order?.quotation?.subtotal || 0),
+            tax_amount: Number(invoice.job_order?.quotation?.tax_amount || 0),
+            use_tax: Boolean(invoice.job_order?.quotation?.use_tax),
+            total_amount: Number(invoice.job_order?.quotation?.total_amount || invoice.amount || 0),
+            perdiem_price: invoice.job_order?.quotation?.perdiem_price ?? null,
+            perdiem_qty: invoice.job_order?.quotation?.perdiem_qty ?? null,
+            perdiem_name: invoice.job_order?.quotation?.perdiem_name ?? null,
+            transport_price: invoice.job_order?.quotation?.transport_price ?? null,
+            transport_qty: invoice.job_order?.quotation?.transport_qty ?? null,
+            transport_name: invoice.job_order?.quotation?.transport_name ?? null,
+            profile: {
+              full_name: invoice.job_order?.quotation?.profile?.full_name || null,
+              company_name: invoice.job_order?.quotation?.profile?.company_name || null,
+              email: invoice.job_order?.quotation?.profile?.email || null,
+              phone: invoice.job_order?.quotation?.profile?.phone || null,
+              address: invoice.job_order?.quotation?.profile?.address || null
+            },
+            items: (invoice.job_order?.quotation?.items || []).map((item: any, idx: number) => ({
+              id: String(item.id || idx),
+              qty: Number(item.qty || 1),
+              price_snapshot: Number(item.price_snapshot || 0),
+              parameter_snapshot: item.parameter_snapshot || null,
+              service: item.service ? {
+                name: item.service.name,
+                category: item.service.category || null,
+                regulation: item.service.regulation || item.service.regulation_ref?.name || null
+              } : null,
+              equipment: item.equipment ? { name: item.equipment.name } : null
+            }))
+          }
+        }
       };
 
-      const blob = await pdf(<InvoicePDF data={pdfData} />).toBlob();
+      const blob = await pdf(<InvoicePDF data={invoicePdfData} company={companyProfile} />).toBlob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;

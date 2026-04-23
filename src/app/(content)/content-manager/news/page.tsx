@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { 
   getNews, 
   upsertNews, 
@@ -63,11 +63,7 @@ export default function NewsManagerPage() {
   const [editingItem, setEditItem] = useState<any>(null);
   const [uploading, setUploading] = useState(false);
 
-  useEffect(() => {
-    loadNews();
-  }, []);
-
-  async function loadNews() {
+  const loadNews = useCallback(async () => {
     setLoading(true);
     const result = await getNews();
     if (result.error) {
@@ -76,7 +72,15 @@ export default function NewsManagerPage() {
       setNews(result);
     }
     setLoading(false);
-  }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void loadNews();
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [loadNews]);
 
   const handleOpenDialog = (item: any = null) => {
     if (item) {

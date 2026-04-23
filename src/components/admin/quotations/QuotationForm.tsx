@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 const quotationSchema = z.object({
   quotation_number: z.string().min(1, "Nomor penawaran wajib diisi"),
   title: z.string().min(3, "Judul pengujian wajib diisi").nullable().or(z.literal("")),
+  sampling_location: z.string().optional().nullable(),
   user_id: z.string().min(1, "Pilih klien terlebih dahulu"),
   use_tax: z.boolean().default(true),
   discount_amount: z.coerce.number().min(0).default(0),
@@ -74,6 +75,7 @@ export function QuotationForm({
     defaultValues: {
       quotation_number: nextQuotationNumber,
       title: "",
+      sampling_location: "",
       user_id: "",
       use_tax: true,
       discount_amount: 0,
@@ -206,12 +208,21 @@ export function QuotationForm({
                            <Button type="button" onClick={onAddCustomer} variant="outline" className="h-9 w-9 rounded-lg border-slate-200 text-emerald-600 shrink-0"><UserPlus className="h-4 w-4" /></Button>
                         </div>
                      </div>
-                     <div className="md:col-span-12 space-y-1 text-left">
-                        <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Judul Pekerjaan <span className="text-rose-500">*</span></label>
-                        <Input {...register("title")} placeholder="Contoh: Analisa Berkala Kualitas Air" className={cn("h-9 border-slate-200 rounded-lg font-bold text-xs", errors.title && "border-rose-300")} />
-                     </div>
-                  </div>
-               </div>
+                      <div className="md:col-span-12 space-y-1 text-left">
+                         <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Judul Pekerjaan <span className="text-rose-500">*</span></label>
+                         <Input {...register("title")} placeholder="Contoh: Analisa Berkala Kualitas Air" className={cn("h-9 border-slate-200 rounded-lg font-bold text-xs", errors.title && "border-rose-300")} />
+                      </div>
+                       <div className="md:col-span-12 space-y-1 text-left">
+                          <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Lokasi Sampling</label>
+                          <textarea
+                            {...register("sampling_location")}
+                           rows={3}
+                           placeholder="Lokasi sampling / titik pengambilan contoh..."
+                           className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none shadow-sm resize-none"
+                         />
+                       </div>
+                   </div>
+                </div>
 
                {/* 02. Daftar Layanan */}
                <div className="space-y-3">

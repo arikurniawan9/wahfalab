@@ -31,6 +31,11 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-require-imports": "warn",
     },
   },
+  {
+    ignores: [
+      "src/generated/**",
+    ],
+  },
 ]);
 
 export default eslintConfig;

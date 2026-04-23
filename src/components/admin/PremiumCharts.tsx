@@ -44,40 +44,39 @@ const STATUS_COLORS: Record<string, string> = {
   scheduled: "#64748b",   // slate-500
 };
 
-export function PremiumCharts({ quotationTrend, jobStatus, revenueData = [] }: PremiumChartsProps) {
-  // Custom Tooltip for AreaChart
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-white p-4 rounded-xl shadow-xl border border-slate-100">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{label}</p>
-          <p className="text-lg font-black text-slate-900">
-            {payload[0].value} Penawaran
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
+function CustomTooltip({ active, payload, label }: any) {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-white p-4 rounded-xl shadow-xl border border-slate-100">
+        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{label}</p>
+        <p className="text-lg font-black text-slate-900">
+          {payload[0].value} Penawaran
+        </p>
+      </div>
+    );
+  }
+  return null;
+}
 
-  // Custom Tooltip for BarChart
-  const RevenueTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-white p-4 rounded-xl shadow-xl border border-slate-100">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{label}</p>
-          <p className="text-lg font-black text-emerald-600">
-            {new Intl.NumberFormat('id-ID', {
-              style: 'currency',
-              currency: 'IDR',
-              minimumFractionDigits: 0
-            }).format(payload[0].value)}
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
+function RevenueTooltip({ active, payload, label }: any) {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-white p-4 rounded-xl shadow-xl border border-slate-100">
+        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{label}</p>
+        <p className="text-lg font-black text-emerald-600">
+          {new Intl.NumberFormat('id-ID', {
+            style: 'currency',
+            currency: 'IDR',
+            minimumFractionDigits: 0
+          }).format(payload[0].value)}
+        </p>
+      </div>
+    );
+  }
+  return null;
+}
+
+export function PremiumCharts({ quotationTrend, jobStatus, revenueData = [] }: PremiumChartsProps) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -54,11 +54,12 @@ import {
   ArrowRightCircle,
   Maximize2,
   MoreHorizontal,
-  Check
+  Check,
+  Send
 } from "lucide-react";
 import { LoadingOverlay, LoadingButton } from "@/components/ui";
 import { TableSkeleton } from "@/components/ui/skeleton";
-import { getJobOrders, getJobStats, getFieldOfficers, getCustomers, deleteJobOrderWithPhotos } from "@/lib/actions/jobs";
+import { getJobOrders, getJobStats, getFieldOfficers, getCustomers, deleteJobOrderWithPhotos, sendTravelOrderToField } from "@/lib/actions/jobs";
 import { getFieldAssistants } from "@/lib/actions/field-assistant";
 import { createSamplingAssignment } from "@/lib/actions/sampling";
 import { toast } from "sonner";
@@ -128,35 +129,53 @@ function PremiumStatCard({ title, value, subValue, icon: Icon, color, onClick, a
     <div 
       onClick={onClick}
       className={cn(
-        "relative group cursor-pointer transition-all duration-500 p-[1px] rounded-[2rem] overflow-hidden",
-        active ? "bg-gradient-to-br from-emerald-500 to-teal-500 shadow-2xl scale-[1.02]" : "hover:scale-[1.02]"
+        "relative group cursor-pointer transition-all duration-300 p-[1px] rounded-[1.5rem] overflow-hidden",
+        active ? "bg-emerald-700 shadow-lg shadow-emerald-900/20 scale-[1.01]" : "hover:scale-[1.01] bg-slate-100"
       )}
     >
       <div className={cn(
-        "bg-white h-full w-full rounded-[1.95rem] p-6 flex flex-col justify-between transition-all duration-500",
-        active ? "bg-opacity-95" : "bg-opacity-100 hover:bg-slate-50"
+        "h-full w-full rounded-[1.45rem] p-4 flex flex-col justify-between transition-all duration-300 min-h-[132px]",
+        active ? "bg-emerald-700" : "bg-white hover:bg-slate-50"
       )}>
-        <div className="flex justify-between items-start mb-4">
+        <div className="flex justify-between items-start mb-2">
           <div className={cn(
-            "h-12 w-12 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-500 group-hover:rotate-12",
-            active ? "bg-emerald-600 text-white" : iconColors[color] || "bg-slate-100 text-slate-500"
+            "h-9 w-9 rounded-xl flex items-center justify-center shadow-sm transition-all duration-300",
+            active ? "bg-white text-emerald-700" : iconColors[color] || "bg-slate-100 text-slate-500"
           )}>
-            <Icon className="h-6 w-6" />
+            <Icon className="h-4 w-4" />
           </div>
-          {active && <div className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />}
+          {active && <div className="h-2 w-2 rounded-full bg-emerald-200 animate-pulse" />}
         </div>
         
         <div>
-          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">{title}</h3>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-black text-slate-900 tracking-tighter">{value}</span>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{subValue}</span>
+          <h3 className={cn(
+            "text-[9px] font-black uppercase tracking-[0.16em] mb-1.5",
+            active ? "text-emerald-100" : "text-slate-400"
+          )}>{title}</h3>
+          <div className="flex items-baseline gap-1.5">
+            <span className={cn(
+              "text-2xl font-black tracking-tight leading-none",
+              active ? "text-white" : "text-slate-900"
+            )}>{value}</span>
+            <span className={cn(
+              "text-[9px] font-bold uppercase tracking-wider",
+              active ? "text-emerald-100" : "text-slate-400"
+            )}>{subValue}</span>
           </div>
         </div>
         
-        <div className="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between">
-          <span className="text-[8px] font-bold text-emerald-600 uppercase tracking-widest">View Details</span>
-          <ArrowUpRight className="h-3 w-3 text-slate-300 group-hover:text-emerald-500 transition-colors" />
+        <div className={cn(
+          "mt-3 pt-3 border-t flex items-center justify-between",
+          active ? "border-emerald-600/70" : "border-slate-100"
+        )}>
+          <span className={cn(
+            "text-[8px] font-bold uppercase tracking-widest",
+            active ? "text-emerald-100" : "text-emerald-600"
+          )}>View Details</span>
+          <ArrowUpRight className={cn(
+            "h-3 w-3 transition-colors",
+            active ? "text-emerald-100" : "text-slate-300 group-hover:text-emerald-500"
+          )} />
         </div>
       </div>
     </div>
@@ -247,6 +266,8 @@ const statusOptions = [
   { value: "completed", label: "Selesai", color: "bg-emerald-600 text-white border-emerald-600", icon: CheckCircle },
 ];
 
+const createInitialFilters = () => ({ dateFrom: "", dateTo: "", fieldOfficerId: "", customerId: "" });
+
 export default function AdminJobProgressPage() {
   const [data, setData] = useState<any>({ items: [], total: 0, pages: 1 });
   const [stats, setStats] = useState<any>({ total: 0 });
@@ -255,7 +276,8 @@ export default function AdminJobProgressPage() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [filters, setFilters] = useState<any>({ dateFrom: "", dateTo: "", fieldOfficerId: "", customerId: "" });
+  const [draftFilters, setDraftFilters] = useState<any>(createInitialFilters());
+  const [appliedFilters, setAppliedFilters] = useState<any>(createInitialFilters());
   const [fieldOfficers, setFieldOfficers] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [showFilters, setShowFilters] = useState(false);
@@ -265,6 +287,8 @@ export default function AdminJobProgressPage() {
   const [deleting, setDeleting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
+  const [assignDialogLoading, setAssignDialogLoading] = useState(false);
+  const [sendingTravelOrderJobId, setSendingTravelOrderJobId] = useState<string | null>(null);
   const [assistants, setAssistants] = useState<any[]>([]);
   const [assignFormData, setAssignFormData] = useState<any>({
     job_order_id: "", field_officer_id: "", assistant_ids: [], scheduled_date: "", scheduled_time: "08:00", location: "", notes: ""
@@ -286,7 +310,7 @@ export default function AdminJobProgressPage() {
     try {
       const result = await getJobOrders(page, limit, debouncedSearch, {
         status: filterStatus !== 'all' ? filterStatus : undefined,
-        ...filters
+        ...appliedFilters
       });
       setData(result);
     } catch (error: any) {
@@ -294,7 +318,7 @@ export default function AdminJobProgressPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, debouncedSearch, filterStatus, filters]);
+  }, [page, limit, debouncedSearch, filterStatus, appliedFilters]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -328,21 +352,22 @@ export default function AdminJobProgressPage() {
 
     // Open dialog immediately
     setIsAssignDialogOpen(true);
+    setAssistants([]);
 
-    // Load data in background
-    setLoading(true);
+    // Load dialog options in background without affecting main table loading
+    setAssignDialogLoading(true);
     try {
       const [officers, assistantList] = await Promise.all([
         getFieldOfficers(),
         getFieldAssistants()
       ]);
       setFieldOfficers(officers || []);
-      setAssistants(assistantList || []);
+      setAssistants(assistantList?.items || []);
     } catch (error) { 
       toast.error("Gagal memuat data petugas"); 
     }
     finally { 
-      setLoading(false); 
+      setAssignDialogLoading(false); 
     }
   };
 
@@ -404,7 +429,11 @@ export default function AdminJobProgressPage() {
   };
 
   const handleQuickPrintManifest = async (job: any) => {
-    // Print Surat Tugas (SPL)
+    if (!job.sampling_assignment) {
+      toast.error("Belum ada penugasan petugas lapangan");
+      return;
+    }
+
     try {
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
@@ -414,11 +443,16 @@ export default function AdminJobProgressPage() {
         return;
       }
 
-      // Fetch company profile for real data
-      let companyName = 'PT WAHFA LAB PRATAMA';
-      let companyAddress = 'Jl. Raya Laboratorium No. 123, Jakarta, Indonesia';
-      let companyPhone = '(021) 1234-5678';
-      let companyEmail = 'info@wahfalab.com';
+      const escapeHtml = (value: any) => String(value ?? "-")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+      let companyName = 'PT WAHFA LAB INDONESIA';
+      let companyAddress = 'Jl. Raya Cianjur';
+      let companyLeader = 'Spv. Administrasi';
       let companyLogo = '';
 
       try {
@@ -428,8 +462,7 @@ export default function AdminJobProgressPage() {
           if (companyData) {
             companyName = companyData.company_name || companyName;
             companyAddress = companyData.address || companyAddress;
-            companyPhone = companyData.phone || companyPhone;
-            companyEmail = companyData.email || companyEmail;
+            companyLeader = companyData.leader_name || companyLeader;
             companyLogo = companyData.logo_url || '';
           }
         }
@@ -437,16 +470,16 @@ export default function AdminJobProgressPage() {
         console.error('Error fetching company profile:', error);
       }
 
-      // Get data with fallbacks
       const customerName = job.quotation?.profile?.company_name ||
-                          job.quotation?.profile?.full_name ||
-                          job.customer_name ||
-                          '-';
+        job.quotation?.profile?.full_name ||
+        '-';
+
+      const picName = job.quotation?.profile?.full_name || '-';
+      const customerAddress = job.quotation?.profile?.address || '-';
 
       const location = job.sampling_assignment?.location ||
-                      job.location ||
-                      job.quotation?.profile?.address ||
-                      '-';
+        job.quotation?.profile?.address ||
+        '-';
 
       const scheduledDate = job.sampling_assignment?.scheduled_date;
       const dateDisplay = scheduledDate
@@ -457,431 +490,342 @@ export default function AdminJobProgressPage() {
           })
         : '-';
 
-      const officerName = job.sampling_assignment?.field_officer?.full_name ||
-                         job.sampling_assignment?.field_officer_name ||
-                         '-';
+      const rangeDisplay = scheduledDate
+        ? `${dateDisplay} sampai dengan selesai`
+        : '.......................... sampai dengan selesai';
 
-      // Fix: Get assistants properly from sampling_assignment
-      let assistantsDisplay = '-';
-      if (job.sampling_assignment) {
-        const asstArray = Array.isArray(job.sampling_assignment.assistants) 
-          ? job.sampling_assignment.assistants 
-          : [];
-        if (asstArray.length > 0) {
-          assistantsDisplay = asstArray
-            .map((a: any) => a.full_name || a.name)
-            .filter(Boolean)
-            .join(', ');
+      const officerName = job.sampling_assignment?.field_officer?.full_name || '-';
+      const assistantNames = Array.isArray(job.sampling_assignment?.assistants)
+        ? job.sampling_assignment.assistants.map((a: any) => a.full_name).filter(Boolean)
+        : [];
+
+      const personnel = [officerName, ...assistantNames].filter(Boolean);
+      const personnelHtml = personnel.length > 0
+        ? personnel.map((name, idx) => `<li>${idx + 1}. ${escapeHtml(name)}</li>`).join("")
+        : "<li>1. -</li>";
+
+      const parseParameterSnapshot = (snapshot: any) => {
+        if (!snapshot) return "-";
+        try {
+          const parsed = typeof snapshot === "string" ? JSON.parse(snapshot) : snapshot;
+          if (Array.isArray(parsed)) {
+            return parsed
+              .map((p: any) => p?.name || p?.parameter_name || String(p))
+              .filter(Boolean)
+              .join(", ");
+          }
+          if (typeof parsed === "object") {
+            return Object.values(parsed).join(", ");
+          }
+          return String(parsed);
+        } catch {
+          return String(snapshot);
         }
-      }
+      };
 
       const items = job.quotation?.items || [];
-      const servicesHTML = items.length > 0
+      const jobTitle = items.length > 0
+        ? items
+            .map((item: any) => item.service?.name || item.equipment?.name || 'Pekerjaan Sampling')
+            .filter(Boolean)
+            .join(', ')
+        : `Pekerjaan ${job.tracking_code || '-'}`;
+
+      const rowsHtml = items.length > 0
         ? items.map((item: any, idx: number) => {
-            const serviceName = item.service?.name || item.service_name || item.name || '-';
-            
-            // Fix: Get parameters properly
-            let paramsDisplay = '-';
-            const params = item.service?.parameters || item.parameters;
-            
-            if (params) {
-              try {
-                const parsed = typeof params === 'string' ? JSON.parse(params) : params;
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                  paramsDisplay = parsed
-                    .map((p: any) => p.name || p.parameter_name || p)
-                    .filter(Boolean)
-                    .join(', ');
-                }
-              } catch (e) {
-                paramsDisplay = String(params);
-              }
-            }
+            const serviceName = item.service?.name || item.equipment?.name || '-';
+            const qty = Number(item.qty || 1);
+            const regulation = item.service?.regulation_ref?.name || item.service?.regulation || '-';
+            const paramsDisplay = parseParameterSnapshot(item.parameter_snapshot);
+            const regulationParams = regulation !== '-'
+              ? `${escapeHtml(regulation)}<br/>${paramsDisplay !== '-' ? escapeHtml(paramsDisplay) : ''}`
+              : escapeHtml(paramsDisplay);
 
             return `
               <tr>
-                <td style="text-align: center;">${idx + 1}</td>
-                <td>${serviceName}</td>
-                <td>${paramsDisplay || '-'}</td>
+                <td class="cell-center">${idx + 1}</td>
+                <td>${escapeHtml(serviceName)}</td>
+                <td class="cell-center">${qty} titik</td>
+                <td>${regulationParams || '-'}</td>
               </tr>
             `;
           }).join('')
-        : '<tr><td colspan="3" style="text-align: center; padding: 20px; color: #666;">Tidak ada pengujian</td></tr>';
+        : '<tr><td colspan="4" class="cell-center">Tidak ada deskripsi pekerjaan</td></tr>';
+
+      const cityDate = `Cianjur, ${new Date().toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      })}`;
+      const numberSeed = String(job.tracking_code || '').replace(/\D/g, '').slice(-2) || '00';
+      const suratNumber = `${numberSeed}/ST/WLI/${new Date().getFullYear()}`;
+      const origin = window.location.origin;
+      const fallbackLogo = `${origin}/logo-wahfalab.png`;
+      const resolvedLogo = fallbackLogo;
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, "0");
+      const d = String(now.getDate()).padStart(2, "0");
+      const docAutoNumber = `F-7.3-${y}${m}${d}-${numberSeed}`;
 
       const html = `
         <!DOCTYPE html>
         <html>
         <head>
           <meta charset="UTF-8">
+          <title>Surat Tugas Pengambilan Contoh</title>
           <style>
-            @page {
-              size: A4;
-              margin: 1.5cm 2cm 1.5cm 2cm;
-            }
             * { margin: 0; padding: 0; box-sizing: border-box; }
             body {
-              font-family: 'Arial', sans-serif;
+              font-family: Arial, Helvetica, sans-serif;
               font-size: 11pt;
-              line-height: 1.5;
+              line-height: 1.45;
               color: #000;
-              background: #fff;
+              padding: 16px 20px;
             }
-
-            /* Kop Surat */
-            .kop-surat {
-              border-bottom: 3px double #000;
-              padding-bottom: 10px;
-              margin-bottom: 15px;
+            .doc-header {
+              width: 100%;
+              border-collapse: collapse;
+              border: 1px solid #000;
+              margin-bottom: 14px;
+              table-layout: fixed;
+            }
+            .doc-header td {
+              border: 1px solid #000;
+              padding: 4px 6px;
+            }
+            .doc-header .logo-cell {
+              width: 30%;
+              text-align: left;
+              vertical-align: middle;
+              padding: 6px 10px;
+            }
+            .doc-header .brand-wrap {
               display: flex;
               align-items: center;
-              gap: 20px;
+              gap: 8px;
             }
-            .kop-logo {
-              flex-shrink: 0;
-            }
-            .kop-logo img {
-              height: 70px;
-              width: auto;
+            .doc-header .logo-cell img {
+              max-width: 32px;
+              width: 32px;
+              height: auto;
               object-fit: contain;
-              filter: none !important;
-              -webkit-filter: none !important;
+              display: inline-block;
             }
-            .kop-logo .emoji-logo {
-              font-size: 56px;
+            .doc-header .brand-text {
+              font-size: 19pt;
               line-height: 1;
-              color: inherit;
+              font-weight: 700;
+              color: #3f3f46;
+              letter-spacing: -0.6px;
             }
-            .kop-info {
-              flex: 1;
-            }
-            .kop-info .company-name {
-              font-size: 16pt;
-              font-weight: bold;
-              text-transform: uppercase;
-              margin-bottom: 3px;
-            }
-            .kop-info .company-address {
-              font-size: 9pt;
-              margin-bottom: 2px;
-            }
-            .kop-info .company-contact {
-              font-size: 9pt;
-              font-style: italic;
-            }
-
-            /* Force hide browser headers/footers */
-            @media print {
-              @page {
-                margin-top: 1cm;
-                margin-bottom: 1cm;
-                margin-left: 2cm;
-                margin-right: 2cm;
-                size: A4;
-              }
-              html, body {
-                height: auto !important;
-                overflow: visible !important;
-              }
-              body {
-                print-color-adjust: exact;
-                -webkit-print-color-adjust: exact;
-                -moz-print-color-adjust: exact;
-                margin: 0 !important;
-                padding: 0 !important;
-              }
-              /* Hide all browser annotations */
-              @page {
-                @top-left { content: none !important; display: none !important; }
-                @top-center { content: none !important; display: none !important; }
-                @top-right { content: none !important; display: none !important; }
-                @bottom-left { content: none !important; display: none !important; }
-                @bottom-center { content: none !important; display: none !important; }
-                @bottom-right { content: none !important; display: none !important; }
-                @left-top { content: none !important; }
-                @left-middle { content: none !important; }
-                @left-bottom { content: none !important; }
-                @right-top { content: none !important; }
-                @right-middle { content: none !important; }
-                @right-bottom { content: none !important; }
-              }
-            }
-            .judul-surat {
+            .doc-header .title-cell {
               text-align: center;
-              margin: 20px 0 15px 0;
+              vertical-align: middle;
+              font-weight: 700;
+              line-height: 1.15;
+              padding: 6px 8px;
             }
-            .judul-surat .document-title {
-              font-size: 14pt;
-              font-weight: bold;
-              text-transform: uppercase;
-              text-decoration: underline;
-              margin-bottom: 5px;
+            .doc-header .title-form {
+              font-size: 11pt;
             }
-            .judul-surat .document-number {
-              font-size: 10pt;
+            .doc-header .title-main {
+              font-size: 12pt;
+              margin-top: 2px;
             }
-            
-            /* Isi Surat */
-            .isi-surat {
-              margin-top: 20px;
+            .doc-header .meta-cell {
+              text-align: center;
+              font-size: 7.2pt;
+              font-weight: 700;
+              white-space: normal;
+              word-break: break-word;
+              line-height: 1.05;
+              padding: 2px 4px;
             }
-            .isi-surat p {
+            .doc-header .meta-label {
+              display: block;
+              font-size: 6.8pt;
+              font-weight: 700;
+              margin-bottom: 1px;
+            }
+            .doc-header .meta-value {
+              display: block;
+              font-size: 7.4pt;
+              font-weight: 800;
+            }
+            .letter-head {
+              margin-top: 18px;
               margin-bottom: 12px;
+            }
+            .letter-date {
+              text-align: right;
+              margin-bottom: 8px;
+            }
+            .letter-head p { margin-bottom: 6px; }
+            .letter-head .nomor-line { margin-top: 8px; }
+            .body p {
+              margin-bottom: 10px;
               text-align: justify;
             }
-            
-            /* Tabel Detail */
-            .detail-box {
-              margin: 15px 0;
+            .personnel-list {
+              margin: 8px 0 12px 0;
+              padding-left: 0;
+              list-style: none;
+            }
+            .personnel-list li { margin-bottom: 4px; }
+            .work-table {
               width: 100%;
               border-collapse: collapse;
-            }
-            .detail-box td {
-              padding: 6px 8px;
-              border: 1px solid #000;
-              vertical-align: top;
-            }
-            .detail-box td:first-child {
-              width: 25%;
-              font-weight: bold;
-              background: #f5f5f5;
-            }
-            .detail-box td:nth-child(2) {
-              width: 3%;
-              text-align: center;
-            }
-            
-            /* Tabel Pengujian */
-            .tabel-pengujian {
-              margin: 20px 0;
-              border-collapse: collapse;
-              width: 100%;
-            }
-            .tabel-pengujian th,
-            .tabel-pengujian td {
-              border: 1px solid #000;
-              padding: 8px;
-              text-align: left;
+              margin: 10px 0 12px 0;
               font-size: 10pt;
             }
-            .tabel-pengujian th {
-              background: #e0e0e0;
-              font-weight: bold;
+            .work-table th, .work-table td {
+              border: 1px solid #000;
+              padding: 6px 7px;
+              vertical-align: top;
+            }
+            .work-table th {
               text-align: center;
+              font-weight: 700;
             }
-            .tabel-pengujian td:first-child {
+            .cell-center {
               text-align: center;
-              width: 40px;
+              vertical-align: middle;
             }
-            
-            /* Tanda Tangan */
-            .tanda-tangan {
-              margin-top: 50px;
-              width: 100%;
+            .signature {
+              margin-top: 28px;
             }
-            .ttd-container {
-              display: flex;
-              justify-content: space-between;
-              gap: 50px;
+            .signature-name {
+              margin-top: 46px;
+              font-weight: 700;
             }
-            .ttd-box {
-              flex: 1;
+            .footer-note {
+              margin-top: 36px;
               text-align: center;
-            }
-            .ttd-box .jabatan {
-              margin-bottom: 90px;
-              font-weight: bold;
-              line-height: 1.6;
-              min-height: 60px;
-            }
-            .ttd-box .nama {
+              font-size: 8pt;
               border-top: 1px solid #000;
               padding-top: 8px;
-              display: inline-block;
-              min-width: 200px;
-              font-weight: bold;
             }
-            
-            /* Footer */
-            .footer {
-              margin-top: 30px;
-              font-size: 8pt;
-              font-style: italic;
-              text-align: center;
-              border-top: 1px solid #ccc;
-              padding-top: 8px;
+            @page {
+              size: A4;
+              margin: 10mm 12mm;
             }
-            
-            /* Print Controls */
+            @media print { .no-print { display: none; } }
             .no-print {
-              margin-top: 40px;
+              margin-top: 24px;
               text-align: center;
-              padding: 30px;
-              background: #f5f5f5;
-              border-radius: 10px;
-              border: 2px solid #ddd;
+              padding: 14px;
+              border: 1px solid #ddd;
+              border-radius: 8px;
             }
             .btn {
-              padding: 14px 40px;
+              padding: 10px 24px;
               border: none;
-              border-radius: 8px;
+              border-radius: 6px;
               cursor: pointer;
-              font-size: 14px;
-              font-weight: bold;
+              font-size: 13px;
+              font-weight: 700;
               margin: 0 10px;
-              transition: all 0.3s ease;
-              text-transform: uppercase;
             }
-            .btn-print {
-              background: #059669;
-              color: white;
-            }
-            .btn-print:hover {
-              background: #047857;
-              transform: translateY(-2px);
-              box-shadow: 0 4px 8px rgba(5, 150, 105, 0.3);
-            }
-            .btn-close {
-              background: #64748b;
-              color: white;
-            }
-            .btn-close:hover {
-              background: #475569;
-              transform: translateY(-2px);
-              box-shadow: 0 4px 8px rgba(100, 116, 139, 0.3);
-            }
-            
-            @media print {
-              .no-print { display: none; }
-              body { font-size: 11pt; }
-              @page { margin: 2cm 2cm 2cm 2cm; }
-            }
+            .btn-print { background: #047857; color: #fff; }
+            .btn-close { background: #475569; color: #fff; }
           </style>
         </head>
         <body onload="window.print();">
-          <!-- Kop Surat -->
-          <div class="kop-surat">
-            <div class="kop-logo">
-              ${companyLogo ? `<img src="${companyLogo}" alt="Logo" />` : '<div class="emoji-logo">🧪</div>'}
-            </div>
-            <div class="kop-info">
-              <div class="company-name">${companyName}</div>
-              <div class="company-address">
-                ${companyAddress}
-              </div>
-              <div class="company-contact">
-                Telp: ${companyPhone} | Email: ${companyEmail}
-              </div>
-            </div>
+          <table class="doc-header">
+            <tr>
+              <td class="logo-cell">
+                <div class="brand-wrap">
+                  <img src="${escapeHtml(resolvedLogo)}" alt="Logo Wahfalab" onerror="this.onerror=null;this.src='${escapeHtml(fallbackLogo)}';" />
+                  <span class="brand-text">Wahfalab</span>
+                </div>
+              </td>
+              <td class="title-cell" colspan="4">
+                <div class="title-form">FORMULIR</div>
+                <div class="title-main">SURAT TUGAS PENGAMBILAN CONTOH</div>
+              </td>
+            </tr>
+            <tr>
+              <td class="meta-cell">
+                <span class="meta-label">NOMOR DOKUMEN</span>
+                <span class="meta-value">${escapeHtml(docAutoNumber)}</span>
+              </td>
+              <td class="meta-cell">
+                <span class="meta-label">TERBITAN / REVISI</span>
+                <span class="meta-value">01/00</span>
+              </td>
+              <td class="meta-cell">
+                <span class="meta-label">TANGGAL TERBIT</span>
+                <span class="meta-value">02-01-2026</span>
+              </td>
+              <td class="meta-cell">
+                <span class="meta-label">TANGGAL REVISI</span>
+                <span class="meta-value">-</span>
+              </td>
+              <td class="meta-cell">
+                <span class="meta-label">HALAMAN</span>
+                <span class="meta-value">1 DARI 1</span>
+              </td>
+            </tr>
+          </table>
+
+          <div class="letter-head">
+            <p class="letter-date">${escapeHtml(cityDate)}</p>
+            <p class="nomor-line">Nomor : ${escapeHtml(suratNumber)}</p>
+            <p style="margin-top: 12px;">Kepada Yth.</p>
+            <p><strong>${escapeHtml(customerName)}</strong></p>
+            <p>${escapeHtml(customerAddress)}</p>
+            <p style="margin-top: 8px;">u.p. : <strong>${escapeHtml(picName)}</strong></p>
           </div>
-          
-          <!-- Judul Surat -->
-          <div class="judul-surat">
-            <div class="document-title">SURAT PERINTAH KERJA</div>
-            <div class="document-number">Nomor: ${job.tracking_code || job.id || '-'}/SPK/III/2026</div>
-          </div>
-          
-          <!-- Isi Surat -->
-          <div class="isi-surat">
-            <p>
-              Yang bertanda tangan di bawah ini, Manager Operasional PT Wahfa Lab Pratama, 
-              memberikan tugas kepada petugas untuk melaksanakan kegiatan sampling dan 
-              pengujian laboratorium dengan detail sebagai berikut:
-            </p>
-            
-            <table class="detail-box">
-              <tr>
-                <td>No. Job Order</td>
-                <td>:</td>
-                <td><strong>${job.tracking_code || '-'}</strong></td>
-              </tr>
-              <tr>
-                <td>Customer</td>
-                <td>:</td>
-                <td><strong>${customerName}</strong></td>
-              </tr>
-              <tr>
-                <td>Lokasi Sampling</td>
-                <td>:</td>
-                <td>${location}</td>
-              </tr>
-              <tr>
-                <td>Tanggal Sampling</td>
-                <td>:</td>
-                <td>${dateDisplay}</td>
-              </tr>
-              <tr>
-                <td>Petugas Sampling</td>
-                <td>:</td>
-                <td><strong>${officerName}</strong></td>
-              </tr>
-              ${assistantsDisplay !== '-' ? `
-              <tr>
-                <td>Asisten Lapangan</td>
-                <td>:</td>
-                <td><strong>${assistantsDisplay}</strong></td>
-              </tr>
-              ` : ''}
-            </table>
-            
-            <p><strong>Daftar Pengujian:</strong></p>
-            
-            <table class="tabel-pengujian">
+
+          <div class="body">
+            <p>Dengan hormat,</p>
+            <p>Bersama ini kami menugaskan kepada nama-nama tersebut dibawah ini :</p>
+            <ol class="personnel-list">
+              ${personnelHtml}
+            </ol>
+            <p>Untuk melaksanakan,</p>
+            <p><strong>Pekerjaan :</strong> ${escapeHtml(jobTitle)}</p>
+
+            <table class="work-table">
               <thead>
                 <tr>
-                  <th>No</th>
-                  <th>Nama Pengujian</th>
-                  <th>Parameter</th>
+                  <th style="width: 42px;">No</th>
+                  <th>Deskripsi Pekerjaan</th>
+                  <th style="width: 95px;">Jumlah</th>
+                  <th>Parameter/Regulasi</th>
                 </tr>
               </thead>
               <tbody>
-                ${servicesHTML}
+                ${rowsHtml}
               </tbody>
             </table>
-            
+
             <p>
-              Demikian surat perintah kerja ini dibuat untuk dilaksanakan dengan penuh 
-              tanggung jawab dan profesionalisme.
+              Pelaksanaan pekerjaan tersebut dari tanggal ${escapeHtml(rangeDisplay)}, berlokasi di ${escapeHtml(location)}.
             </p>
-          </div>
-          
-          <!-- Tanda Tangan -->
-          <div class="tanda-tangan">
-            <div class="ttd-container">
-              <div class="ttd-box">
-                <div class="jabatan">
-                  Mengetahui,<br>
-                  Manager Operasional
-                </div>
-                <div class="nama">
-                  ( ___________________ )
-                </div>
-              </div>
-              <div class="ttd-box">
-                <div class="jabatan">
-                  Petugas Sampling
-                </div>
-                <div class="nama">
-                  ( ${officerName} )
-                </div>
-              </div>
+            <p>
+              Demikian surat tugas ini kami buat dengan sebenar-benarnya untuk dipergunakan sebagaimana mestinya.
+            </p>
+
+            <div class="signature">
+              <p>Hormat Kami,</p>
+              <p class="signature-name">${escapeHtml(companyLeader)}</p>
+              <p>(${escapeHtml(companyName)})</p>
+            </div>
+
+            <div class="footer-note">
+              Dokumen ini terkendali kecuali di luar ketentuan distribusi pengendalian dokumen<br/>
+              Laboratorium Penguji ${escapeHtml(companyName)}
             </div>
           </div>
-          
-          <!-- Footer -->
-          <div class="footer">
-            Dokumen ini dicetak secara otomatis dari sistem WahfaLab pada ${new Date().toLocaleDateString('id-ID', { 
-              day: 'numeric', 
-              month: 'long', 
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
-          </div>
-          
-          <!-- Print Controls -->
+
           <div class="no-print">
-            <button onclick="window.print()" class="btn btn-print">🖨️ Cetak A4</button>
-            <button onclick="window.close()" class="btn btn-close">❌ Tutup</button>
+            <button onclick="window.print()" class="btn btn-print">Cetak A4</button>
+            <button onclick="window.close()" class="btn btn-close">Tutup</button>
+            <div style="margin-top:8px;font-size:11px;color:#334155;">
+              Jika header/footer browser masih muncul, nonaktifkan opsi “Headers and footers” di dialog print.
+            </div>
           </div>
         </body>
         </html>
@@ -894,6 +838,28 @@ export default function AdminJobProgressPage() {
       toast.error("Gagal mencetak surat tugas", {
         description: error.message
       });
+    }
+  };
+  const handleSendTravelOrder = async (job: any) => {
+    if (!job.sampling_assignment) {
+      toast.error("Belum ada penugasan petugas lapangan");
+      return;
+    }
+
+    setSendingTravelOrderJobId(job.id);
+    try {
+      const result = await sendTravelOrderToField(job.id);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+
+      toast.success("Surat tugas berhasil dikirim ke petugas lapangan");
+      loadData();
+    } catch (error: any) {
+      toast.error(error.message || "Gagal mengirim surat tugas");
+    } finally {
+      setSendingTravelOrderJobId(null);
     }
   };
 
@@ -1077,12 +1043,12 @@ export default function AdminJobProgressPage() {
 
         {/* Advanced Filters Panel */}
         {showFilters && (
-          <div className="p-8 bg-slate-50/50 border-b border-slate-100 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-in slide-in-from-top-6 duration-500">
+          <div className="p-8 bg-slate-50/50 border-b border-slate-100 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 animate-in slide-in-from-top-6 duration-500">
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                 <User className="h-3 w-3" /> Database Klien
               </label>
-              <Select value={filters.customerId} onValueChange={(v) => setFilters({...filters, customerId: v})}>
+              <Select value={draftFilters.customerId} onValueChange={(v) => setDraftFilters({ ...draftFilters, customerId: v })}>
                 <SelectTrigger className="bg-white border-none rounded-2xl h-14 text-xs font-black uppercase tracking-tight shadow-sm px-5">
                   <SelectValue placeholder="Semua Klien" />
                 </SelectTrigger>
@@ -1096,7 +1062,7 @@ export default function AdminJobProgressPage() {
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                 <ShieldCheck className="h-3 w-3" /> Personel Lapangan
               </label>
-              <Select value={filters.fieldOfficerId} onValueChange={(v) => setFilters({...filters, fieldOfficerId: v})}>
+              <Select value={draftFilters.fieldOfficerId} onValueChange={(v) => setDraftFilters({ ...draftFilters, fieldOfficerId: v })}>
                 <SelectTrigger className="bg-white border-none rounded-2xl h-14 text-xs font-black uppercase tracking-tight shadow-sm px-5">
                   <SelectValue placeholder="Semua Petugas" />
                 </SelectTrigger>
@@ -1112,22 +1078,42 @@ export default function AdminJobProgressPage() {
               </label>
               <Input 
                 type="date" 
-                value={filters.dateFrom} 
-                onChange={(e) => setFilters({...filters, dateFrom: e.target.value})} 
+                value={draftFilters.dateFrom} 
+                onChange={(e) => setDraftFilters({ ...draftFilters, dateFrom: e.target.value })} 
                 className="bg-white border-none rounded-2xl h-14 text-xs font-black uppercase shadow-sm px-5" 
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                <Calendar className="h-3 w-3" /> Tanggal Akhir
+              </label>
+              <Input
+                type="date"
+                value={draftFilters.dateTo}
+                onChange={(e) => setDraftFilters({ ...draftFilters, dateTo: e.target.value })}
+                className="bg-white border-none rounded-2xl h-14 text-xs font-black uppercase shadow-sm px-5"
               />
             </div>
 
             <div className="flex items-end gap-3">
               <Button 
                 variant="ghost" 
-                onClick={() => { setFilters({dateFrom:"", dateTo:"", fieldOfficerId:"", customerId:""}); setPage(1); }} 
+                onClick={() => {
+                  const resetFilters = createInitialFilters();
+                  setDraftFilters(resetFilters);
+                  setAppliedFilters(resetFilters);
+                  setPage(1);
+                }} 
                 className="text-rose-600 font-black text-[10px] uppercase tracking-widest h-14 hover:bg-rose-50 rounded-2xl flex-1 transition-all"
               >
                 Reset
               </Button>
               <Button 
-                onClick={() => loadData()}
+                onClick={() => {
+                  setAppliedFilters(draftFilters);
+                  setPage(1);
+                }}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-widest h-14 rounded-2xl flex-1 shadow-lg shadow-emerald-900/10 transition-all"
               >
                 Terapkan
@@ -1220,45 +1206,63 @@ export default function AdminJobProgressPage() {
                     </TableCell>
                     
                     <TableCell className="px-10 py-8 text-right">
-                      <div className="flex justify-end gap-3">
+                      <div className="flex justify-end gap-2">
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Link href={`/admin/jobs/${job.id}`}>
-                                <Button variant="ghost" size="icon" className="h-12 w-12 rounded-2xl bg-slate-50 text-slate-400 hover:bg-emerald-600 hover:text-white transition-all duration-500 shadow-sm border border-slate-100/50">
-                                  <Maximize2 className="h-5 w-5" />
-                                </Button>
-                              </Link>
+                              <Button asChild variant="ghost" size="icon" className="h-9 w-9 rounded-lg bg-slate-50 text-slate-400 hover:bg-emerald-600 hover:text-white transition-all duration-300 shadow-sm border border-slate-100/50">
+                                <Link href={`/admin/jobs/${job.id}`}>
+                                  <Maximize2 className="h-4 w-4" />
+                                </Link>
+                              </Button>
                             </TooltipTrigger>
-                            <TooltipContent className="bg-emerald-900 text-white rounded-xl py-2 px-3"><p className="text-[9px] font-black uppercase">Buka Pemantauan</p></TooltipContent>
+                            <TooltipContent className="bg-emerald-900 text-white rounded-md py-1 px-2">
+                              <p className="text-[8px] font-black uppercase tracking-wide">Buka Pemantauan</p>
+                            </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
 
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-12 w-12 rounded-2xl bg-white text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-500 shadow-sm border border-slate-100">
-                              <MoreVertical className="h-5 w-5" />
+                            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg bg-white text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-300 shadow-sm border border-slate-100">
+                              <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-72 p-3 rounded-[2rem] border-none shadow-2xl bg-white/95 backdrop-blur-xl">
-                            <DropdownMenuLabel className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 py-3">Kontrol Infrastruktur</DropdownMenuLabel>
+                          <DropdownMenuContent align="end" className="w-56 p-2 rounded-xl border border-slate-100 shadow-xl bg-white/95 backdrop-blur-xl">
+                            <DropdownMenuLabel className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-3 py-2">Kontrol Infrastruktur</DropdownMenuLabel>
                             <DropdownMenuSeparator className="bg-slate-50" />
-                            <DropdownMenuItem onClick={() => openAssignDialog(job)} className="rounded-2xl p-4 text-[11px] font-black uppercase tracking-widest text-slate-700 hover:bg-emerald-50 focus:bg-emerald-50 focus:text-emerald-700 transition-colors" disabled={job.status !== 'scheduled'}>
-                              <div className="h-8 w-8 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center mr-4">
-                                <UserPlus className="h-4 w-4" />
-                              </div>
-                              Tugaskan Personel
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="rounded-2xl p-4 text-[11px] font-black uppercase tracking-widest text-slate-700 hover:bg-blue-50 focus:bg-blue-50 focus:text-blue-700 transition-colors" onClick={() => handleQuickPrintManifest(job)}>
-                              <div className="h-8 w-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center mr-4">
-                                <Printer className="h-4 w-4" />
+                            {!job.sampling_assignment && (
+                              <DropdownMenuItem onClick={() => openAssignDialog(job)} className="rounded-lg p-2.5 text-[10px] font-black uppercase tracking-wider text-slate-700 hover:bg-emerald-50 focus:bg-emerald-50 focus:text-emerald-700 transition-colors" disabled={job.status !== 'scheduled'}>
+                                <div className="h-6 w-6 rounded-md bg-emerald-100 text-emerald-600 flex items-center justify-center mr-2.5">
+                                  <UserPlus className="h-3.5 w-3.5" />
+                                </div>
+                                Tugaskan Personel
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                              className="rounded-lg p-2.5 text-[10px] font-black uppercase tracking-wider text-slate-700 hover:bg-blue-50 focus:bg-blue-50 focus:text-blue-700 transition-colors data-[disabled]:opacity-40 data-[disabled]:pointer-events-none"
+                              onClick={() => handleQuickPrintManifest(job)}
+                              disabled={!job.sampling_assignment}
+                            >
+                              <div className="h-6 w-6 rounded-md bg-blue-100 text-blue-600 flex items-center justify-center mr-2.5">
+                                <Printer className="h-3.5 w-3.5" />
                               </div>
                               Cetak Surat Tugas
                             </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="rounded-lg p-2.5 text-[10px] font-black uppercase tracking-wider text-slate-700 hover:bg-indigo-50 focus:bg-indigo-50 focus:text-indigo-700 transition-colors data-[disabled]:opacity-40 data-[disabled]:pointer-events-none"
+                              onClick={() => handleSendTravelOrder(job)}
+                              disabled={!job.sampling_assignment || sendingTravelOrderJobId === job.id}
+                            >
+                              <div className="h-6 w-6 rounded-md bg-indigo-100 text-indigo-600 flex items-center justify-center mr-2.5">
+                                <Send className="h-3.5 w-3.5" />
+                              </div>
+                              {sendingTravelOrderJobId === job.id ? "Mengirim..." : "Kirim Surat Tugas"}
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator className="bg-slate-50" />
-                            <DropdownMenuItem onClick={() => { setSelectedJob(job); setIsDeleteDialogOpen(true); }} className="rounded-2xl p-4 text-[11px] font-black uppercase tracking-widest text-rose-600 hover:bg-rose-50 focus:bg-rose-50 transition-colors">
-                              <div className="h-8 w-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center mr-4">
-                                <Trash2 className="h-4 w-4" />
+                            <DropdownMenuItem onClick={() => { setSelectedJob(job); setIsDeleteDialogOpen(true); }} className="rounded-lg p-2.5 text-[10px] font-black uppercase tracking-wider text-rose-600 hover:bg-rose-50 focus:bg-rose-50 transition-colors">
+                              <div className="h-6 w-6 rounded-md bg-rose-100 text-rose-600 flex items-center justify-center mr-2.5">
+                                <Trash2 className="h-3.5 w-3.5" />
                               </div>
                               Hentikan Pekerjaan
                             </DropdownMenuItem>
@@ -1327,21 +1331,21 @@ export default function AdminJobProgressPage() {
 
       {/* ASSIGNMENT DIALOG - PREMIUM v2.0 */}
       <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
-        <DialogContent className="max-w-[95vw] sm:max-w-3xl rounded-[2.5rem] border-none p-0 overflow-hidden shadow-2xl bg-white">
+        <DialogContent showCloseButton={false} className="max-w-[95vw] sm:max-w-3xl rounded-xl border border-slate-200 p-0 overflow-hidden shadow-2xl bg-white">
           {/* Premium Header */}
-          <div className="bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 p-8 md:p-10 text-white relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500 rounded-full blur-[100px] opacity-20" />
-            <div className="absolute bottom-0 left-0 w-48 h-48 bg-teal-500 rounded-full blur-[80px] opacity-20" />
+          <div className="bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 p-5 md:p-6 text-white relative overflow-hidden border-b border-emerald-700/70">
+            <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-500 rounded-full blur-[80px] opacity-20" />
+            <div className="absolute bottom-0 left-0 w-32 h-32 bg-teal-500 rounded-full blur-[60px] opacity-20" />
             
-            <div className="relative z-10 flex items-center gap-5">
-              <div className="w-16 h-16 md:w-20 md:h-20 rounded-3xl bg-white/10 backdrop-blur-xl flex items-center justify-center border-2 border-white/20 shadow-2xl">
-                <UserPlus className="h-8 w-8 md:h-10 md:w-10 text-emerald-300" />
+            <div className="relative z-10 flex items-center gap-3">
+              <div className="w-12 h-12 md:w-14 md:h-14 rounded-xl bg-white/10 backdrop-blur-xl flex items-center justify-center border border-white/20 shadow-lg">
+                <UserPlus className="h-6 w-6 md:h-7 md:w-7 text-emerald-300" />
               </div>
               <div className="flex-1 min-w-0">
-                <DialogTitle className="text-2xl md:text-3xl font-black uppercase tracking-tight text-white leading-none truncate">
+                <DialogTitle className="text-xl md:text-2xl font-black uppercase tracking-tight text-white leading-none truncate">
                   Penugasan Personel
                 </DialogTitle>
-                <DialogDescription className="text-emerald-200 font-bold uppercase text-[10px] md:text-[11px] tracking-[0.25em] mt-2 opacity-90 truncate">
+                <DialogDescription className="text-emerald-100 font-bold uppercase text-[9px] md:text-[10px] tracking-[0.18em] mt-1.5 opacity-90 truncate">
                   {selectedJob?.tracking_code} • {selectedJob?.quotation?.profile?.company_name || 'N/A'}
                 </DialogDescription>
               </div>
@@ -1349,9 +1353,9 @@ export default function AdminJobProgressPage() {
             
             <button
               onClick={() => setIsAssignDialogOpen(false)}
-              className="absolute top-4 right-4 md:top-6 md:right-6 h-10 w-10 md:h-12 md:w-12 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-md flex items-center justify-center transition-all border border-white/10"
+              className="absolute top-3 right-3 md:top-4 md:right-4 h-9 w-9 md:h-10 md:w-10 rounded-lg bg-white/10 hover:bg-white/20 backdrop-blur-md flex items-center justify-center transition-all border border-white/10"
             >
-              <X className="h-5 w-5 md:h-6 md:w-6 text-white" />
+              <X className="h-4 w-4 md:h-5 md:w-5 text-white" />
             </button>
           </div>
 
@@ -1445,6 +1449,12 @@ export default function AdminJobProgressPage() {
                     {assignFormData.assistant_ids.length} terpilih
                   </span>
                 </div>
+
+                {assignDialogLoading && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-500">
+                    Memuat data petugas dan asisten...
+                  </div>
+                )}
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto p-3 bg-slate-50/80 rounded-3xl border-2 border-slate-100">
                   {assistants.length > 0 ? (
@@ -1542,6 +1552,7 @@ export default function AdminJobProgressPage() {
               </Button>
               <LoadingButton 
                 loading={submitting} 
+                disabled={assignDialogLoading}
                 onClick={handleAssignSubmit} 
                 className="flex-[2] h-14 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black uppercase text-[11px] tracking-widest shadow-xl shadow-emerald-900/20 transition-all active:scale-[0.98]"
               >
@@ -1556,4 +1567,5 @@ export default function AdminJobProgressPage() {
     </div>
   );
 }
+
 

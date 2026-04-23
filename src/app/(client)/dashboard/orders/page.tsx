@@ -68,6 +68,7 @@ import { toast } from "sonner";
 import { ChemicalLoader, LoadingOverlay, LoadingButton } from "@/components/ui";
 import { pdf } from "@react-pdf/renderer";
 import { InvoicePDF } from "@/components/pdf/InvoicePDF";
+type InvoicePdfData = React.ComponentProps<typeof InvoicePDF>["data"];
 
 const statusColors: Record<string, string> = {
   scheduled: 'bg-amber-50 text-amber-600 border-amber-100',
@@ -193,9 +194,9 @@ export default function ClientOrdersPage() {
     if (!order.invoice) { toast.error("Invoice belum tersedia"); return; }
     setIsDownloadingPdf(true);
     try {
-      // Get real company profile for logo and info
-      const { getCachedCompanyProfile } = await import('@/lib/cache');
-      const company = await getCachedCompanyProfile();
+      // Load company profile through a server action to keep Redis code server-only
+      const { getCompanyProfile } = await import('@/lib/actions/company');
+      const company = await getCompanyProfile();
       
       const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
       const companyProfile = { 
@@ -206,17 +207,53 @@ export default function ClientOrdersPage() {
         logo_url: company?.logo_url || `${origin}/next.svg`, // Fallback to Next.js logo if not set
         npwp: company?.npwp || '-' 
       };
-      const items = order.quotation?.items?.map((item: any) => ({ 
-        category_name: item.service?.category_ref?.name || item.service?.category || (item.equipment ? "ALAT LAB" : "Layanan Lab"), 
-        service_name: item.service?.name || item.equipment?.name || 'Layanan', 
-        parameters: item.parameter_snapshot || null, 
-        regulation: item.service?.regulation || item.service?.regulation_ref?.name || null,
-        quantity: Number(item.qty || 1), 
-        unit_price: Number(item.price_snapshot || 0), 
-        subtotal: Number((item.qty || 1) * (item.price_snapshot || 0)) 
-      })) || [];
-      const pdfData = { invoice_number: String(order.invoice.invoice_number), quotation_number: order.quotation?.quotation_number || '-', tracking_code: String(order.tracking_code), issue_date: order.invoice.created_at || new Date().toISOString(), due_date: order.invoice.due_date || new Date().toISOString(), amount: Number(order.invoice.amount || 0), payment_status: String(order.invoice.status || 'draft'), customer: { full_name: order.quotation?.profile?.full_name || 'Pelanggan', company_name: order.quotation?.profile?.company_name || '-', email: order.quotation?.profile?.email || '-', phone: order.quotation?.profile?.phone || '-', address: order.quotation?.profile?.address || '-' }, items, company: companyProfile };
-      const blob = await pdf(<InvoicePDF data={pdfData} />).toBlob();
+      const invoicePdfData: InvoicePdfData = {
+        invoice_number: String(order.invoice.invoice_number),
+        amount: Number(order.invoice.amount || 0),
+        status: String(order.invoice.status || "draft"),
+        due_date: String(order.invoice.due_date || new Date().toISOString()),
+        paid_at: order.invoice.paid_at || null,
+        created_at: String(order.invoice.created_at || new Date().toISOString()),
+        notes: order.invoice.notes || null,
+        job_order: {
+          tracking_code: String(order.tracking_code || "-"),
+          quotation: {
+            quotation_number: order.quotation?.quotation_number || "-",
+            subtotal: Number(order.quotation?.subtotal || 0),
+            tax_amount: Number(order.quotation?.tax_amount || 0),
+            use_tax: Boolean(order.quotation?.use_tax),
+            total_amount: Number(order.quotation?.total_amount || order.invoice.amount || 0),
+            perdiem_price: order.quotation?.perdiem_price ?? null,
+            perdiem_qty: order.quotation?.perdiem_qty ?? null,
+            perdiem_name: order.quotation?.perdiem_name ?? null,
+            transport_price: order.quotation?.transport_price ?? null,
+            transport_qty: order.quotation?.transport_qty ?? null,
+            transport_name: order.quotation?.transport_name ?? null,
+            profile: {
+              full_name: order.quotation?.profile?.full_name || "Pelanggan",
+              company_name: order.quotation?.profile?.company_name || "-",
+              email: order.quotation?.profile?.email || "-",
+              phone: order.quotation?.profile?.phone || "-",
+              address: order.quotation?.profile?.address || "-",
+            },
+            items: (order.quotation?.items || []).map((item: any, idx: number) => ({
+              id: String(item.id || idx),
+              qty: Number(item.qty || 1),
+              price_snapshot: Number(item.price_snapshot || 0),
+              parameter_snapshot: item.parameter_snapshot || null,
+              service: item.service
+                ? {
+                    name: item.service.name,
+                    category: item.service.category || null,
+                    regulation: item.service.regulation || item.service.regulation_ref?.name || null,
+                  }
+                : null,
+              equipment: item.equipment ? { name: item.equipment.name } : null,
+            })),
+          },
+        },
+      };
+      const blob = await pdf(<InvoicePDF data={invoicePdfData} company={companyProfile} />).toBlob();
       if (!blob) throw new Error("Gagal membuat data binary PDF");
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');

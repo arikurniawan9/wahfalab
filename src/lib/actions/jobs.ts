@@ -372,3 +372,140 @@ export async function deleteJobOrderWithPhotos(jobOrderId: string) {
     return { error: 'Gagal menghapus Job Order dan foto' }
   }
 }
+
+export async function getJobOrderById(id: string) {
+  try {
+    const item = await prisma.jobOrder.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        tracking_code: true,
+        status: true,
+        notes: true,
+        created_at: true,
+        analysis_started_at: true,
+        analysis_done_at: true,
+        reporting_done_at: true,
+        sampling_assignment: {
+          select: {
+            id: true,
+            status: true,
+            scheduled_date: true,
+            actual_date: true,
+            location: true,
+            field_officer: {
+              select: {
+                id: true,
+                full_name: true
+              }
+            },
+            assistants: {
+              select: {
+                id: true,
+                full_name: true
+              }
+            }
+          }
+        },
+        quotation: {
+          select: {
+            id: true,
+            quotation_number: true,
+            profile: {
+              select: {
+                id: true,
+                full_name: true,
+                company_name: true,
+                address: true,
+                email: true,
+                phone: true
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!item) return null
+    return serializeData(item)
+  } catch (error) {
+    console.error('Error fetching job order by id:', error)
+    return null
+  }
+}
+
+export async function sendTravelOrderToField(jobOrderId: string) {
+  try {
+    const session = await auth()
+    if (!session?.user?.email) {
+      return { error: 'Unauthorized' }
+    }
+
+    const sender = await prisma.profile.findUnique({
+      where: { email: session.user.email },
+      select: { id: true, role: true, full_name: true, email: true }
+    })
+
+    if (!sender || !['admin', 'operator'].includes(sender.role)) {
+      return { error: 'Forbidden' }
+    }
+
+    const jobOrder = await prisma.jobOrder.findUnique({
+      where: { id: jobOrderId },
+      select: {
+        id: true,
+        tracking_code: true,
+        sampling_assignment: {
+          select: {
+            id: true,
+            scheduled_date: true,
+            field_officer: {
+              select: {
+                id: true,
+                full_name: true
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!jobOrder) {
+      return { error: 'Job order tidak ditemukan' }
+    }
+
+    if (!jobOrder.sampling_assignment || !jobOrder.sampling_assignment.field_officer?.id) {
+      return { error: 'Job order belum memiliki penugasan petugas lapangan' }
+    }
+
+    const assignment = jobOrder.sampling_assignment
+    const scheduleText = assignment.scheduled_date
+      ? new Date(assignment.scheduled_date).toLocaleDateString('id-ID')
+      : 'sesuai jadwal'
+
+    await prisma.notification.create({
+      data: {
+        user_id: assignment.field_officer.id,
+        type: 'job_assigned',
+        title: 'Surat Tugas Dikirim',
+        message: `Surat tugas untuk ${jobOrder.tracking_code} telah dikirim oleh ${sender.full_name || sender.email}. Jadwal: ${scheduleText}.`,
+        link: `/field/assignments/${assignment.id}`,
+        metadata: {
+          job_order_id: jobOrder.id,
+          assignment_id: assignment.id,
+          tracking_code: jobOrder.tracking_code,
+          sent_by: sender.id
+        }
+      }
+    })
+
+    revalidatePath('/api/notifications')
+    revalidatePath('/field')
+    revalidatePath('/admin/jobs')
+
+    return { success: true }
+  } catch (error: any) {
+    console.error('Send Travel Order To Field Error:', error)
+    return { error: error.message || 'Gagal mengirim surat tugas' }
+  }
+}

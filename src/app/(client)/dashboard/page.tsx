@@ -26,6 +26,7 @@ import {
 import { getJobOrders } from "@/lib/actions/jobs";
 import { getProfile } from "@/lib/actions/auth";
 import { cn } from "@/lib/utils";
+import { getDisplayJobNotes } from "@/lib/job-notes";
 import { toast } from "sonner";
 import { ChemicalLoader } from "@/components/ui";
 
@@ -384,8 +385,8 @@ export default function ClientDashboard() {
                 <div className="flex justify-center py-2"><WorkflowTimeline status={selectedJob?.status || ''} /></div>
                 <p className="mt-8 text-xs font-bold text-emerald-600 uppercase tracking-widest animate-pulse">{statusLabels[selectedJob?.status] || 'MEMPROSES DATA'}</p>
             </div>
-            {selectedJob?.notes && (
-                <div className="bg-amber-50 p-5 rounded-3xl border border-amber-100 flex items-start gap-4"><MessageCircle className="h-5 w-5 text-amber-600 shrink-0" /><div><p className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1">Catatan Lab</p><p className="text-sm font-medium text-amber-800 italic">"{selectedJob.notes}"</p></div></div>
+            {getDisplayJobNotes(selectedJob?.notes) && (
+                <div className="bg-amber-50 p-5 rounded-3xl border border-amber-100 flex items-start gap-4"><MessageCircle className="h-5 w-5 text-amber-600 shrink-0" /><div><p className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1">Catatan Lab</p><p className="text-sm font-medium text-amber-800 italic">"{getDisplayJobNotes(selectedJob?.notes)}"</p></div></div>
             )}
           </div>
           <DialogFooter className="p-6 bg-slate-50 border-t flex gap-3">

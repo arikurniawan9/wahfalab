@@ -227,15 +227,9 @@ interface NavContentProps {
 
 export function NavContent({ isCollapsed, menuItems, pathname, companyName, logoUrl, logout, onItemClick }: NavContentProps) {
   const [openGroups, setOpenGroups] = useState<string[]>([]);
-
-  useEffect(() => {
-    const activeGroup = menuItems.find(group => 
-      group.items.some((item: any) => pathname === item.href)
-    );
-    if (activeGroup && !openGroups.includes(activeGroup.id)) {
-      setOpenGroups(prev => [...prev, activeGroup.id]);
-    }
-  }, [pathname, menuItems]);
+  const activeGroupId = menuItems.find(group =>
+    group.items.some((item: any) => pathname === item.href)
+  )?.id;
 
   const toggleGroup = (groupId: string) => {
     if (isCollapsed) return; // Prevent accordion in collapsed mode
@@ -267,7 +261,7 @@ export function NavContent({ isCollapsed, menuItems, pathname, companyName, logo
       {/* Navigation */}
       <nav className="flex-1 px-3 space-y-2">
         {menuItems.map((group) => {
-          const isOpen = openGroups.includes(group.id);
+          const isOpen = openGroups.includes(group.id) || activeGroupId === group.id;
           const hasActiveItem = group.items.some((item: any) => pathname === item.href);
 
           // Render Floating Menu if Collapsed

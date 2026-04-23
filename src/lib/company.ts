@@ -24,7 +24,7 @@ export async function getCompanyProfile() {
 
 export async function getLandingPageConfig() {
   try {
-    let config = await prisma.landingPageConfig.findFirst()
+    const config = await prisma.landingPageConfig.findFirst()
     
     // If doesn't exist, return default structure or create one
     if (!config) {

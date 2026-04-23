@@ -60,7 +60,7 @@ export default function OperatorAssistantManagementPage() {
     setLoading(true);
     try {
       const data = await getFieldAssistants();
-      setAssistants(data);
+      setAssistants(data?.items || []);
     } catch (error) {
       toast.error("Gagal memuat data asisten");
     } finally {

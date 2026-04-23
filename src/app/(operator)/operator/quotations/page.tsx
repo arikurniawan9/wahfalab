@@ -102,6 +102,7 @@ import { Card, CardContent } from "@/components/ui/card";
 
 const quotationSchema = z.object({
   quotation_number: z.string().min(1, "Nomor penawaran wajib diisi"),
+  sampling_location: z.string().optional().nullable(),
   user_id: z.string().min(1, "Pilih pelanggan"),
   use_tax: z.boolean().default(true),
   discount_amount: z.coerce.number().default(0),
@@ -161,6 +162,7 @@ export default function OperatorQuotationListPage() {
     resolver: zodResolver(quotationSchema),
     defaultValues: {
       quotation_number: "INV-",
+      sampling_location: "",
       user_id: "",
       use_tax: true,
       discount_amount: 0,
@@ -557,6 +559,10 @@ export default function OperatorQuotationListPage() {
                   <Controller control={control} name="user_id" render={({ field }) => (
                     <Select value={field.value || ""} onValueChange={field.onChange}><SelectTrigger className="h-12 md:h-14 border-2 border-slate-100 rounded-xl md:rounded-2xl bg-slate-50/50 font-bold text-xs md:text-sm"><SelectValue placeholder="Pilih Klien..." /></SelectTrigger><SelectContent className="rounded-2xl shadow-2xl">{clients.map(c => <SelectItem key={c.id} value={c.id} className="font-bold text-sm">{c.full_name} - {c.company_name || "Personal"}</SelectItem>)}</SelectContent></Select>
                   )} />
+                </div>
+                <div className="md:col-span-2 space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Lokasi Sampling</label>
+                  <textarea {...register("sampling_location")} rows={3} placeholder="Lokasi sampling / titik pengambilan contoh..." className="w-full rounded-xl border-2 border-slate-100 bg-white px-4 py-3 text-xs font-bold text-slate-700 outline-none shadow-sm resize-none" />
                 </div>
               </div>
             </section>

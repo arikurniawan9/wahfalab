@@ -306,7 +306,7 @@ export default function UserManagementPage() {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="icon" onClick={handleExport} className="h-11 w-11 rounded-xl bg-white border-slate-200 shadow-sm hover:shadow-md transition-all text-slate-600 hover:text-emerald-600" title="Export CSV"><Download className="h-4 w-4" /></Button>
-          <Button variant="outline" size="icon" className="h-11 w-11 rounded-xl bg-white border-slate-200 shadow-sm hover:shadow-md transition-all text-slate-600 hover:text-blue-600" onClick={loadUsers} title="Refresh Data"><RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} /></Button>
+          <Button variant="outline" size="icon" className="h-11 w-11 rounded-xl bg-white border-slate-200 shadow-sm hover:shadow-md transition-all text-slate-600 hover:text-blue-600" onClick={() => { void loadUsers(); }} title="Refresh Data"><RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} /></Button>
         </div>
       </div>
 

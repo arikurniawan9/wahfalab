@@ -9,6 +9,7 @@ import { headers } from 'next/headers'
 import { audit } from '@/lib/audit-log'
 import { auth } from '@/lib/auth'
 import { notifyInvoiceGenerated } from '@/lib/actions/notifications'
+import type { Prisma } from '@/generated/prisma'
 
 const INVOICE_REQUEST_MARKER = '[INVOICE_REQUESTED]'
 
@@ -24,6 +25,7 @@ export async function getQuotationById(id: string) {
         id: true,
         quotation_number: true,
         title: true,
+        sampling_location: true,
         date: true,
         status: true,
         subtotal: true,
@@ -139,6 +141,7 @@ export async function getQuotations(
         id: true,
         quotation_number: true,
         title: true,
+        sampling_location: true,
         date: true,
         status: true,
         subtotal: true,
@@ -208,11 +211,11 @@ export async function getQuotations(
 
   // Process counts into a flat object
   const statusCounts = {
-    total: counts.reduce((acc, curr) => acc + curr._count._all, 0),
-    draft: counts.find(c => c.status === 'draft')?._count._all || 0,
-    accepted: counts.find(c => c.status === 'accepted')?._count._all || 0,
-    rejected: counts.find(c => c.status === 'rejected')?._count._all || 0,
-    paid: counts.find(c => c.status === 'paid')?._count._all || 0,
+    total: counts.reduce((acc: number, curr: Prisma.QuotationGroupByOutputType) => acc + (curr._count?._all ?? 0), 0),
+    draft: counts.find((c: Prisma.QuotationGroupByOutputType) => c.status === 'draft')?._count?._all || 0,
+    accepted: counts.find((c: Prisma.QuotationGroupByOutputType) => c.status === 'accepted')?._count?._all || 0,
+    rejected: counts.find((c: Prisma.QuotationGroupByOutputType) => c.status === 'rejected')?._count?._all || 0,
+    paid: counts.find((c: Prisma.QuotationGroupByOutputType) => c.status === 'paid')?._count?._all || 0,
   }
 
   // Deeply serialize decimals and dates to avoid Client Component errors
@@ -297,11 +300,11 @@ export async function publishInvoiceRequest(quotationId: string) {
       select: { id: true }
     })
 
-    const targetUsers = financeAndAdmins.filter((user) => user.id !== requester.id)
+    const targetUsers = financeAndAdmins.filter((user: { id: string }) => user.id !== requester.id)
 
     if (targetUsers.length > 0) {
       await prisma.notification.createMany({
-        data: targetUsers.map((recipient) => ({
+        data: targetUsers.map((recipient: { id: string }) => ({
           user_id: recipient.id,
           type: 'invoice_generated',
           title: 'Permintaan Invoice Baru',
@@ -543,6 +546,7 @@ export async function cloneQuotation(id: string) {
       data: {
         quotation_number: nextNumber,
         title: source.title,
+        sampling_location: source.sampling_location,
         user_id: source.user_id,
         subtotal: source.subtotal,
         discount_amount: source.discount_amount,
@@ -602,6 +606,7 @@ export async function createQuotation(formData: any) {
       data: {
         quotation_number: formData.quotation_number,
         title: formData.title || null,
+        sampling_location: formData.sampling_location || null,
         user_id: finalUserId,
         subtotal: subtotalValue,
         discount_amount: formData.discount_amount || 0,
@@ -686,6 +691,7 @@ export async function updateQuotation(id: string, formData: any) {
         data: {
           quotation_number: formData.quotation_number,
           title: formData.title || null,
+          sampling_location: formData.sampling_location || null,
           subtotal: subtotalValue,
           discount_amount: formData.discount_amount || 0,
           use_tax: formData.use_tax,

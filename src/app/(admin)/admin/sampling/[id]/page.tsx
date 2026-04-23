@@ -191,6 +191,12 @@ export default function AdminSamplingDetailPage() {
     completed: "Selesai",
     cancelled: "Dibatalkan"
   };
+  const quotationTitle =
+    assignment.job_order.quotation.title ||
+    assignment.job_order.quotation.items?.[0]?.parameter_snapshot ||
+    assignment.job_order.quotation.items?.[0]?.service?.name ||
+    assignment.job_order.quotation.items?.[0]?.equipment?.name ||
+    "MULTIPLE ITEMS";
 
   return (
     <div className="p-4 md:p-10 max-w-7xl mx-auto space-y-10">
@@ -300,10 +306,9 @@ export default function AdminSamplingDetailPage() {
               </p>
             </div>
             <div className="flex justify-between items-end border-b border-slate-100 pb-2">
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Layanan</p>
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Judul Pengujian</p>
               <p className="text-xs font-black text-slate-800 text-right truncate max-w-[150px]">
-                {assignment.job_order.quotation.items?.[0]?.service?.name || 
-                 assignment.job_order.quotation.items?.[0]?.equipment?.name || 'MULTIPLE SERVICES'}
+                {quotationTitle}
               </p>
             </div>
             <div className="flex justify-between items-end">

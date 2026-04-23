@@ -48,6 +48,7 @@ import { toast } from "sonner";
 const quotationSchema = z.object({
   quotation_number: z.string().min(1, "Nomor penawaran wajib diisi"),
   title: z.string().min(3, "Judul pengujian wajib diisi").nullable().or(z.literal("")),
+  sampling_location: z.string().optional().nullable(),
   user_id: z.string().min(1, "Pilih klien terlebih dahulu"),
   use_tax: z.boolean().default(true),
   discount_amount: z.coerce.number().min(0).default(0),
@@ -108,6 +109,7 @@ export function QuotationFormPage({
     defaultValues: initialData || {
       quotation_number: nextQuotationNumber,
       title: "",
+      sampling_location: "",
       user_id: "",
       use_tax: true,
       discount_amount: 0,
@@ -125,6 +127,7 @@ export function QuotationFormPage({
     reset({
       quotation_number: nextQuotationNumber,
       title: "",
+      sampling_location: "",
       user_id: "",
       use_tax: true,
       discount_amount: 0,
@@ -340,16 +343,27 @@ export function QuotationFormPage({
                         <ErrorMessage message={errors.user_id?.message as string} />
                      </div>
                   </div>
-                  <div className="space-y-2 text-left">
+                   <div className="space-y-2 text-left">
                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block text-left">Judul Pengujian / Perihal <span className="text-rose-500">*</span></label>
                      <div className={cn("flex items-center gap-4 px-5 h-12 rounded-xl bg-slate-50 border-none transition-all shadow-inner focus-within:ring-2 focus-within:ring-emerald-500/20", errors.title && "bg-rose-50")}>
                         <Search className="h-4 w-4 text-emerald-500/60 shrink-0" />
                         <input {...register("title")} placeholder="Ketik judul atau perihal pengujian..." className="flex-1 bg-transparent border-none outline-none font-bold text-xs text-slate-700 placeholder:text-slate-300" />
                      </div>
                      <ErrorMessage message={errors.title?.message as string} />
-                  </div>
-               </div>
-            </div>
+                   </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                       <div className="md:col-span-2 space-y-2 text-left">
+                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block text-left">Lokasi Sampling</label>
+                         <textarea
+                           {...register("sampling_location")}
+                          rows={3}
+                          placeholder="Lokasi sampling / titik pengambilan contoh..."
+                          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-bold text-slate-700 outline-none shadow-inner focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 resize-none"
+                        />
+                      </div>
+                   </div>
+                 </div>
+              </div>
 
             {/* 02. Daftar Layanan Lab */}
             <div className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden text-left">

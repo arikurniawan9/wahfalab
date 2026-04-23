@@ -33,6 +33,7 @@ import { createSamplingAssignment } from "@/lib/actions/sampling";
 import { createTravelOrder } from "@/lib/actions/travel-order";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { getDisplayJobNotes } from "@/lib/job-notes";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PremiumPageWrapper, PremiumCard } from "@/components/layout/PremiumPageWrapper";
@@ -131,7 +132,7 @@ export default function OperatorJobProgressPage() {
       setJobs(jobsData.items || []);
       setStats(statsData);
       setFieldOfficers(officers);
-      setAssistants(assistantList);
+      setAssistants(assistantList?.items || []);
       if (showRefreshToast) toast.success("Data Operasional Diperbarui");
     } catch (error: any) { toast.error("Gagal sinkronisasi data"); }
     finally { setLoading(false); setRefreshing(false); }
@@ -363,13 +364,13 @@ export default function OperatorJobProgressPage() {
             <div className="grid grid-cols-2 gap-4"><div className="bg-slate-50 p-5 rounded-3xl border border-slate-100"><p className="text-[9px] font-black text-slate-400 uppercase mb-1">Tanggal Masuk</p><p className="text-sm font-black text-slate-800">{new Date(selectedJob?.created_at).toLocaleDateString('id-ID')}</p></div><div className="bg-slate-50 p-5 rounded-3xl border border-slate-100"><p className="text-[9px] font-black text-slate-400 uppercase mb-1">Nominal</p><p className="text-sm font-black text-emerald-700">Rp {Number(selectedJob?.quotation?.total_amount || 0).toLocaleString("id-ID")}</p></div></div>
             
             {/* Operational Notes / Reason for Delay */}
-            {selectedJob?.notes && (
+            {getDisplayJobNotes(selectedJob?.notes) && (
               <div className="bg-rose-50 p-6 rounded-3xl border-2 border-rose-100/50">
                 <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest mb-2 flex items-center gap-2">
                   <AlertCircle className="h-3 w-3" /> Catatan Operasional / Penundaan
                 </p>
                 <p className="text-xs font-bold text-rose-800 leading-relaxed italic">
-                  "{selectedJob.notes}"
+                  "{getDisplayJobNotes(selectedJob?.notes)}"
                 </p>
               </div>
             )}

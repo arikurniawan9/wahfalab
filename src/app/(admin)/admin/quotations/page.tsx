@@ -380,7 +380,9 @@ export default function QuotationListPage() {
                           <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl text-slate-400 hover:text-emerald-600"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-56 p-2 rounded-2xl border-slate-100 shadow-2xl z-[100]">
                              <DropdownMenuItem onClick={() => router.push(`/admin/quotations/${item.id}/edit`)} className="rounded-xl p-3 text-[10px] font-black uppercase"><FileText className="mr-2 h-4 w-4" /> Edit Data</DropdownMenuItem>
-                             <DropdownMenuItem onClick={() => handleStatusUpdate(item.id, 'accepted')} className="rounded-xl p-3 text-[10px] font-black uppercase text-emerald-600"><CheckCircle className="mr-2 h-4 w-4" /> Terima</DropdownMenuItem>
+                              {item.status !== 'accepted' && (
+                                <DropdownMenuItem onClick={() => handleStatusUpdate(item.id, 'accepted')} className="rounded-xl p-3 text-[10px] font-black uppercase text-emerald-600"><CheckCircle className="mr-2 h-4 w-4" /> Terima</DropdownMenuItem>
+                              )}
                              {item.status === 'accepted' && latestJobOrder && !hasInvoice && (
                               <DropdownMenuItem onClick={() => setConfirmInvoiceQuotationId(item.id)} disabled={invoiceRequested || publishingInvoice} className="rounded-xl p-3 text-[10px] font-black uppercase text-blue-600 disabled:text-slate-400">
                                 <Send className="mr-2 h-4 w-4" /> {invoiceRequested ? 'Permintaan Terkirim' : 'Terbitkan Invoice'}

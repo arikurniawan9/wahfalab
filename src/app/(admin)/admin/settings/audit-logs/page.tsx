@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { History } from "lucide-react";
 import { format } from "date-fns";
 import { id } from "date-fns/locale";
-import { Prisma } from "@/generated/prisma";
+import type { AuditLog } from "@/generated/prisma";
 
 export default function AuditLogsPage() {
   const fetchAuditLogsWrapper = async (page?: number, limit?: number, search?: string) => {
@@ -28,7 +28,7 @@ export default function AuditLogsPage() {
     pages,
     search,
     setSearch,
-  } = useCrud({
+  } = useCrud<AuditLog>({
     fetchFn: fetchAuditLogsWrapper,
     messages: {
       loading: "Memuat data audit log...",
@@ -52,7 +52,7 @@ export default function AuditLogsPage() {
     {
       key: "created_at",
       header: "Waktu",
-      cell: (item: Prisma.AuditLog) => (
+      cell: (item: AuditLog) => (
         <span className="text-sm whitespace-nowrap">
           {format(new Date(item.created_at), "dd MMM yyyy HH:mm:ss", { locale: id })}
         </span>
@@ -61,7 +61,7 @@ export default function AuditLogsPage() {
     {
       key: "user",
       header: "Pengguna",
-      cell: (item: Prisma.AuditLog) => (
+      cell: (item: AuditLog) => (
         <div>
           <div className="font-medium text-sm text-slate-900">{item.user_email || "System"}</div>
           {item.user_role && <div className="text-xs text-slate-500 capitalize">{item.user_role.replace("_", " ")}</div>}
@@ -71,7 +71,7 @@ export default function AuditLogsPage() {
     {
       key: "action",
       header: "Aksi",
-      cell: (item: Prisma.AuditLog) => (
+      cell: (item: AuditLog) => (
         <Badge className={getActionColor(item.action)} variant="outline">
           {item.action}
         </Badge>
@@ -80,7 +80,7 @@ export default function AuditLogsPage() {
     {
       key: "entity",
       header: "Entitas",
-      cell: (item: Prisma.AuditLog) => (
+      cell: (item: AuditLog) => (
         <div>
           <div className="text-sm font-medium text-slate-900 capitalize">{item.entity_type.replace("_", " ")}</div>
           {item.entity_id && (
@@ -94,7 +94,7 @@ export default function AuditLogsPage() {
     {
       key: "ip_address",
       header: "IP Address",
-      cell: (item: Prisma.AuditLog) => (
+      cell: (item: AuditLog) => (
         <span className="text-xs text-slate-500 font-mono">
           {item.ip_address || "-"}
         </span>

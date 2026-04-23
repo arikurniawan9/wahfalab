@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import prisma from "@/lib/prisma";
 import { getProfile } from "./auth";
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@/generated/prisma";
 
 /**
  * Server Actions untuk Regulasi
@@ -118,7 +118,7 @@ export async function createOrUpdateRegulation(data: RegulationInput, id?: strin
 
     if (id) {
       // Update existing
-      const regulation = await prisma.$transaction(async (tx) => {
+      const regulation = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const updated = await tx.regulation.update({
           where: { id },
           data: {
@@ -334,9 +334,9 @@ export async function getAllRegulationsForDropdown() {
     });
 
     // Transform to include simple parameters_list for easier frontend consumption
-    const transformed = regulations.map(reg => ({
+    const transformed = regulations.map((reg: { parameters: Array<{ parameter: string }>; [key: string]: any }) => ({
       ...reg,
-      parameters_list: reg.parameters.map(p => p.parameter)
+      parameters_list: reg.parameters.map((p: { parameter: string }) => p.parameter)
     }));
 
     return { regulations: transformed, success: true };

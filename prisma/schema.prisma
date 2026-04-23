@@ -396,6 +396,7 @@ model Quotation {
   id               String          @id @default(uuid())
   quotation_number String          @unique
   title            String?         // Judul Pengujian
+  sampling_location String?         @db.Text
   user_id          String
   profile          Profile         @relation(fields: [user_id], references: [id])
   date             DateTime        @default(now())

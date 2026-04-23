@@ -166,14 +166,14 @@ export default function AdminSamplingMonitoringPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await getAllSamplingAssignments(page, limit, debouncedSearch);
+      const result = await getAllSamplingAssignments(page, limit, debouncedSearch, filterStatus);
       setData(result);
     } catch (error: any) {
       toast.error("Gagal memuat data sampling");
     } finally {
       setLoading(false);
     }
-  }, [page, limit, debouncedSearch]);
+  }, [page, limit, debouncedSearch, filterStatus]);
 
   const loadFilterOptions = useCallback(async () => {
     try {
@@ -184,7 +184,7 @@ export default function AdminSamplingMonitoringPage() {
         getFieldAssistants()
       ]);
       setFieldOfficers(officers || []);
-      setAssistants(assistantList || []);
+      setAssistants(assistantList?.items || []);
       setCustomers(clientList || []);
       
       // Filter jobs yang belum ditugaskan
@@ -279,20 +279,14 @@ loadData();
 
   // Stats calculation
   const stats = useMemo(() => ({
-    total: data.items.length,
+    total: data.total,
     pending: data.items.filter((i: any) => i.status === "pending").length,
     in_progress: data.items.filter((i: any) => i.status === "in_progress").length,
     completed: data.items.filter((i: any) => i.status === "completed").length,
     cancelled: data.items.filter((i: any) => i.status === "cancelled").length
   }), [data.items]);
 
-  const filteredItems = useMemo(() => {
-    let result = [...data.items];
-    if (filterStatus !== "all") {
-      result = result.filter(item => item.status === filterStatus);
-    }
-    return result;
-  }, [data.items, filterStatus]);
+  const filteredItems = useMemo(() => data.items, [data.items]);
 
   return (
     <div className="p-4 md:p-10 pb-24 md:pb-10">
