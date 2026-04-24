@@ -21,9 +21,11 @@ import {
   Calendar,
   Clock,
   BellRing,
-  ArrowRight
+  ArrowRight,
+  RotateCcw
 } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { getAllInvoices, getInvoiceStats, getPendingInvoiceRequests, sendInvoiceToCustomer } from "@/lib/actions/invoice";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +46,7 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function InvoicesPage() {
+  const pathname = usePathname();
   const [data, setData] = useState<any>({ items: [], total: 0, pages: 1 });
   const [pendingRequests, setPendingRequests] = useState<any>({ items: [], total: 0, pages: 1 });
   const [stats, setStats] = useState<any>({});
@@ -53,6 +56,9 @@ export default function InvoicesPage() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null);
+  const baseInvoicePath = pathname.startsWith('/admin/')
+    ? '/admin/finance/invoices'
+    : '/finance/invoices';
 
   useEffect(() => {
     loadData();
@@ -113,6 +119,10 @@ export default function InvoicesPage() {
     loadPendingRequests(1);
   };
 
+  const handleRefreshAll = async () => {
+    await Promise.all([loadData(), loadPendingRequests(), loadStats()]);
+  };
+
   const handleSendInvoice = async (item: any) => {
     try {
       setSendingInvoiceId(item.id);
@@ -164,20 +174,49 @@ export default function InvoicesPage() {
   };
 
   return (
-    <div className="p-4 md:p-8 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-emerald-900 font-[family-name:var(--font-montserrat)] uppercase flex items-center gap-3">
-          <FileText className="h-6 w-6 text-emerald-600" />
-          Daftar Invoice
-        </h1>
-        <p className="text-slate-500 text-sm mt-1">
-          Kelola dan monitor semua invoice pembayaran
-        </p>
+    <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
+      <div className="overflow-hidden rounded-3xl bg-emerald-900 shadow-xl border border-emerald-700/50">
+        <div className="bg-gradient-to-br from-emerald-950 via-emerald-800 to-emerald-500 p-4 md:p-5 text-white relative overflow-hidden">
+          <div className="absolute -top-12 -right-12 w-64 h-64 bg-emerald-400/20 rounded-full blur-[60px]" />
+
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-inner shrink-0">
+                <FileText className="h-5 w-5 text-emerald-200" />
+              </div>
+              <div>
+                <h1 className="text-lg md:text-xl font-black tracking-tight text-white leading-none uppercase">
+                  Daftar Invoice
+                </h1>
+                <p className="text-emerald-100/60 text-[10px] md:text-xs font-medium mt-1 uppercase tracking-widest">
+                  Kelola dan monitor semua invoice pembayaran.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 self-end sm:self-auto">
+              <div className="hidden lg:block text-right border-r border-white/10 pr-4">
+                <p className="text-emerald-300 text-[8px] font-bold uppercase tracking-widest mb-0.5">Total Invoice</p>
+                <p className="text-lg font-black text-white leading-none">
+                  {stats.total || 0} <span className="text-emerald-300 text-[10px] font-bold uppercase tracking-normal">Item</span>
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefreshAll}
+                className="h-8 px-3 rounded-lg bg-white/10 border-white/20 hover:bg-white/20 text-white text-[10px] font-black uppercase tracking-widest"
+              >
+                <RotateCcw className={cn("mr-1.5 h-3.5 w-3.5", loading && "animate-spin")} />
+                Refresh
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-6">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm font-medium text-slate-600">
@@ -242,7 +281,7 @@ export default function InvoicesPage() {
       </div>
 
       {/* Filters */}
-      <Card className="mb-6">
+      <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Search className="h-4 w-4 text-emerald-600" />
@@ -280,7 +319,7 @@ export default function InvoicesPage() {
         </CardContent>
       </Card>
 
-      <Card className="mb-6 border-amber-200 bg-amber-50/40">
+      <Card className="border-amber-200 bg-amber-50/40">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2 text-amber-900">
             <BellRing className="h-4 w-4 text-amber-600" />
@@ -360,129 +399,198 @@ export default function InvoicesPage() {
               <p className="text-slate-500 text-sm mt-3">Memuat invoice...</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/50">
-                    <th className="text-left py-3 px-4 text-sm font-bold text-emerald-900">Invoice</th>
-                    <th className="text-left py-3 px-4 text-sm font-bold text-emerald-900">Customer</th>
-                    <th className="text-left py-3 px-4 text-sm font-bold text-emerald-900">Job Order</th>
-                    <th className="text-right py-3 px-4 text-sm font-bold text-emerald-900">Jumlah</th>
-                    <th className="text-left py-3 px-4 text-sm font-bold text-emerald-900">Status</th>
-                    <th className="text-left py-3 px-4 text-sm font-bold text-emerald-900">Jatuh Tempo</th>
-                    <th className="text-center py-3 px-4 text-sm font-bold text-emerald-900">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.items?.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="text-center py-20">
-                        <div className="flex flex-col items-center gap-4">
-                          <div className="h-20 w-20 rounded-full bg-slate-50 flex items-center justify-center">
-                            <FileText className="h-10 w-10 text-slate-300" />
-                          </div>
-                          <div className="text-center">
-                            <p className="text-lg font-semibold text-slate-700">Belum ada invoice</p>
-                            <p className="text-sm text-slate-500 mt-1">
-                              Invoice draft akan muncul di sini setelah permintaan invoice diterbitkan dan progres sampling selesai
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    data.items?.map((item: any) => (
-                      <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-2">
-                            <CreditCard className="h-4 w-4 text-slate-400" />
-                            <span className="font-mono text-sm font-medium text-slate-800">
-                              {item.invoice_number}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex flex-col">
-                            <span className="text-sm font-medium text-slate-800">
+            <>
+              {data.items?.length === 0 ? (
+                <div className="text-center py-20">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="h-20 w-20 rounded-full bg-slate-50 flex items-center justify-center">
+                      <FileText className="h-10 w-10 text-slate-300" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-lg font-semibold text-slate-700">Belum ada invoice</p>
+                      <p className="text-sm text-slate-500 mt-1">
+                        Invoice draft akan muncul di sini setelah permintaan invoice diterbitkan dan progres sampling selesai
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="md:hidden divide-y divide-slate-100">
+                    {data.items?.map((item: any) => (
+                      <div key={item.id} className="py-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-mono text-xs font-bold text-slate-700">{item.invoice_number}</p>
+                            <p className="text-sm font-semibold text-slate-800 mt-1">
                               {item.job_order?.quotation?.profile?.full_name || '-'}
-                            </span>
+                            </p>
                             {item.job_order?.quotation?.profile?.company_name && (
-                              <span className="text-xs text-slate-500">
+                              <p className="text-xs text-slate-500">
                                 {item.job_order.quotation.profile.company_name}
-                              </span>
+                              </p>
                             )}
                           </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <Link
-                            href={`/finance/invoices/${item.id}`}
-                            className="text-emerald-600 hover:underline text-sm font-mono"
-                          >
-                            {item.job_order?.tracking_code || '-'}
-                          </Link>
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <span className="text-sm font-bold text-emerald-700">
-                            {formatCurrency(Number(item.amount))}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4">
                           <Badge className={cn(
                             "text-[10px] font-bold uppercase",
                             statusColors[item.status] || statusColors.draft
                           )}>
                             {statusLabels[item.status] || item.status}
                           </Badge>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-2">
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <p className="text-slate-400 uppercase font-bold tracking-wide">Job Order</p>
+                            <Link href={`${baseInvoicePath}/${item.id}`} className="text-emerald-600 font-mono hover:underline">
+                              {item.job_order?.tracking_code || '-'}
+                            </Link>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-slate-400 uppercase font-bold tracking-wide">Jumlah</p>
+                            <p className="font-bold text-emerald-700">{formatCurrency(Number(item.amount))}</p>
+                          </div>
+                          <div className="col-span-2 flex items-center gap-2 text-slate-600">
                             <Calendar className="h-3 w-3 text-slate-400" />
-                            <span className="text-sm text-slate-600">
-                              {formatDate(item.due_date)}
-                            </span>
+                            <span>{formatDate(item.due_date)}</span>
                             {new Date(item.due_date) < new Date() && item.status !== 'paid' && (
                               <Clock className="h-3 w-3 text-amber-600" />
                             )}
                           </div>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <Link href={`/finance/invoices/${item.id}`}>
-                              <Button size="sm" variant="outline" className="h-8 text-xs">
-                                <FileText className="h-3 w-3 mr-1" />
-                                Detail
-                              </Button>
-                            </Link>
-                            {item.status === 'draft' && (
-                              <Button
-                                size="sm"
-                                onClick={() => handleSendInvoice(item)}
-                                disabled={sendingInvoiceId === item.id}
-                                className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700"
-                                title="Terbitkan Invoice"
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Link href={`${baseInvoicePath}/${item.id}`} className="flex-1">
+                            <Button size="sm" variant="outline" className="h-8 text-xs w-full">
+                              <FileText className="h-3 w-3 mr-1" />
+                              Detail
+                            </Button>
+                          </Link>
+                          {item.status === 'draft' && (
+                            <Button
+                              size="sm"
+                              onClick={() => handleSendInvoice(item)}
+                              disabled={sendingInvoiceId === item.id}
+                              className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700"
+                              title="Terbitkan Invoice"
+                            >
+                              <Send className="h-3 w-3 mr-1" />
+                              {sendingInvoiceId === item.id ? 'Mengirim...' : 'Terbitkan'}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50/50">
+                          <th className="text-left py-3 px-4 text-sm font-bold text-emerald-900">Invoice</th>
+                          <th className="text-left py-3 px-4 text-sm font-bold text-emerald-900">Customer</th>
+                          <th className="text-left py-3 px-4 text-sm font-bold text-emerald-900">Job Order</th>
+                          <th className="text-right py-3 px-4 text-sm font-bold text-emerald-900">Jumlah</th>
+                          <th className="text-left py-3 px-4 text-sm font-bold text-emerald-900">Status</th>
+                          <th className="text-left py-3 px-4 text-sm font-bold text-emerald-900">Jatuh Tempo</th>
+                          <th className="text-center py-3 px-4 text-sm font-bold text-emerald-900">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.items?.map((item: any) => (
+                          <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <CreditCard className="h-4 w-4 text-slate-400" />
+                                <span className="font-mono text-sm font-medium text-slate-800">
+                                  {item.invoice_number}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex flex-col">
+                                <span className="text-sm font-medium text-slate-800">
+                                  {item.job_order?.quotation?.profile?.full_name || '-'}
+                                </span>
+                                {item.job_order?.quotation?.profile?.company_name && (
+                                  <span className="text-xs text-slate-500">
+                                    {item.job_order.quotation.profile.company_name}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <Link
+                                href={`${baseInvoicePath}/${item.id}`}
+                                className="text-emerald-600 hover:underline text-sm font-mono"
                               >
-                                <Send className="h-3 w-3 mr-1" />
-                                {sendingInvoiceId === item.id ? 'Mengirim...' : 'Terbitkan'}
-                              </Button>
-                            )}
-                            {item.status !== 'paid' && item.status !== 'cancelled' && item.status !== 'draft' && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 w-8 p-0 text-blue-600 hover:bg-blue-50"
-                                title="Kirim ke Customer"
-                              >
-                                <Send className="h-3 w-3" />
-                              </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                                {item.job_order?.tracking_code || '-'}
+                              </Link>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <span className="text-sm font-bold text-emerald-700">
+                                {formatCurrency(Number(item.amount))}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <Badge className={cn(
+                                "text-[10px] font-bold uppercase",
+                                statusColors[item.status] || statusColors.draft
+                              )}>
+                                {statusLabels[item.status] || item.status}
+                              </Badge>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-3 w-3 text-slate-400" />
+                                <span className="text-sm text-slate-600">
+                                  {formatDate(item.due_date)}
+                                </span>
+                                {new Date(item.due_date) < new Date() && item.status !== 'paid' && (
+                                  <Clock className="h-3 w-3 text-amber-600" />
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <div className="flex items-center justify-center gap-2">
+                                <Link href={`${baseInvoicePath}/${item.id}`}>
+                                  <Button size="sm" variant="outline" className="h-8 text-xs">
+                                    <FileText className="h-3 w-3 mr-1" />
+                                    Detail
+                                  </Button>
+                                </Link>
+                                {item.status === 'draft' && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleSendInvoice(item)}
+                                    disabled={sendingInvoiceId === item.id}
+                                    className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700"
+                                    title="Terbitkan Invoice"
+                                  >
+                                    <Send className="h-3 w-3 mr-1" />
+                                    {sendingInvoiceId === item.id ? 'Mengirim...' : 'Terbitkan'}
+                                  </Button>
+                                )}
+                                {item.status !== 'paid' && item.status !== 'cancelled' && item.status !== 'draft' && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 w-8 p-0 text-blue-600 hover:bg-blue-50"
+                                    title="Kirim ke Customer"
+                                  >
+                                    <Send className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </>
           )}
 
           {/* Pagination */}

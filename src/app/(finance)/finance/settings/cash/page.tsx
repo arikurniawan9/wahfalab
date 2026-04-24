@@ -22,7 +22,6 @@ import {
   FileSpreadsheet,
   FileText,
   Calendar,
-  Sparkles,
   RotateCcw,
   Lock,
   LockOpen
@@ -415,12 +414,32 @@ export default function CashSummaryPage() {
 
   return (
     <div className="space-y-4 md:space-y-6">
-      <div className="overflow-hidden rounded-3xl bg-amber-900 shadow-xl border border-amber-700/50">
-        <div className="bg-gradient-to-br from-amber-950 via-amber-800 to-amber-500 p-4 md:p-5 text-white relative overflow-hidden">
-          <div className="absolute -top-12 -right-12 w-64 h-64 bg-amber-300/20 rounded-full blur-[60px]" />
+      <div className="overflow-hidden rounded-3xl bg-emerald-900 shadow-xl border border-emerald-700/50">
+        <div className="bg-gradient-to-br from-emerald-950 via-emerald-800 to-emerald-500 p-4 md:p-5 text-white relative overflow-hidden">
+          <div className="absolute -top-12 -right-12 w-64 h-64 bg-emerald-400/20 rounded-full blur-[60px]" />
 
-          <div className="relative z-10 flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-3">
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-inner shrink-0">
+                <Wallet className="h-5 w-5 text-emerald-200" />
+              </div>
+              <div>
+                <h1 className="text-lg md:text-xl font-black tracking-tight text-white leading-none">
+                  Kas Tunai
+                </h1>
+                <p className="text-emerald-100/60 text-[10px] md:text-xs font-medium mt-1 uppercase tracking-widest">
+                  Audit pencatatan kas fisik masuk dan keluar.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 sm:gap-3 self-end sm:self-auto">
+              <div className="hidden lg:block text-right border-r border-white/10 pr-4">
+                <p className="text-emerald-300 text-[8px] font-bold uppercase tracking-widest mb-0.5">Total Transaksi</p>
+                <p className="text-lg font-black text-white leading-none">
+                  {summary.transactionCount || 0} <span className="text-emerald-300 text-[10px] font-bold uppercase tracking-normal">Item</span>
+                </p>
+              </div>
               <Link href={basePath} className="w-fit">
                 <Button
                   variant="outline"
@@ -440,33 +459,6 @@ export default function CashSummaryPage() {
                 Refresh
               </Button>
             </div>
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-inner shrink-0">
-                  <Wallet className="h-5 w-5 text-amber-200" />
-                </div>
-                <div>
-                  <h1 className="text-lg md:text-xl font-black tracking-tight text-white leading-none uppercase">
-                    Ringkasan Kas Tunai
-                  </h1>
-                  <p className="text-amber-100/70 text-[10px] md:text-xs font-medium mt-1 uppercase tracking-widest">
-                    Audit pencatatan cash fisik masuk dan keluar
-                  </p>
-                </div>
-              </div>
-
-              <div className="self-end sm:self-auto text-right border-r border-white/10 pr-3">
-                <p className="text-amber-200 text-[8px] font-bold uppercase tracking-widest mb-0.5">Total Transaksi</p>
-                <p className="text-lg font-black text-white leading-none">
-                  {summary.transactionCount || 0} <span className="text-amber-200 text-[10px] font-bold uppercase tracking-normal">Item</span>
-                </p>
-              </div>
-            </div>
-
-            <Badge className="bg-white/15 text-white border border-white/20 text-[9px] font-black uppercase tracking-widest px-2.5 py-1 w-fit">
-              <Sparkles className="mr-1.5 h-3 w-3" /> Rekening Sistem
-            </Badge>
           </div>
         </div>
       </div>

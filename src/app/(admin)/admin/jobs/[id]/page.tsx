@@ -48,7 +48,7 @@ const statusLabel: Record<string, string> = {
 };
 
 const workflowSteps = [
-  { key: "scheduled", label: "Order" },
+  { key: "scheduled", label: "Penjadwalan" },
   { key: "sampling", label: "Sampling" },
   { key: "analysis_ready", label: "Siap Analisis" },
   { key: "analysis", label: "Analisis" },
@@ -400,7 +400,7 @@ export default function AdminJobDetailPage() {
                   Penugasan Personel
                 </DialogTitle>
                 <DialogDescription className="text-emerald-100 font-bold uppercase text-[9px] md:text-[10px] tracking-[0.18em] mt-1.5 opacity-90 truncate">
-                  {job?.tracking_code} • {job?.quotation?.profile?.company_name || "N/A"}
+                  {job?.tracking_code} | {job?.quotation?.profile?.company_name || "-"}
                 </DialogDescription>
               </DialogHeader>
             </div>
@@ -527,7 +527,7 @@ export default function AdminJobDetailPage() {
                             <p className={cn("text-sm font-bold truncate transition-colors", isSelected ? "text-emerald-900" : "text-slate-900")}>
                               {assistant.full_name}
                             </p>
-                            <p className="text-xs text-slate-500 truncate">{assistant.phone || "No phone"}</p>
+                            <p className="text-xs text-slate-500 truncate">{assistant.phone || "Belum ada nomor"}</p>
                           </div>
                           <input
                             type="checkbox"
@@ -596,3 +596,4 @@ export default function AdminJobDetailPage() {
     </div>
   );
 }
+

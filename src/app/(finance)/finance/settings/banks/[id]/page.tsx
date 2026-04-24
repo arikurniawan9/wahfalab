@@ -163,30 +163,19 @@ export default function BankDetailPage() {
         <div className="bg-gradient-to-br from-emerald-950 via-emerald-800 to-emerald-500 p-4 md:p-5 text-white relative overflow-hidden">
           <div className="absolute -top-12 -right-12 w-64 h-64 bg-emerald-400/20 rounded-full blur-[60px]" />
 
-          <div className="relative z-10 flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-3">
-              <Link href={basePath} className="w-fit">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-3 rounded-lg bg-white/10 border-white/20 hover:bg-white/20 text-white text-[10px] font-black uppercase tracking-widest"
-                >
-                  <ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Kembali
-                </Button>
-              </Link>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={loadData}
-                className="h-8 px-3 rounded-lg bg-white/10 border-white/20 hover:bg-white/20 text-white text-[10px] font-black uppercase tracking-widest"
-              >
-                <RotateCcw className={cn("mr-1.5 h-3.5 w-3.5", loading && "animate-spin")} />
-                Refresh
-              </Button>
-            </div>
-
+          <div className="relative z-10">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
+                <Link href={basePath} className="w-fit">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 rounded-lg bg-white/10 border-white/20 hover:bg-white/20 text-white"
+                    aria-label="Kembali"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                </Link>
                 <div className="h-10 w-10 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-inner shrink-0">
                   {selectedBank?.account_number === "CASH-001" ? (
                     <Wallet className="h-5 w-5 text-amber-200" />
@@ -204,11 +193,22 @@ export default function BankDetailPage() {
                 </div>
               </div>
 
-              <div className="self-end sm:self-auto text-right border-r border-white/10 pr-3">
-                <p className="text-emerald-300 text-[8px] font-bold uppercase tracking-widest mb-0.5">Total Transaksi</p>
-                <p className="text-lg font-black text-white leading-none">
-                  {summary.transactionCount || 0} <span className="text-emerald-300 text-[10px] font-bold uppercase tracking-normal">Item</span>
-                </p>
+              <div className="flex items-center gap-3 self-end sm:self-auto">
+                <div className="text-right border-r border-white/10 pr-3">
+                  <p className="text-emerald-300 text-[8px] font-bold uppercase tracking-widest mb-0.5">Total Transaksi</p>
+                  <p className="text-lg font-black text-white leading-none">
+                    {summary.transactionCount || 0} <span className="text-emerald-300 text-[10px] font-bold uppercase tracking-normal">Item</span>
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={loadData}
+                  className="h-8 px-3 rounded-lg bg-white/10 border-white/20 hover:bg-white/20 text-white text-[10px] font-black uppercase tracking-widest"
+                >
+                  <RotateCcw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+                  <span className="hidden sm:inline ml-1.5">Refresh</span>
+                </Button>
               </div>
             </div>
           </div>

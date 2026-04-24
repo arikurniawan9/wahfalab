@@ -5,7 +5,7 @@ import { Bell, Menu, X, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NotificationBell } from '@/components/ui/notification-bell'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
-import { NavContent, adminMenuItems, operatorMenuItems } from './Sidebar'
+import { NavContent, adminMenuItems, operatorMenuItems, financeMenuItems } from './Sidebar'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { logout } from '@/lib/actions/auth'
@@ -47,7 +47,7 @@ export function Header({ title, subtitle, profile }: HeaderProps) {
   };
 
   // Determine if we should show hamburger menu based on role
-  const showHamburger = profile?.role === 'admin' || profile?.role === 'operator';
+  const showHamburger = profile?.role === 'admin' || profile?.role === 'operator' || profile?.role === 'finance';
 
   useEffect(() => {
     async function fetchCompanyProfile() {
@@ -69,6 +69,8 @@ export function Header({ title, subtitle, profile }: HeaderProps) {
     ? adminMenuItems()
     : profile?.role === 'operator'
       ? operatorMenuItems
+      : profile?.role === 'finance'
+        ? financeMenuItems()
       : [];
 
   return (
@@ -82,7 +84,10 @@ export function Header({ title, subtitle, profile }: HeaderProps) {
                 <Menu className="h-6 w-6" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="p-0 w-72 bg-emerald-950 border-none">
+            <SheetContent
+              side="left"
+              className="p-0 w-72 bg-gradient-to-b from-emerald-900 via-emerald-800 to-emerald-950 border-r border-emerald-700/60 text-white shadow-2xl"
+            >
               <SheetTitle className="sr-only">Menu Navigasi</SheetTitle>
               <NavContent 
                 isCollapsed={false}

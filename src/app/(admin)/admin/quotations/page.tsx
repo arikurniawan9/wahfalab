@@ -154,16 +154,23 @@ export default function QuotationListPage() {
   const handleExportExcel = () => {
     if (data.items.length === 0) return toast.error("Tidak ada data untuk di-export");
     
+    const quotationStatusLabels: Record<string, string> = {
+      draft: "Draft",
+      accepted: "Diterima",
+      rejected: "Ditolak",
+      paid: "Lunas",
+    };
+
     const excelData = data.items.map((i: any) => ({
       "No. Penawaran": i.quotation_number,
       "Tanggal": new Date(i.created_at).toLocaleDateString('id-ID'),
       "Nama Klien": i.profile.full_name,
-      "Perusahaan": i.profile.company_name || "PERSONAL",
+      "Perusahaan": i.profile.company_name || "PERORANGAN",
       "Subtotal": i.subtotal,
       "Diskon": i.discount_amount,
       "Pajak": i.tax_amount,
       "Total Tagihan": i.total_amount,
-      "Status": i.status.toUpperCase()
+      "Status": quotationStatusLabels[i.status] || i.status
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(excelData);
@@ -216,12 +223,18 @@ export default function QuotationListPage() {
   };
 
   const statusCounts = data.statusCounts || {};
+  const quotationStatusLabels: Record<string, string> = {
+    draft: "Draft",
+    accepted: "Diterima",
+    rejected: "Ditolak",
+    paid: "Lunas",
+  };
   const statusTabs = [
     { value: "all", label: "Semua" },
-    { value: "draft", label: "Draft" },
-    { value: "accepted", label: "Accepted" },
-    { value: "rejected", label: "Rejected" },
-    { value: "paid", label: "Paid" },
+    { value: "draft", label: quotationStatusLabels.draft },
+    { value: "accepted", label: quotationStatusLabels.accepted },
+    { value: "rejected", label: quotationStatusLabels.rejected },
+    { value: "paid", label: quotationStatusLabels.paid },
   ];
 
   return (
@@ -252,9 +265,9 @@ export default function QuotationListPage() {
       {/* Stats Bar */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-10">
         <StatCard title="Total Penawaran" value={statusCounts.total} icon={Layers} color="emerald" />
-        <StatCard title="Draft Pending" value={statusCounts.draft} icon={Clock} color="amber" />
-        <StatCard title="Approved" value={statusCounts.accepted} icon={CheckCircle} color="blue" />
-        <StatCard title="Rejected" value={statusCounts.rejected} icon={XCircle} color="red" />
+        <StatCard title="Draft" value={statusCounts.draft} icon={Clock} color="amber" />
+        <StatCard title="Diterima" value={statusCounts.accepted} icon={CheckCircle} color="blue" />
+        <StatCard title="Ditolak" value={statusCounts.rejected} icon={XCircle} color="red" />
         <StatCard title="Lunas" value={statusCounts.paid} icon={DollarSign} color="purple" />
       </div>
 
@@ -293,7 +306,7 @@ export default function QuotationListPage() {
             <div className="flex items-center gap-2 bg-slate-50 px-4 h-12 rounded-2xl border border-slate-100 shrink-0 xl:h-11 xl:px-3.5 xl:rounded-xl">
               <Calendar className="h-4 w-4 text-emerald-500 shrink-0" />
               <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className="h-8 w-full min-w-0 border-none bg-transparent text-[10px] font-black p-0 focus-visible:ring-0 xl:w-28" />
-              <span className="text-[10px] font-black text-slate-300 mx-1 shrink-0">TO</span>
+              <span className="text-[10px] font-black text-slate-300 mx-1 shrink-0">s/d</span>
               <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className="h-8 w-full min-w-0 border-none bg-transparent text-[10px] font-black p-0 focus-visible:ring-0 xl:w-28" />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 xl:flex xl:items-center">
@@ -344,7 +357,7 @@ export default function QuotationListPage() {
                     <TableCell className="px-4 text-left">
                       <div className="flex flex-col">
                         <span className="font-black text-slate-700 uppercase text-[11px] leading-none">{item.profile.full_name}</span>
-                        <span className="text-[9px] font-bold text-emerald-600 uppercase mt-1 tracking-widest">{item.profile.company_name || "PERSONAL"}</span>
+                        <span className="text-[9px] font-bold text-emerald-600 uppercase mt-1 tracking-widest">{item.profile.company_name || "PERORANGAN"}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-right px-4 font-black text-slate-900 text-xs italic">Rp {Number(item.total_amount).toLocaleString("id-ID")}</TableCell>
@@ -354,7 +367,7 @@ export default function QuotationListPage() {
                         item.status === 'accepted' ? "bg-blue-50 text-blue-600 border-blue-200" : 
                         item.status === 'rejected' ? "bg-rose-50 text-rose-600 border-rose-200" :
                         "bg-emerald-50 text-emerald-600 border-emerald-200")}>
-                        {item.status}
+                        {quotationStatusLabels[item.status] || item.status}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-center px-6">

@@ -66,6 +66,12 @@ export default function QuotationDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const statusLabelMap: Record<string, string> = {
+    draft: "Draft",
+    accepted: "Diterima",
+    rejected: "Ditolak",
+    paid: "Lunas",
+  };
 
   const loadQuotation = async () => {
     setLoading(true);
@@ -118,7 +124,7 @@ export default function QuotationDetailPage() {
     setSubmitting(true);
     try {
       await updateQuotationStatus(quotation.id, newStatus);
-      toast.success(`Status berhasil diubah menjadi ${newStatus.toUpperCase()}`);
+      toast.success(`Status berhasil diubah menjadi ${statusLabelMap[newStatus] || newStatus}`);
       setQuotation({ ...quotation, status: newStatus });
     } catch (error) {
       toast.error("Gagal mengubah status");
@@ -130,9 +136,9 @@ export default function QuotationDetailPage() {
   const getStatusConfig = (status: string) => {
     switch (status) {
       case "draft": return { color: "bg-slate-100 text-slate-700 border-slate-200", icon: Clock, label: "Draft" };
-      case "accepted": return { color: "bg-emerald-100 text-emerald-700 border-emerald-200 shadow-emerald-900/5", icon: CheckCircle, label: "Accepted" };
-      case "rejected": return { color: "bg-rose-100 text-rose-700 border-rose-200", icon: XCircle, label: "Rejected" };
-      case "paid": return { color: "bg-purple-100 text-purple-700 border-purple-200", icon: DollarSign, label: "Paid" };
+      case "accepted": return { color: "bg-emerald-100 text-emerald-700 border-emerald-200 shadow-emerald-900/5", icon: CheckCircle, label: "Diterima" };
+      case "rejected": return { color: "bg-rose-100 text-rose-700 border-rose-200", icon: XCircle, label: "Ditolak" };
+      case "paid": return { color: "bg-purple-100 text-purple-700 border-purple-200", icon: DollarSign, label: "Lunas" };
       default: return { color: "bg-slate-100 text-slate-700 border-slate-200", icon: FileText, label: status };
     }
   };
@@ -211,9 +217,9 @@ export default function QuotationDetailPage() {
         <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-1000" />
         <div className="flex flex-col md:flex-row justify-between items-center gap-8 relative z-10">
           {[
-            { key: 'draft', label: 'Drafting', icon: FileText, date: quotation.created_at },
-            { key: 'accepted', label: 'Approved', icon: CheckCircle, date: quotation.status === 'accepted' || quotation.status === 'paid' ? quotation.updated_at : null },
-            { key: 'paid', label: 'Payment', icon: Banknote, date: quotation.status === 'paid' ? quotation.updated_at : null }
+            { key: 'draft', label: 'Draft', icon: FileText, date: quotation.created_at },
+            { key: 'accepted', label: 'Diterima', icon: CheckCircle, date: quotation.status === 'accepted' || quotation.status === 'paid' ? quotation.updated_at : null },
+            { key: 'paid', label: 'Pembayaran', icon: Banknote, date: quotation.status === 'paid' ? quotation.updated_at : null }
           ].map((step, idx, arr) => {
             const isActive = quotation.status === step.key || (step.key === 'draft' && quotation.status !== 'rejected') || (step.key === 'accepted' && quotation.status === 'paid');
             const isCompleted = (step.key === 'draft' && quotation.status !== 'draft') || (step.key === 'accepted' && quotation.status === 'paid');

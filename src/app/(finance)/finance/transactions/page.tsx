@@ -20,7 +20,8 @@ import {
   Wrench,
   Building,
   Wallet,
-  Calendar
+  Calendar,
+  RotateCcw
 } from "lucide-react";
 import { getFinancialRecords, getBankAccounts } from "@/lib/actions/finance";
 import { getCompanyProfile } from "@/lib/actions/company";
@@ -214,38 +215,66 @@ export default function TransactionsHistoryPage() {
     }
   };
 
+  const handleRefresh = async () => {
+    await Promise.all([loadData(), loadBanks()]);
+  };
+
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-black text-emerald-950 font-[family-name:var(--font-montserrat)] uppercase tracking-tight flex items-center gap-3">
-            <div className="h-10 w-2 bg-emerald-600 rounded-full" />
-            Riwayat Transaksi
-          </h1>
-          <p className="text-slate-500 text-sm font-medium mt-1 ml-5">
-            Buku besar digital untuk semua arus kas WahfaLab
-          </p>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <Button
-            variant="outline"
-            onClick={downloadExcel}
-            disabled={exporting !== null}
-            className="rounded-xl border-emerald-200 text-emerald-600 font-bold text-xs uppercase tracking-widest h-12 px-6"
-          >
-            <FileSpreadsheet className="mr-2 h-4 w-4" />
-            {exporting === "excel" ? "Exporting..." : "Download Excel"}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={downloadPdf}
-            disabled={exporting !== null}
-            className="rounded-xl border-slate-300 text-slate-700 font-bold text-xs uppercase tracking-widest h-12 px-6"
-          >
-            <FileText className="mr-2 h-4 w-4" />
-            {exporting === "pdf" ? "Exporting..." : "Download PDF"}
-          </Button>
+      <div className="overflow-hidden rounded-3xl bg-emerald-900 shadow-xl border border-emerald-700/50">
+        <div className="bg-gradient-to-br from-emerald-950 via-emerald-800 to-emerald-500 p-4 md:p-5 text-white relative overflow-hidden">
+          <div className="absolute -top-12 -right-12 w-64 h-64 bg-emerald-400/20 rounded-full blur-[60px]" />
+
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-inner shrink-0">
+                <History className="h-5 w-5 text-emerald-200" />
+              </div>
+              <div>
+                <h1 className="text-lg md:text-xl font-black tracking-tight text-white leading-none uppercase">
+                  Riwayat Transaksi
+                </h1>
+                <p className="text-emerald-100/60 text-[10px] md:text-xs font-medium mt-1 uppercase tracking-widest">
+                  Buku besar digital untuk semua arus kas WahfaLab.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3 self-end sm:self-auto">
+              <div className="hidden lg:block text-right border-r border-white/10 pr-4">
+                <p className="text-emerald-300 text-[8px] font-bold uppercase tracking-widest mb-0.5">Total Transaksi</p>
+                <p className="text-lg font-black text-white leading-none">
+                  {data.total || 0} <span className="text-emerald-300 text-[10px] font-bold uppercase tracking-normal">Item</span>
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                className="h-8 px-3 rounded-lg bg-white/10 border-white/20 hover:bg-white/20 text-white text-[10px] font-black uppercase tracking-widest"
+              >
+                <RotateCcw className={cn("mr-1.5 h-3.5 w-3.5", loading && "animate-spin")} />
+                Refresh
+              </Button>
+              <Button
+                variant="outline"
+                onClick={downloadExcel}
+                disabled={exporting !== null}
+                className="h-8 px-3 rounded-lg bg-white/10 border-white/20 hover:bg-white/20 text-white text-[10px] font-black uppercase tracking-widest"
+              >
+                <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+                {exporting === "excel" ? "Exporting..." : "Excel"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={downloadPdf}
+                disabled={exporting !== null}
+                className="h-8 px-3 rounded-lg bg-white/10 border-white/20 hover:bg-white/20 text-white text-[10px] font-black uppercase tracking-widest"
+              >
+                <FileText className="mr-1.5 h-3.5 w-3.5" />
+                {exporting === "pdf" ? "Exporting..." : "PDF"}
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 

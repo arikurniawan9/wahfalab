@@ -293,3 +293,40 @@ Lanjutkan proyek wahfalab dari SESSION_NOTES.md dan fokus ke area admin dan fina
   - filter cepat histori lock: 3 / 6 / 12 bulan.
   - export `CSV` untuk histori lock periode sesuai filter aktif.
 - Verifikasi tipe setelah semua peningkatan UX period lock: `npx tsc --noEmit` lulus.
+
+## Progress Copywriting Admin (2026-04-24)
+
+- Audit label/copywriting halaman admin dilanjutkan untuk area:
+  - `/admin/jobs`
+  - `/admin/jobs/[id]`
+  - `/admin/quotations`
+  - `/admin/quotations/[id]`
+- Perbaikan yang sudah masuk:
+  - konsistensi istilah status menjadi Bahasa Indonesia (`Diterima`, `Ditolak`, `Lunas`, `Pelaporan`, `Penjadwalan`)
+  - penggantian teks UI campuran/asing seperti:
+    - `View Details` -> `Lihat Detail`
+    - `No phone` -> `Belum ada nomor`
+    - `TO` (rentang tanggal) -> `s/d`
+    - placeholder instruksi yang berisi karakter non-standar dibersihkan
+  - fallback data yang lebih jelas:
+    - `N/A` -> `-`
+    - `PERSONAL` -> `PERORANGAN`
+- Verifikasi tipe setelah perubahan copywriting admin: `npx tsc --noEmit` lulus.
+
+## Progress Navigasi Finance (2026-04-24)
+
+- Sidebar role `finance` sudah diaktifkan dan kini menampilkan grup `Keuangan` lengkap:
+  - Dashboard Keuangan
+  - Daftar Bank
+  - Kas Tunai
+  - Pemasukan
+  - Pengeluaran
+  - Riwayat Transaksi
+  - Verifikasi Bayar
+  - Laporan Invoice
+  - Arus Kas
+- Header mobile (`hamburger menu`) sekarang juga aktif untuk role `finance`.
+- Bottom nav finance disesuaikan:
+  - menu `Invoice` diarahkan ke `/finance/invoices`
+  - ditambahkan shortcut `Pembayaran` ke `/finance/payments`
+- Verifikasi tipe setelah perubahan navigasi finance: `npx tsc --noEmit` lulus.

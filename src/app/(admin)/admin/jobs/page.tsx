@@ -171,7 +171,7 @@ function PremiumStatCard({ title, value, subValue, icon: Icon, color, onClick, a
           <span className={cn(
             "text-[8px] font-bold uppercase tracking-widest",
             active ? "text-emerald-100" : "text-emerald-600"
-          )}>View Details</span>
+          )}>Lihat Detail</span>
           <ArrowUpRight className={cn(
             "h-3 w-3 transition-colors",
             active ? "text-emerald-100" : "text-slate-300 group-hover:text-emerald-500"
@@ -187,10 +187,10 @@ function PremiumStatCard({ title, value, subValue, icon: Icon, color, onClick, a
  */
 function ProfessionalStepper({ status }: any) {
   const stages = [
-    { id: 'scheduled', label: "Order", icon: FileText },
+    { id: 'scheduled', label: "Penjadwalan", icon: FileText },
     { id: 'sampling', label: "Sampling", icon: MapPin },
     { id: 'analysis', label: "Analisis", icon: FlaskConical },
-    { id: 'reporting', label: "Reporting", icon: FileText },
+    { id: 'reporting', label: "Pelaporan", icon: FileText },
     { id: 'completed', label: "Selesai", icon: CheckCircle },
   ];
 
@@ -257,12 +257,12 @@ function ProfessionalStepper({ status }: any) {
 
 const statusOptions = [
   { value: "all", label: "Semua", color: "bg-slate-900 text-white", icon: Layers },
-  { value: "scheduled", label: "Order", color: "bg-blue-50 text-blue-700 border-blue-100", icon: Clock },
+  { value: "scheduled", label: "Penjadwalan", color: "bg-blue-50 text-blue-700 border-blue-100", icon: Clock },
   { value: "sampling", label: "Sampling", color: "bg-amber-50 text-amber-700 border-amber-100", icon: MapPin },
   { value: "analysis_ready", label: "Siap Analisis", color: "bg-emerald-50 text-emerald-700 border-emerald-100", icon: ClipboardCheck },
   { value: "analysis", label: "Analisis Lab", color: "bg-indigo-50 text-indigo-700 border-indigo-100", icon: FlaskConical },
   { value: "analysis_done", label: "Selesai Analisis", color: "bg-violet-50 text-violet-700 border-violet-100", icon: TestTube },
-  { value: "reporting", label: "Reporting", color: "bg-purple-50 text-purple-700 border-purple-100", icon: FileText },
+  { value: "reporting", label: "Pelaporan", color: "bg-purple-50 text-purple-700 border-purple-100", icon: FileText },
   { value: "completed", label: "Selesai", color: "bg-emerald-600 text-white border-emerald-600", icon: CheckCircle },
 ];
 
@@ -929,7 +929,7 @@ export default function AdminJobProgressPage() {
         <PremiumStatCard 
           title="Terjadwal" 
           value={stats.scheduled || 0} 
-          subValue="Order Baru" 
+          subValue="Pekerjaan Baru" 
           icon={Clock} 
           color="blue" 
           active={filterStatus === 'scheduled'} 
@@ -1346,7 +1346,7 @@ export default function AdminJobProgressPage() {
                   Penugasan Personel
                 </DialogTitle>
                 <DialogDescription className="text-emerald-100 font-bold uppercase text-[9px] md:text-[10px] tracking-[0.18em] mt-1.5 opacity-90 truncate">
-                  {selectedJob?.tracking_code} • {selectedJob?.quotation?.profile?.company_name || 'N/A'}
+                  {selectedJob?.tracking_code} | {selectedJob?.quotation?.profile?.company_name || '-'}
                 </DialogDescription>
               </div>
             </div>
@@ -1486,7 +1486,7 @@ export default function AdminJobProgressPage() {
                               {assistant.full_name}
                             </p>
                             <p className="text-xs text-slate-500 truncate">
-                              {assistant.phone || "No phone"}
+                              {assistant.phone || "Belum ada nomor"}
                             </p>
                           </div>
                           <input
@@ -1532,7 +1532,7 @@ export default function AdminJobProgressPage() {
                 </label>
                 <textarea
                   className="w-full h-32 bg-white border-2 border-slate-200 rounded-3xl p-5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all placeholder:text-slate-300 resize-none"
-                  placeholder="Instruksi khusus untuk tim lapangan (protokol sampling,注意点，dll)..."
+                  placeholder="Instruksi khusus untuk tim lapangan (protokol sampling, titik perhatian, dll)..."
                   value={assignFormData.notes}
                   onChange={(e) => setAssignFormData({...assignFormData, notes: e.target.value})}
                 />

@@ -157,6 +157,25 @@ export const operatorMenuItems = [
   },
 ];
 
+export const financeMenuItems = () => [
+  {
+    id: "finance",
+    group: "Keuangan",
+    icon: CreditCard,
+    items: [
+      { icon: Banknote, label: "Dashboard Keuangan", href: "/finance", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
+      { icon: Building2, label: "Daftar Bank", href: "/finance/settings/banks", color: "text-sky-400", bgColor: "bg-sky-500/10" },
+      { icon: Wallet, label: "Kas Tunai", href: "/finance/settings/cash", color: "text-amber-400", bgColor: "bg-amber-500/10" },
+      { icon: ArrowUpRight, label: "Pemasukan", href: "/finance/income", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
+      { icon: ArrowDownRight, label: "Pengeluaran", href: "/finance/expense", color: "text-rose-400", bgColor: "bg-rose-500/10" },
+      { icon: History, label: "Riwayat Transaksi", href: "/finance/transactions", color: "text-violet-400", bgColor: "bg-violet-500/10" },
+      { icon: CreditCard, label: "Verifikasi Bayar", href: "/finance/payments", color: "text-green-400", bgColor: "bg-green-500/10" },
+      { icon: Receipt, label: "Laporan Invoice", href: "/finance/invoices", color: "text-pink-400", bgColor: "bg-pink-500/10" },
+      { icon: FileBarChart, label: "Arus Kas", href: "/finance/cashflow", color: "text-blue-400", bgColor: "bg-blue-500/10" },
+    ]
+  },
+];
+
 export function Sidebar({ className }: { className?: string }) {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -192,7 +211,9 @@ export function Sidebar({ className }: { className?: string }) {
     ? adminMenuItems()
     : role === 'operator'
       ? operatorMenuItems
-      : [];
+      : role === 'finance'
+        ? financeMenuItems()
+        : [];
 
   return (
     <aside
@@ -241,6 +262,11 @@ export function NavContent({ isCollapsed, menuItems, pathname, companyName, logo
     group.items.some((item: any) => pathname === item.href)
   )?.id;
 
+  useEffect(() => {
+    if (isCollapsed) return;
+    setOpenGroups(activeGroupId ? [activeGroupId] : []);
+  }, [activeGroupId, isCollapsed]);
+
   const toggleGroup = (groupId: string) => {
     if (isCollapsed) return; // Prevent accordion in collapsed mode
     setOpenGroups(prev => 
@@ -271,7 +297,7 @@ export function NavContent({ isCollapsed, menuItems, pathname, companyName, logo
       {/* Navigation */}
       <nav className="flex-1 px-3 space-y-2">
         {menuItems.map((group) => {
-          const isOpen = openGroups.includes(group.id) || activeGroupId === group.id;
+          const isOpen = openGroups.includes(group.id);
           const hasActiveItem = group.items.some((item: any) => pathname === item.href);
 
           // Render Floating Menu if Collapsed
