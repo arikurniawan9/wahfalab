@@ -90,14 +90,26 @@ const styles = StyleSheet.create({
     color: "#111827",
   },
   rightLabel: {
-    width: 52,
+    width: 46,
     textAlign: "right",
+    fontWeight: "bold",
+  },
+  rightSeparator: {
+    width: 8,
+    textAlign: "center",
     fontWeight: "bold",
   },
   rightValue: {
     width: 120,
     textAlign: "right",
     color: "#111827",
+  },
+  rightMetaRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "flex-start",
+    marginBottom: 2,
+    fontSize: 9,
   },
   recipientBlock: {
     marginTop: 2,
@@ -273,6 +285,13 @@ qrPlaceholder: {
 });
 
 export const QuotationDocument = ({ data }: any) => {
+  const formattedDate = (() => {
+    if (!data?.date) return "-";
+    const parsed = new Date(data.date);
+    if (Number.isNaN(parsed.getTime())) return "-";
+    return parsed.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+  })();
+
   return (
       <Document>
       <Page size="A4" style={styles.page}>
@@ -307,13 +326,15 @@ export const QuotationDocument = ({ data }: any) => {
               </View>
 
             <View style={{ ...styles.headerRight, width: "40%" }}>
-              <View style={styles.headerInfoRow}>
+              <View style={styles.rightMetaRow}>
                 <Text style={styles.rightLabel}>Tanggal</Text>
-                <Text style={styles.rightValue}>: {new Date(data.date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</Text>
+                <Text style={styles.rightSeparator}>:</Text>
+                <Text style={styles.rightValue}>{formattedDate}</Text>
               </View>
-              <View style={styles.headerInfoRow}>
+              <View style={styles.rightMetaRow}>
                 <Text style={styles.rightLabel}>Nomor</Text>
-                <Text style={styles.rightValue}>: {data.quotation_number}</Text>
+                <Text style={styles.rightSeparator}>:</Text>
+                <Text style={styles.rightValue}>{data.quotation_number || "-"}</Text>
               </View>
             </View>
           </View>

@@ -40,6 +40,7 @@ interface PremiumStatCardProps {
     label: string;
     href: string;
   };
+  compact?: boolean;
 }
 
 export function PremiumStatCard({
@@ -53,13 +54,17 @@ export function PremiumStatCard({
   status = 'neutral',
   isCurrency = false,
   quickAction,
+  compact = false,
 }: PremiumStatCardProps) {
   const Icon = iconMap[iconName];
   const trendColor = trend && trend >= 0 ? 'text-emerald-600' : 'text-red-600';
   const trendBgColor = trend && trend >= 0 ? 'bg-emerald-50' : 'bg-red-50';
   
   return (
-    <div className="group relative bg-white rounded-3xl shadow-lg shadow-slate-200/50 border border-slate-100 overflow-hidden hover:shadow-xl hover:shadow-emerald-900/10 transition-all duration-500 hover:-translate-y-1">
+    <div className={cn(
+      "group relative bg-white shadow-lg shadow-slate-200/50 border border-slate-100 overflow-hidden hover:shadow-xl hover:shadow-emerald-900/10 transition-all duration-500 hover:-translate-y-1",
+      compact ? "rounded-2xl" : "rounded-3xl"
+    )}>
       {/* Gradient Background Glow */}
       <div className={cn(
         "absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-10 transition-opacity duration-500",
@@ -68,22 +73,23 @@ export function PremiumStatCard({
       
       {/* Status Indicator */}
       {status === 'active' && (
-        <div className="absolute top-4 right-4">
-          <span className="relative flex h-3 w-3">
+        <div className={cn("absolute", compact ? "top-3 right-3" : "top-4 right-4")}>
+          <span className={cn("relative flex", compact ? "h-2.5 w-2.5" : "h-3 w-3")}>
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            <span className={cn("relative inline-flex rounded-full bg-emerald-500", compact ? "h-2.5 w-2.5" : "h-3 w-3")}></span>
           </span>
         </div>
       )}
 
-      <div className="p-6 relative">
+      <div className={cn("relative", compact ? "p-4" : "p-6")}>
         {/* Icon & Title */}
-        <div className="flex items-start justify-between mb-4">
+        <div className={cn("flex items-start justify-between", compact ? "mb-3" : "mb-4")}>
           <div className={cn(
-            "h-14 w-14 rounded-2xl flex items-center justify-center shadow-lg transition-transform duration-500 group-hover:rotate-12 group-hover:scale-110",
+            "rounded-2xl flex items-center justify-center shadow-lg transition-transform duration-500 group-hover:rotate-12 group-hover:scale-110",
+            compact ? "h-11 w-11" : "h-14 w-14",
             `bg-gradient-to-br ${gradient}`
           )}>
-            <Icon className="h-7 w-7 text-white" />
+            <Icon className={cn("text-white", compact ? "h-5 w-5" : "h-7 w-7")} />
           </div>
           
           {quickAction && (
@@ -97,12 +103,18 @@ export function PremiumStatCard({
         </div>
 
         {/* Value */}
-        <div className="mb-4">
-          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">
+        <div className={cn(compact ? "mb-3" : "mb-4")}>
+          <h3 className={cn(
+            "font-black uppercase tracking-[0.2em] text-slate-400",
+            compact ? "text-[9px] mb-1.5" : "text-[10px] mb-2"
+          )}>
             {title}
           </h3>
           <div className="flex items-baseline gap-2">
-            <span className="text-4xl font-black text-slate-900 tracking-tighter">
+            <span className={cn(
+              "font-black text-slate-900 tracking-tighter",
+              compact ? "text-3xl" : "text-4xl"
+            )}>
               {typeof value === 'number' && !isCurrency 
                 ? value.toLocaleString('id-ID') 
                 : value}
@@ -112,7 +124,7 @@ export function PremiumStatCard({
 
         {/* Sparkline Mini Chart */}
         {sparkline && sparkline.length > 0 && (
-          <div className="mb-4 h-12">
+          <div className={cn(compact ? "mb-3 h-10" : "mb-4 h-12")}>
             <Sparkline 
               data={sparkline} 
               color={gradient.split(' ')[1].replace('to-', '')}
@@ -145,7 +157,10 @@ export function PremiumStatCard({
         {quickAction && (
           <Link
             href={quickAction.href}
-            className="mt-4 w-full p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-100 transition-all flex items-center justify-between group/btn"
+            className={cn(
+              "w-full rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-100 transition-all flex items-center justify-between group/btn",
+              compact ? "mt-3 p-2.5" : "mt-4 p-3"
+            )}
           >
             <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">
               {quickAction.label}

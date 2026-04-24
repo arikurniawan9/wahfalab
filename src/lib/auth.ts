@@ -3,6 +3,12 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import type { NextAuthConfig } from "next-auth";
 
+const authSecret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+
+if (!authSecret) {
+  throw new Error("Missing AUTH_SECRET (or NEXTAUTH_SECRET) environment variable.");
+}
+
 export const authConfig = {
   providers: [
     Credentials({
@@ -72,7 +78,7 @@ export const authConfig = {
   session: {
     strategy: "jwt",
   },
-  secret: process.env.AUTH_SECRET || "wahfalab_secret_fallback_key_123",
+  secret: authSecret,
   trustHost: true,
   callbacks: {
     async jwt({ token, user, trigger, session }) {

@@ -6,7 +6,6 @@
 "use client";
 
 import React, { useState, useEffect, use } from "react";
-import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,9 +37,10 @@ import {
 import { getQuotationById, updateQuotationStatus } from "@/lib/actions/quotation";
 import { downloadQuotationPDF } from "@/lib/generate-quotation-pdf";
 import { cn } from "@/lib/utils";
+import { OperatorPageHeader } from "@/components/operator/OperatorPageHeader";
+import { OPERATOR_EMPTY_TEXT, OPERATOR_TOAST_TEXT } from "@/lib/constants/operator-copy";
 
 export default function OperatorQuotationDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const router = useRouter();
   const { id } = React.use(params);
   const [loading, setLoading] = useState(true);
   const [quotation, setQuotation] = useState<any>(null);
@@ -57,7 +57,7 @@ export default function OperatorQuotationDetailPage({ params }: { params: Promis
       const data = await getQuotationById(id);
       setQuotation(data);
     } catch (error) {
-      toast.error("Gagal memuat data penawaran");
+      toast.error(OPERATOR_TOAST_TEXT.quotationLoadFailed);
     } finally {
       setLoading(false);
     }
@@ -67,7 +67,7 @@ export default function OperatorQuotationDetailPage({ params }: { params: Promis
     try {
       await downloadQuotationPDF(quotation);
     } catch (error) {
-      toast.error("Gagal mencetak PDF");
+      toast.error(OPERATOR_TOAST_TEXT.quotationPdfFailed);
     }
   };
 
@@ -75,10 +75,10 @@ export default function OperatorQuotationDetailPage({ params }: { params: Promis
     setUpdating(true);
     try {
       await updateQuotationStatus(quotation.id, newStatus);
-      toast.success(`Dokumen resmi di-${newStatus === 'accepted' ? 'terima' : 'tolak'}`);
+      toast.success(OPERATOR_TOAST_TEXT.quotationStatusUpdated);
       loadQuotation();
     } catch (error) {
-      toast.error("Gagal update status");
+      toast.error(OPERATOR_TOAST_TEXT.quotationStatusFailed);
     } finally {
       setUpdating(false);
     }
@@ -92,44 +92,42 @@ export default function OperatorQuotationDetailPage({ params }: { params: Promis
     paid: { label: 'LUNAS', color: 'text-purple-600', bg: 'bg-purple-100', icon: DollarSign }
   };
 
-  if (loading) return <div className="flex h-[80vh] items-center justify-center"><ChemicalLoader /></div>;
-  if (!quotation) return <div className="p-10 text-center">Dokumen tidak ditemukan.</div>;
+  if (loading) return <ChemicalLoader fullScreen />;
+  if (!quotation) return <div className="p-10 text-center">{OPERATOR_EMPTY_TEXT.quotationNotFound}</div>;
 
   const cfg = statusConfig[quotation.status] || statusConfig.draft;
 
   return (
     <div className="p-4 md:p-10 pb-24 md:pb-10 max-w-7xl mx-auto space-y-10">
-      {/* Header Premium */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div className="flex items-center gap-5">
-          <Link href="/operator/quotations">
-            <Button variant="outline" size="icon" className="h-14 w-14 rounded-2xl border-2 border-slate-100 hover:bg-emerald-50 hover:text-emerald-600 transition-all shadow-sm">
-              <ArrowLeft className="h-6 w-6" />
+      <OperatorPageHeader
+        icon={FileText}
+        title={quotation.title || "Manajemen berkas penawaran digital laboratorium"}
+        description={quotation.quotation_number}
+        statsLabel="Status"
+        statsValue={cfg.label}
+        actions={(
+          <div className="flex items-center gap-2">
+            <Badge className={cn("font-black text-[10px] px-3 py-1 rounded-full border-none shadow-sm", cfg.bg, cfg.color)}>
+              {cfg.label}
+            </Badge>
+            <Link href="/operator/quotations">
+              <Button variant="outline" size="sm" className="bg-white/10 border-white/20 hover:bg-white/20 text-white rounded-xl h-9 px-4 backdrop-blur-md transition-all text-xs font-bold">
+                <ArrowLeft className="h-3.5 w-3.5 mr-1.5" />
+                Kembali
+              </Button>
+            </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePrintPDF}
+              className="bg-white/10 border-white/20 hover:bg-white/20 text-white rounded-xl h-9 px-4 backdrop-blur-md transition-all text-xs font-bold"
+            >
+              <Printer className="mr-1.5 h-3.5 w-3.5" />
+              Cetak
             </Button>
-          </Link>
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-               <h1 className="text-3xl font-black text-emerald-950 tracking-tighter uppercase font-[family-name:var(--font-montserrat)]">{quotation.quotation_number}</h1>
-               <Badge className={cn("font-black text-[10px] px-3 py-1 rounded-full border-none shadow-sm", cfg.bg, cfg.color)}>{cfg.label}</Badge>
-            </div>
-            {quotation.title && (
-              <p className="text-emerald-700 text-sm font-black uppercase tracking-tight mb-1 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-100 w-fit">
-                {quotation.title}
-              </p>
-            )}
-            <p className="text-slate-500 text-sm font-medium italic">Manajemen berkas penawaran digital laboratorium.</p>
           </div>
-        </div>
-        <div className="flex gap-3">
-          <Button
-            variant="outline"
-            onClick={handlePrintPDF}
-            className="h-12 px-6 rounded-2xl border-2 border-blue-100 text-blue-600 font-black text-xs uppercase tracking-widest hover:bg-blue-50 bg-white shadow-sm transition-all"
-          >
-            <Printer className="mr-2 h-4 w-4" /> Cetak Penawaran
-          </Button>
-        </div>
-      </div>
+        )}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Main Content */}

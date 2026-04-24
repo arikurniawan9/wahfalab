@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   FileText,
+  Briefcase,
   Users,
   FlaskConical,
   MapPin,
@@ -49,6 +50,13 @@ const reportingNavItems: BottomNavItem[] = [
   { icon: FileText, label: "LHU", href: "/reporting/jobs" },
 ];
 
+const operatorNavItems: BottomNavItem[] = [
+  { icon: LayoutDashboard, label: "Beranda", href: "/operator", exact: true },
+  { icon: FileText, label: "Penawaran", href: "/operator/quotations" },
+  { icon: Briefcase, label: "Order", href: "/operator/jobs" },
+  { icon: CreditCard, label: "Bayar", href: "/operator/payments" },
+];
+
 const financeNavItems: BottomNavItem[] = [
   { icon: LayoutDashboard, label: "Beranda", href: "/finance", exact: true },
   { icon: FileText, label: "Invoice", href: "/finance/invoices" },
@@ -57,10 +65,21 @@ const financeNavItems: BottomNavItem[] = [
   { icon: Wallet, label: "Kas", href: "/finance/settings/cash" },
 ];
 
+function inferRoleFromPath(pathname: string): string | null {
+  if (pathname.startsWith("/dashboard")) return "client";
+  if (pathname.startsWith("/field")) return "field_officer";
+  if (pathname.startsWith("/analyst")) return "analyst";
+  if (pathname.startsWith("/reporting")) return "reporting";
+  if (pathname.startsWith("/operator")) return "operator";
+  if (pathname.startsWith("/finance")) return "finance";
+  if (pathname.startsWith("/admin")) return "admin";
+  return null;
+}
+
 export function BottomNav() {
   const pathname = usePathname();
-  const [role, setRole] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [role, setRole] = useState<string | null>(() => inferRoleFromPath(pathname));
+  const [isLoading, setIsLoading] = useState(() => !inferRoleFromPath(pathname));
 
   useEffect(() => {
     async function fetchRole() {
@@ -74,13 +93,15 @@ export function BottomNav() {
     fetchRole();
   }, []);
 
-  // Don't show BottomNav for admin and operator
-  if (isLoading || role === 'admin' || role === 'operator') return null;
+  // Don't show BottomNav for admin
+  if (isLoading || role === 'admin') return null;
 
   const navItems = role === 'field_officer'
     ? fieldOfficerNavItems
     : role === 'client'
       ? clientNavItems
+      : role === 'operator'
+        ? operatorNavItems
       : role === 'analyst'
         ? analystNavItems
         : role === 'reporting'

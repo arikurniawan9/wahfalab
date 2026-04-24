@@ -13,7 +13,7 @@ interface LoadingOverlayProps {
   showClose?: boolean;
   onClose?: () => void;
   progress?: number; // 0-100 for progress bar
-  variant?: "default" | "fullscreen" | "modal" | "inline";
+  variant?: "default" | "fullscreen" | "modal" | "inline" | "transparent";
   children?: React.ReactNode;
 }
 
@@ -34,18 +34,27 @@ export function LoadingOverlay({
     fullscreen: "fixed inset-0 z-[9999]",
     modal: "fixed inset-0 z-[9999]",
     inline: "absolute inset-0 z-50",
+    transparent: "fixed inset-0 z-[9999]",
   };
 
   const backgrounds = {
     default: "bg-slate-900/70 backdrop-blur-md",
     fullscreen: "bg-slate-950/95",
-    modal: "bg-white/80 backdrop-blur-md",
+    modal: "bg-slate-900/30 backdrop-blur-sm",
     inline: "bg-white/80 backdrop-blur-sm",
+    transparent: "bg-white/70 backdrop-blur-md",
   };
+
+  const isLightVariant = variant === "modal" || variant === "transparent" || variant === "inline";
 
   return (
     <div className={cn(variants[variant], backgrounds[variant], "flex items-center justify-center")}>
-      <div className="flex flex-col items-center gap-3 p-6 max-w-sm w-full mx-4">
+      <div
+        className={cn(
+          "flex flex-col items-center gap-3 p-6 max-w-sm w-full mx-4",
+          variant === "modal" && "rounded-2xl border border-white/60 bg-white/85 shadow-2xl"
+        )}
+      >
         {/* Loader */}
         {children || <ChemicalLoader size="sm" />}
 
@@ -55,7 +64,7 @@ export function LoadingOverlay({
             {title && (
               <h3 className={cn(
                 "font-semibold text-lg",
-                variant === "modal" ? "text-slate-900" : "text-white"
+                isLightVariant ? "text-slate-900" : "text-white"
               )}>
                 {title}
               </h3>
@@ -63,7 +72,7 @@ export function LoadingOverlay({
             {description && (
               <p className={cn(
                 "text-sm",
-                variant === "modal" ? "text-slate-600" : "text-slate-200"
+                isLightVariant ? "text-slate-600" : "text-slate-200"
               )}>
                 {description}
               </p>
@@ -85,7 +94,7 @@ export function LoadingOverlay({
             </div>
             <p className={cn(
               "text-xs text-center",
-              variant === "modal" ? "text-slate-500" : "text-slate-400"
+              isLightVariant ? "text-slate-500" : "text-slate-400"
             )}>
               {progress}% completed
             </p>

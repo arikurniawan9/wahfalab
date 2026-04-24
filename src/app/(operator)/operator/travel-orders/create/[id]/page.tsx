@@ -14,11 +14,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ChemicalLoader } from "@/components/ui";
+import { ChemicalLoader, LoadingOverlay } from "@/components/ui";
 import { createTravelOrder, getTravelOrderByAssignmentId } from "@/lib/actions/travel-order";
 import { getAssignmentById } from "@/lib/actions/sampling";
 import { ArrowLeft, Save, Truck, MapPin, Calendar, DollarSign, Utensils } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { OperatorPageHeader } from "@/components/operator/OperatorPageHeader";
+import { OPERATOR_LOADING_COPY, PROCESSING_TEXT } from "@/lib/constants/loading";
+import { OPERATOR_EMPTY_TEXT, OPERATOR_TOAST_TEXT } from "@/lib/constants/operator-copy";
 
 export default function OperatorCreateTravelOrderPage() {
   const router = useRouter();
@@ -62,13 +65,13 @@ export default function OperatorCreateTravelOrderPage() {
       const existingTO = await getTravelOrderByAssignmentId(params.id as string);
       if (existingTO) {
         setExistingTravelOrder(existingTO);
-        toast.info("Surat tugas sudah ada, redirecting...");
+        toast.info(OPERATOR_TOAST_TEXT.travelOrderExistsRedirect);
         setTimeout(() => {
-          router.push(`/operator/travel-orders/${existingTO.id}`);
+          router.push(`/operator/travel-orders/${existingTO.id}/preview`);
         }, 2000);
       }
     } catch (error: any) {
-      toast.error("Gagal memuat data", {
+      toast.error(OPERATOR_TOAST_TEXT.loadFailed, {
         description: error?.message
       });
     } finally {
@@ -83,17 +86,17 @@ export default function OperatorCreateTravelOrderPage() {
     try {
       // Validate
       if (!formData.departure_date || !formData.return_date) {
-        toast.error("Tanggal berangkat & kembali wajib diisi");
+        toast.error(OPERATOR_TOAST_TEXT.travelOrderDateRequired);
         setSubmitting(false);
         return;
       }
       if (!formData.destination) {
-        toast.error("Tujuan wajib diisi");
+        toast.error(OPERATOR_TOAST_TEXT.travelOrderDestinationRequired);
         setSubmitting(false);
         return;
       }
       if (!formData.purpose) {
-        toast.error("Maksud & tujuan wajib diisi");
+        toast.error(OPERATOR_TOAST_TEXT.travelOrderPurposeRequired);
         setSubmitting(false);
         return;
       }
@@ -117,17 +120,17 @@ export default function OperatorCreateTravelOrderPage() {
         return;
       }
 
-      toast.success("✅ Surat tugas berhasil dibuat!");
+      toast.success(OPERATOR_TOAST_TEXT.travelOrderCreated);
       
       // Redirect to detail page
       setTimeout(() => {
         if (result.travelOrder) {
-          router.push(`/operator/travel-orders/${result.travelOrder.id}`);
+          router.push(`/operator/travel-orders/${result.travelOrder.id}/preview`);
         }
       }, 1000);
     } catch (error: any) {
       console.error("Create travel order error:", error);
-      toast.error("Gagal membuat surat tugas", {
+      toast.error(OPERATOR_TOAST_TEXT.travelOrderCreateFailed, {
         description: error?.message
       });
     } finally {
@@ -136,30 +139,19 @@ export default function OperatorCreateTravelOrderPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <ChemicalLoader size="lg" />
-      </div>
-    );
+    return <ChemicalLoader fullScreen />;
   }
 
   if (existingTravelOrder) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <ChemicalLoader size="lg" />
-          <p className="mt-4 text-slate-600 font-medium">Mengalihkan ke surat tugas...</p>
-        </div>
-      </div>
-    );
+    return <ChemicalLoader fullScreen />;
   }
 
   if (!assignment) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-slate-600">Assignment tidak ditemukan</h2>
-          <Link href="/operator/sampling">
+          <h2 className="text-2xl font-bold text-slate-600">{OPERATOR_EMPTY_TEXT.assignmentNotFound}</h2>
+          <Link href="/operator/jobs">
             <Button className="mt-4">Kembali</Button>
           </Link>
         </div>
@@ -169,18 +161,23 @@ export default function OperatorCreateTravelOrderPage() {
 
   return (
     <div className="p-4 md:p-10 pb-24 md:pb-10">
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-6">
-        <Link href="/operator/sampling">
-          <Button variant="outline" size="icon" className="rounded-xl">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <div>
-          <h1 className="text-3xl font-bold text-emerald-900">Buat Surat Tugas Perjalanan</h1>
-          <p className="text-slate-500 text-sm">Isi detail perjalanan dinas untuk petugas lapangan</p>
-        </div>
-      </div>
+      <OperatorPageHeader
+        icon={Truck}
+        title="Buat Surat Tugas Perjalanan"
+        description="Isi detail perjalanan dinas untuk petugas lapangan"
+        statsLabel="Job Order"
+        statsValue={assignment.job_order?.tracking_code || "-"}
+        onRefresh={loadData}
+        refreshing={loading}
+        actions={(
+          <Link href="/operator/jobs">
+            <Button variant="outline" size="sm" className="bg-white/10 border-white/20 hover:bg-white/20 text-white rounded-xl h-9 px-4 backdrop-blur-md transition-all text-xs font-bold">
+              <ArrowLeft className="h-3.5 w-3.5 mr-1.5" />
+              Kembali
+            </Button>
+          </Link>
+        )}
+      />
 
       {/* Assignment Info Card */}
       <Card className="mb-6 bg-emerald-50 border-emerald-200">
@@ -419,7 +416,7 @@ export default function OperatorCreateTravelOrderPage() {
             {submitting ? (
               <>
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-                <span>Menyimpan...</span>
+                <span>{PROCESSING_TEXT}</span>
               </>
             ) : (
               <>
@@ -430,6 +427,9 @@ export default function OperatorCreateTravelOrderPage() {
           </Button>
         </div>
       </form>
+      <LoadingOverlay isOpen={submitting} title={OPERATOR_LOADING_COPY.title} description={OPERATOR_LOADING_COPY.description} variant="transparent" />
     </div>
   );
 }
+
+

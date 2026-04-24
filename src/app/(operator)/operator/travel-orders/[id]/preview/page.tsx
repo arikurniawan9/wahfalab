@@ -4,12 +4,16 @@ import React, { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { ArrowLeft, Download } from "lucide-react";
+import { Download, FileText, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { getTravelOrderById } from "@/lib/actions/travel-order";
 import { pdf, PDFViewer } from "@react-pdf/renderer";
 import { TravelOrderPDF } from "@/components/pdf/TravelOrderPDF";
 import { TravelOrderAttachment } from "@/components/pdf/TravelOrderAttachment";
+import { OPERATOR_LOADING_COPY, PROCESSING_TEXT } from "@/lib/constants/loading";
+import { OPERATOR_EMPTY_TEXT, OPERATOR_TOAST_TEXT } from "@/lib/constants/operator-copy";
+import { OperatorPageHeader } from "@/components/operator/OperatorPageHeader";
+import { ChemicalLoader, LoadingOverlay } from "@/components/ui";
 
 export default function OperatorTravelOrderPreviewPage() {
   const params = useParams();
@@ -25,17 +29,15 @@ export default function OperatorTravelOrderPreviewPage() {
   async function loadData() {
     try {
       const data = await getTravelOrderById(params.id as string);
-      console.log('📄 Travel Order Data:', data);
-      console.log('📦 Items:', data?.assignment?.job_order?.quotation?.items);
       setTravelOrder(data);
 
       // Load company profile - use simpler approach
       const defaultCompany = {
-        company_name: 'WahfaLab',
+        company_name: 'Perusahaan',
         address: null,
         phone: null,
         email: null,
-        logo_url: '/logo-wahfalab.png', // Use logo from public folder
+        logo_url: null,
         tagline: null,
         npwp: null
       };
@@ -44,20 +46,13 @@ export default function OperatorTravelOrderPreviewPage() {
         const companyResponse = await fetch('/api/company-profile');
         if (companyResponse.ok) {
           const companyData = await companyResponse.json();
-          console.log('🏢 Company Profile:', companyData);
-          
-          // Use logo from public folder if no logo_url from API
-          let logoUrl = '/logo-wahfalab.png';
-          if (companyData.logo_url && companyData.logo_url.startsWith('http')) {
-            logoUrl = companyData.logo_url;
-          }
           
           setCompanyProfile({
-            company_name: companyData.company_name || 'WahfaLab',
+            company_name: companyData.company_name?.trim() || 'Perusahaan',
             address: companyData.address || null,
             phone: companyData.phone || null,
             email: companyData.email || null,
-            logo_url: logoUrl,
+            logo_url: companyData.logo_url || null,
             tagline: companyData.tagline || null,
             npwp: companyData.npwp || null
           });
@@ -70,7 +65,7 @@ export default function OperatorTravelOrderPreviewPage() {
       }
     } catch (error) {
       console.error('Failed to load travel order:', error);
-      toast.error("Gagal memuat data surat tugas");
+      toast.error(OPERATOR_TOAST_TEXT.travelOrderLoadFailed);
     } finally {
       setLoading(false);
     }
@@ -187,30 +182,23 @@ export default function OperatorTravelOrderPreviewPage() {
       document.body.removeChild(attachmentLink);
       URL.revokeObjectURL(attachmentUrl);
 
-      toast.success("✅ Surat tugas & lampiran berhasil diunduh");
+      toast.success(OPERATOR_TOAST_TEXT.travelOrderDownloadSuccess);
     } catch (error) {
-      toast.error("Gagal membuat PDF");
+      toast.error(OPERATOR_TOAST_TEXT.pdfGenerateFailed);
     } finally {
       setGeneratingPdf(false);
     }
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-          <p className="text-slate-600 font-medium">Memuat surat tugas...</p>
-        </div>
-      </div>
-    );
+    return <ChemicalLoader fullScreen />;
   }
 
   if (!travelOrder) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-slate-600">Surat tugas tidak ditemukan</h2>
+          <h2 className="text-2xl font-bold text-slate-600">{OPERATOR_EMPTY_TEXT.travelOrderNotFound}</h2>
           <Link href="/operator/jobs">
             <Button className="mt-4">Kembali</Button>
           </Link>
@@ -221,24 +209,34 @@ export default function OperatorTravelOrderPreviewPage() {
 
   return (
     <div className="p-4 md:p-10">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <Link href="/operator/jobs">
-          <Button variant="outline" size="icon">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={handleDownloadPdf}
-            disabled={generatingPdf}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            {generatingPdf ? "Mengunduh..." : "Unduh PDF"}
-          </Button>
-        </div>
-      </div>
+      <OperatorPageHeader
+        icon={FileText}
+        title="Pratinjau Surat Tugas"
+        description="Preview dan unduh dokumen perjalanan dinas"
+        statsLabel="No Dokumen"
+        statsValue={travelOrder.document_number || "-"}
+        className="mb-6"
+        actions={(
+          <div className="flex items-center gap-2">
+            <Link href="/operator/jobs">
+              <Button variant="outline" size="sm" className="bg-white/10 border-white/20 hover:bg-white/20 text-white rounded-xl h-9 px-4 backdrop-blur-md transition-all text-xs font-bold">
+                <ArrowLeft className="h-3.5 w-3.5 mr-1.5" />
+                Kembali
+              </Button>
+            </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadPdf}
+              disabled={generatingPdf}
+              className="bg-white/10 border-white/20 hover:bg-white/20 text-white rounded-xl h-9 px-4 backdrop-blur-md transition-all text-xs font-bold"
+            >
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              {generatingPdf ? PROCESSING_TEXT : "Unduh PDF"}
+            </Button>
+          </div>
+        )}
+      />
 
       {/* PDF Preview - Main Document */}
       <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden mb-6">
@@ -335,6 +333,9 @@ export default function OperatorTravelOrderPreviewPage() {
           </div>
         </div>
       </div>
+      <LoadingOverlay isOpen={generatingPdf} title={OPERATOR_LOADING_COPY.title} description={OPERATOR_LOADING_COPY.description} variant="transparent" />
     </div>
   );
 }
+
+

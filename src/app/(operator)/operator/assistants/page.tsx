@@ -23,7 +23,7 @@ import {
   Mail,
   X
 } from "lucide-react";
-import { LoadingOverlay, LoadingButton, EmptyState } from "@/components/ui";
+import { ChemicalLoader, LoadingOverlay, LoadingButton, EmptyState } from "@/components/ui";
 import { 
   getFieldAssistants, 
   createFieldAssistant, 
@@ -31,6 +31,8 @@ import {
   deleteFieldAssistant 
 } from "@/lib/actions/field-assistant";
 import { toast } from "sonner";
+import { OPERATOR_LOADING_COPY, PROCESSING_TEXT } from "@/lib/constants/loading";
+import { OPERATOR_EMPTY_TEXT, OPERATOR_TOAST_TEXT } from "@/lib/constants/operator-copy";
 import {
   Dialog,
   DialogContent,
@@ -40,6 +42,7 @@ import {
   DialogDescription
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { OperatorPageHeader } from "@/components/operator/OperatorPageHeader";
 
 export default function OperatorAssistantManagementPage() {
   const [assistants, setAssistants] = useState<any[]>([]);
@@ -62,7 +65,7 @@ export default function OperatorAssistantManagementPage() {
       const data = await getFieldAssistants();
       setAssistants(data?.items || []);
     } catch (error) {
-      toast.error("Gagal memuat data asisten");
+      toast.error(OPERATOR_TOAST_TEXT.loadFailed);
     } finally {
       setLoading(false);
     }
@@ -87,7 +90,7 @@ export default function OperatorAssistantManagementPage() {
       resetForm();
       loadAssistants();
     } catch (error: any) {
-      toast.error(error.message || "Gagal menyimpan data");
+      toast.error(error.message || OPERATOR_TOAST_TEXT.saveFailed);
     } finally {
       setSubmitting(false);
     }
@@ -121,7 +124,7 @@ export default function OperatorAssistantManagementPage() {
       toast.success("Asisten berhasil dihapus");
       loadAssistants();
     } catch (error: any) {
-      toast.error("Gagal menghapus asisten");
+      toast.error(OPERATOR_TOAST_TEXT.deleteFailed);
     }
   };
 
@@ -130,28 +133,30 @@ export default function OperatorAssistantManagementPage() {
     (a.phone && a.phone.includes(search))
   );
 
+  if (loading) return <ChemicalLoader fullScreen />;
+
   return (
     <div className="p-4 md:p-10 pb-24 md:pb-10">
-      <div className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div>
-          <h1 className="text-2xl font-bold text-emerald-900 uppercase flex items-center gap-3">
-            <UsersIcon className="h-6 w-6 text-emerald-600" />
-            Database Asisten Lapangan
-          </h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Kelola data asisten untuk penugasan sampling (Operasional).
-          </p>
-        </div>
-        <Button
-          onClick={() => {
-            resetForm();
-            setIsDialogOpen(true);
-          }}
-          className="bg-emerald-600 hover:bg-emerald-700 h-11 px-6 rounded-2xl shadow-lg shadow-emerald-900/20 font-bold text-xs uppercase tracking-wider"
-        >
-          <Plus className="mr-2 h-4 w-4" /> Tambah Asisten
-        </Button>
-      </div>
+      <OperatorPageHeader
+        icon={UsersIcon}
+        title="Database Asisten Lapangan"
+        description="Kelola data asisten untuk penugasan sampling"
+        statsLabel="Total Asisten"
+        statsValue={assistants.length}
+        onRefresh={loadAssistants}
+        refreshing={loading}
+        actions={(
+          <Button
+            onClick={() => {
+              resetForm();
+              setIsDialogOpen(true);
+            }}
+            className="bg-white/10 border border-white/20 hover:bg-white/20 text-white h-9 px-4 rounded-xl shadow-none font-bold text-[10px] uppercase tracking-widest"
+          >
+            <Plus className="mr-1.5 h-3.5 w-3.5" /> Tambah Asisten
+          </Button>
+        )}
+      />
 
       <div className="bg-white rounded-[2.5rem] shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
         <div className="p-6 border-b bg-slate-50/50">
@@ -161,7 +166,7 @@ export default function OperatorAssistantManagementPage() {
               placeholder="Cari nama atau no. telepon..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-11 h-12 rounded-xl border-slate-200 focus-visible:ring-emerald-500"
+              className="pl-11 h-11 rounded-xl border-slate-200 bg-white focus-visible:ring-emerald-500"
             />
           </div>
         </div>
@@ -170,22 +175,18 @@ export default function OperatorAssistantManagementPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-slate-50/50 hover:bg-slate-50/50">
-                <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest px-8">Nama Lengkap</TableHead>
-                <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest px-4">Kontak</TableHead>
-                <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest px-4">Alamat</TableHead>
-                <TableHead className="font-black text-slate-900 uppercase text-[10px] tracking-widest px-8 text-right">Aksi</TableHead>
+                <TableHead className="font-black text-slate-400 h-14 uppercase text-[10px] tracking-wider px-8">Nama Lengkap</TableHead>
+                <TableHead className="font-black text-slate-400 h-14 uppercase text-[10px] tracking-wider px-4">Kontak</TableHead>
+                <TableHead className="font-black text-slate-400 h-14 uppercase text-[10px] tracking-wider px-4">Alamat</TableHead>
+                <TableHead className="font-black text-slate-400 h-14 uppercase text-[10px] tracking-wider px-8 text-right">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
-                Array.from({ length: 3 }).map((_, i) => (
-                  <TableRow key={i}><TableCell colSpan={4} className="py-8 px-8"><div className="h-10 bg-slate-100 animate-pulse rounded-xl" /></TableCell></TableRow>
-                ))
-              ) : filteredAssistants.length === 0 ? (
+              {filteredAssistants.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} className="py-20 text-center">
                     <EmptyState 
-                      title="Belum ada data asisten" 
+                      title={OPERATOR_EMPTY_TEXT.noAssistant}
                       description="Tambahkan asisten lapangan untuk mulai menugaskan mereka bersama petugas utama."
                     />
                   </TableCell>
@@ -213,7 +214,7 @@ export default function OperatorAssistantManagementPage() {
                             <Mail className="h-3 w-3 text-slate-400" /> {assistant.email}
                           </div>
                         )}
-                        {!assistant.phone && !assistant.email && <span className="text-xs text-slate-400 italic">Tidak ada kontak</span>}
+                        {!assistant.phone && !assistant.email && <span className="text-xs text-slate-400 italic">{OPERATOR_EMPTY_TEXT.noContact}</span>}
                       </div>
                     </TableCell>
                     <TableCell className="px-4">
@@ -244,62 +245,78 @@ export default function OperatorAssistantManagementPage() {
         setIsDialogOpen(open);
         if (!open) resetForm();
       }}>
-        <DialogContent className="sm:max-w-md rounded-[2rem]">
-          <DialogHeader>
-            <DialogTitle className="text-emerald-900 flex items-center gap-2">
-              <User className="h-5 w-5" />
-              {editingAssistant ? "Edit" : "Tambah"} Asisten Lapangan
-            </DialogTitle>
-            <DialogDescription>
-              Data ini hanya untuk kelengkapan administrasi & surat tugas.
-            </DialogDescription>
+        <DialogContent className="sm:max-w-xl p-0 border-none shadow-2xl rounded-[2.5rem] overflow-hidden">
+          <DialogHeader className="bg-emerald-700 p-6 text-white border-b border-emerald-600/40">
+            <div className="flex items-center gap-4">
+              <div className="h-12 w-12 rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center">
+                <User className="h-6 w-6" />
+              </div>
+              <div>
+                <DialogTitle className="text-xl font-black uppercase tracking-tight leading-none">
+                  {editingAssistant ? "Edit" : "Tambah"} Asisten Lapangan
+                </DialogTitle>
+                <DialogDescription className="text-emerald-200 text-[10px] font-bold uppercase tracking-widest mt-1">
+                  Kelola data petugas untuk administrasi dan surat tugas.
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4 py-4">
+          <form onSubmit={handleSubmit} className="space-y-5 p-6 md:p-8 bg-slate-50/20">
             <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase text-emerald-600">Nama Lengkap</Label>
+              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Nama Lengkap</Label>
               <Input 
                 value={formData.full_name} 
                 onChange={(e) => setFormData({...formData, full_name: e.target.value})} 
                 placeholder="Nama asisten..." 
                 required 
-                className="h-12 rounded-xl"
+                className="h-12 rounded-xl border-2 border-slate-100 bg-white font-semibold"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-emerald-600">No. Telepon / WA</Label>
+                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">No. Telepon / WA</Label>
                 <Input 
                   value={formData.phone} 
                   onChange={(e) => setFormData({...formData, phone: e.target.value})} 
                   placeholder="0812..." 
-                  className="h-12 rounded-xl"
+                  className="h-12 rounded-xl border-2 border-slate-100 bg-white font-semibold"
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-emerald-600">Email (Opsional)</Label>
+                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Email (Opsional)</Label>
                 <Input 
                   value={formData.email} 
                   onChange={(e) => setFormData({...formData, email: e.target.value})} 
                   type="email" 
                   placeholder="email@example.com" 
-                  className="h-12 rounded-xl"
+                  className="h-12 rounded-xl border-2 border-slate-100 bg-white font-semibold"
                 />
               </div>
             </div>
             <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase text-emerald-600">Alamat Lengkap</Label>
+              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Alamat Lengkap</Label>
               <Input 
                 value={formData.address} 
                 onChange={(e) => setFormData({...formData, address: e.target.value})} 
                 placeholder="Alamat domisili..." 
-                className="h-12 rounded-xl"
+                className="h-12 rounded-xl border-2 border-slate-100 bg-white font-semibold"
               />
             </div>
-            <DialogFooter className="pt-4">
+            <DialogFooter className="pt-4 flex-col sm:flex-row gap-3">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setIsDialogOpen(false)}
+                disabled={submitting}
+                className="w-full sm:flex-1 h-12 rounded-xl font-black text-[10px] uppercase tracking-widest text-slate-500 hover:text-emerald-700 hover:bg-emerald-50"
+              >
+                Batal
+              </Button>
               <LoadingButton
                 type="submit"
-                className="w-full bg-emerald-600 hover:bg-emerald-700 h-12 rounded-xl font-bold uppercase tracking-wider text-xs shadow-lg shadow-emerald-900/20"
+                className="w-full sm:flex-1 bg-emerald-600 hover:bg-emerald-700 h-12 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-900/20"
                 loading={submitting}
+                loadingText={PROCESSING_TEXT}
               >
                 {editingAssistant ? "Simpan Perubahan" : "Tambahkan Data"}
               </LoadingButton>
@@ -307,6 +324,7 @@ export default function OperatorAssistantManagementPage() {
           </form>
         </DialogContent>
       </Dialog>
+      <LoadingOverlay isOpen={submitting} title={OPERATOR_LOADING_COPY.title} description={OPERATOR_LOADING_COPY.description} variant="transparent" />
     </div>
   );
 }

@@ -31,6 +31,7 @@ import {
 import { ChemicalLoader } from "@/components/ui";
 import { getAllOperationalCatalogs } from "@/lib/actions/operational-catalog";
 import { toast } from "sonner";
+import { OPERATOR_EMPTY_TEXT, OPERATOR_TOAST_TEXT } from "@/lib/constants/operator-copy";
 import {
   Select,
   SelectContent,
@@ -44,6 +45,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { OperatorPageHeader } from "@/components/operator/OperatorPageHeader";
 
 export default function OperatorEngineerCostsPage() {
   const [data, setData] = useState<any[]>([]);
@@ -60,7 +62,7 @@ export default function OperatorEngineerCostsPage() {
       const perdiemData = result.filter((item: any) => item.category === 'perdiem');
       setData(perdiemData);
     } catch (error: any) {
-      toast.error("Gagal memuat data engineer", {
+      toast.error(OPERATOR_TOAST_TEXT.loadFailed, {
         description: error?.message || "Silakan refresh halaman"
       });
     } finally {
@@ -92,23 +94,29 @@ export default function OperatorEngineerCostsPage() {
     return "text-emerald-600";
   };
 
+  if (loading) return <ChemicalLoader fullScreen />;
+
   return (
     <div className="p-4 md:p-10 pb-24 md:pb-10">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-bold text-emerald-900 tracking-tight">Biaya Engineer</h1>
-          <p className="text-slate-500 text-sm">Katalog perdiem engineer (Read Only)</p>
-        </div>
-        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 px-4 py-2 rounded-full font-bold text-xs">
-          <Eye className="h-3 w-3 mr-2 inline" />
-          VIEW ONLY
-        </Badge>
-      </div>
+      <OperatorPageHeader
+        icon={User}
+        title="Biaya Engineer"
+        description="Katalog perdiem engineer"
+        statsLabel="Total Perdiem"
+        statsValue={data.length}
+        onRefresh={loadData}
+        refreshing={loading}
+        actions={(
+          <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 px-3 py-1.5 rounded-full font-bold text-[10px] uppercase">
+            <Eye className="h-3 w-3 mr-1.5 inline" />
+            View Only
+          </Badge>
+        )}
+      />
 
       {/* Main Table */}
-      <div className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
-        <div className="p-5 border-b bg-emerald-50/5 flex flex-col md:flex-row gap-4 items-center">
+      <div className="bg-white rounded-[2.5rem] shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
+        <div className="p-6 border-b bg-slate-50/50 flex flex-col md:flex-row gap-4 items-center">
           <div className="relative flex-1 w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
             <Input
@@ -118,7 +126,7 @@ export default function OperatorEngineerCostsPage() {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="pl-10 rounded-xl h-10 border-slate-200 focus:ring-emerald-500"
+              className="pl-10 rounded-xl h-11 border-slate-200 bg-white focus:ring-emerald-500"
             />
           </div>
           <div className="flex gap-2 shrink-0">
@@ -126,7 +134,7 @@ export default function OperatorEngineerCostsPage() {
               setFilterType(val);
               setPage(1);
             }}>
-              <SelectTrigger className="w-48 h-10 rounded-xl border-slate-200 bg-white shadow-sm font-medium text-xs">
+              <SelectTrigger className="w-48 h-11 rounded-xl border-slate-200 bg-white shadow-sm font-medium text-xs">
                 <SelectValue placeholder="Semua Tipe" />
               </SelectTrigger>
               <SelectContent>
@@ -141,29 +149,20 @@ export default function OperatorEngineerCostsPage() {
 
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50/80 font-bold">
-              <TableHead className="px-6 w-16 text-center">No</TableHead>
-              <TableHead className="px-4">Nama Engineer</TableHead>
-              <TableHead className="px-4">Lokasi</TableHead>
-              <TableHead className="px-4">Tipe</TableHead>
-              <TableHead className="px-4 text-right">Harga</TableHead>
-              <TableHead className="px-4 text-center">Satuan</TableHead>
+            <TableRow className="bg-slate-50/80">
+              <TableHead className="font-black text-slate-400 h-14 px-6 w-16 text-center text-[10px] uppercase tracking-wider">No</TableHead>
+              <TableHead className="font-black text-slate-400 h-14 px-4 text-[10px] uppercase tracking-wider">Nama Engineer</TableHead>
+              <TableHead className="font-black text-slate-400 h-14 px-4 text-[10px] uppercase tracking-wider">Lokasi</TableHead>
+              <TableHead className="font-black text-slate-400 h-14 px-4 text-[10px] uppercase tracking-wider">Tipe</TableHead>
+              <TableHead className="font-black text-slate-400 h-14 px-4 text-right text-[10px] uppercase tracking-wider">Harga</TableHead>
+              <TableHead className="font-black text-slate-400 h-14 px-4 text-center text-[10px] uppercase tracking-wider">Satuan</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-20">
-                  <div className="flex flex-col items-center justify-center">
-                    <ChemicalLoader />
-                    <p className="mt-4 text-emerald-800 font-bold uppercase tracking-widest text-[10px] animate-pulse">Memuat Katalog Biaya Engineer...</p>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : paginatedData.length === 0 ? (
+            {paginatedData.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-20 text-slate-400 font-medium">
-                  Data tidak ditemukan.
+                  {OPERATOR_EMPTY_TEXT.dataNotFound}
                 </TableCell>
               </TableRow>
             ) : (

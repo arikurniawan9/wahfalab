@@ -86,18 +86,20 @@ export function Header({ title, subtitle, profile }: HeaderProps) {
             </SheetTrigger>
             <SheetContent
               side="left"
-              className="p-0 w-72 bg-gradient-to-b from-emerald-900 via-emerald-800 to-emerald-950 border-r border-emerald-700/60 text-white shadow-2xl"
+              className="p-0 w-72 bg-gradient-to-b from-emerald-900 via-emerald-800 to-emerald-950 border-r border-emerald-700/60 text-white shadow-2xl overflow-y-auto overscroll-contain"
             >
               <SheetTitle className="sr-only">Menu Navigasi</SheetTitle>
-              <NavContent 
-                isCollapsed={false}
-                menuItems={menuItems}
-                pathname={pathname}
-                companyName={companyName}
-                logoUrl={logoUrl}
-                logout={logout}
-                onItemClick={() => setIsOpen(false)}
-              />
+              <div className="h-full overflow-y-auto overscroll-contain">
+                <NavContent 
+                  isCollapsed={false}
+                  menuItems={menuItems}
+                  pathname={pathname}
+                  companyName={companyName}
+                  logoUrl={logoUrl}
+                  logout={logout}
+                  onItemClick={() => setIsOpen(false)}
+                />
+              </div>
             </SheetContent>
           </Sheet>
         )}

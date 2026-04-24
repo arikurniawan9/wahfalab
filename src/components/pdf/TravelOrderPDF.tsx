@@ -298,13 +298,13 @@ const styles = StyleSheet.create({
 export const TravelOrderPDF: React.FC<TravelOrderPDFProps> = ({
   data,
   company = {
-    company_name: 'WahfaLab',
-    address: 'Jl. Raya Cianjur - Bandung No. 123, Cianjur',
-    phone: '(0263) 123456',
-    email: 'admin@wahfalab.com',
+    company_name: 'Perusahaan',
+    address: null,
+    phone: null,
+    email: null,
     logo_url: null,
-    tagline: 'Laboratorium Lingkungan & Analisis Teknis',
-    leader_name: 'Kepala Laboratorium'
+    tagline: 'Laboratorium Analisis Lingkungan',
+    leader_name: 'Pimpinan'
   }
 }) => {
   const formatDate = (dateString: string) => {
@@ -467,7 +467,7 @@ export const TravelOrderPDF: React.FC<TravelOrderPDFProps> = ({
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text>WahfaLab Digital Signature ID: {data.assignment.job_order.tracking_code}</Text>
+          <Text>Digital Signature ID: {data.assignment.job_order.tracking_code}</Text>
           <Text>Halaman 1 dari 1</Text>
         </View>
       </Page>

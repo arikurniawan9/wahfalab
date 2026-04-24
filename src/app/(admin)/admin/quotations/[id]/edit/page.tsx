@@ -11,6 +11,37 @@ import { toast } from "sonner";
 import { useRouter, useParams } from "next/navigation";
 import { LoadingOverlay } from "@/components/ui";
 
+function parseParameterSnapshot(value: unknown): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+  if (typeof value !== "string") return [];
+
+  const raw = value.trim();
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((item) => {
+          if (typeof item === "string") return item;
+          if (item && typeof item === "object" && "name" in item && typeof (item as any).name === "string") {
+            return (item as any).name;
+          }
+          return "";
+        })
+        .filter((item) => item.trim().length > 0);
+    }
+  } catch {
+    // Legacy/new format: "pH, TSS, ..." from createQuotation/updateQuotation.
+  }
+
+  return raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export default function EditQuotationPage() {
   const router = useRouter();
   const params = useParams();
@@ -39,15 +70,15 @@ export default function EditQuotationPage() {
 
         // Map initial data correctly for the form
         const mappedData = {
-           ...currentQuo,
-           items: currentQuo.items.map((item: any) => ({
-              service_id: item.service?.id || null,
-              equipment_id: item.equipment?.id || null,
-              qty: item.qty,
-              price: item.price_snapshot,
-              name: item.equipment?.name || item.service?.name,
-              parameters: item.parameter_snapshot ? (typeof item.parameter_snapshot === 'string' ? JSON.parse(item.parameter_snapshot) : item.parameter_snapshot) : []
-           }))
+          ...currentQuo,
+          items: (currentQuo?.items || []).map((item: any) => ({
+            service_id: item.service?.id || null,
+            equipment_id: item.equipment?.id || null,
+            qty: Number(item.qty || 1),
+            price: Number(item.price_snapshot || 0),
+            name: item.equipment?.name || item.service?.name || "",
+            parameters: parseParameterSnapshot(item.parameter_snapshot),
+          })),
         };
 
         setMasterData({

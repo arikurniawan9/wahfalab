@@ -1,63 +1,43 @@
-"use client";
-
-import React, { useEffect, useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { Header } from "@/components/layout/Header";
-import { getProfile } from "@/lib/actions/auth";
-import { useRouter } from "next/navigation";
-import { ChemicalLoader } from "@/components/ui";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import prisma from "@/lib/prisma";
 
-export default function AnalystLayout({
+export default async function AnalystLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [loading, setLoading] = useState(true);
-  const [authorized, setAuthorized] = useState(false);
-  const [profile, setProfile] = useState<any>(null);
-  const router = useRouter();
+  const session = await auth();
+  const user = session?.user || null;
 
-  useEffect(() => {
-    async function checkAuth() {
-      try {
-        const prof = await getProfile();
-        if (!prof || (prof.role !== "analyst" && prof.role !== "admin" && prof.role !== "operator")) {
-          router.push("/login");
-          return;
-        }
-        setProfile(prof);
-        setAuthorized(true);
-      } catch (error) {
-        console.error("Auth check failed:", error);
-        router.push("/login");
-      } finally {
-        setLoading(false);
-      }
-    }
-    checkAuth();
-  }, [router]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <ChemicalLoader />
-      </div>
-    );
+  if (!user?.email) {
+    redirect("/login");
   }
 
-  if (!authorized) {
-    return null;
+  const profile = await prisma.profile.findUnique({
+    where: { email: user.email },
+    select: { role: true, full_name: true, email: true },
+  });
+
+  if (!profile || !["analyst", "admin", "operator"].includes(profile.role)) {
+    redirect("/access-denied");
   }
 
   return (
     <div className="flex min-h-screen bg-slate-50">
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <Header 
-          title="Analis Laboratorium" 
+        <Header
+          title="Analis Laboratorium"
           subtitle="Kelola analisis sampel"
-          profile={profile} 
+          profile={{
+            full_name: profile.full_name,
+            email: profile.email,
+            role: profile.role,
+          }}
         />
         <main className="flex-1 overflow-y-auto bg-slate-50/50 pb-24 md:pb-0">
           <div className="mx-auto max-w-7xl">

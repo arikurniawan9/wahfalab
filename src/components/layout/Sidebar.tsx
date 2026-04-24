@@ -58,7 +58,7 @@ export const adminMenuItems = () => [
     group: "Overview",
     icon: LayoutDashboard,
     items: [
-      { icon: LayoutDashboard, label: "Beranda", href: "/admin", color: "text-sky-400", bgColor: "bg-sky-500/10" },
+      { icon: LayoutDashboard, label: "Beranda", href: "/admin", exact: true, color: "text-sky-400", bgColor: "bg-sky-500/10" },
     ]
   },
   {
@@ -120,39 +120,40 @@ export const adminMenuItems = () => [
 export const operatorMenuItems = [
   {
     id: "overview",
-    group: "Overview",
+    group: "Ringkasan",
     icon: LayoutDashboard,
     items: [
-      { icon: LayoutDashboard, label: "Beranda", href: "/operator", color: "text-sky-400", bgColor: "bg-sky-500/10" },
+      { icon: LayoutDashboard, label: "Beranda", href: "/operator", exact: true, color: "text-sky-400", bgColor: "bg-sky-500/10" },
     ]
   },
   {
-    id: "orders",
-    group: "Penawaran & Order",
+    id: "workflow",
+    group: "Operasional Lab",
     icon: FileText,
     items: [
       { icon: FileText, label: "Penawaran Harga", href: "/operator/quotations", color: "text-amber-400", bgColor: "bg-amber-500/10" },
       { icon: Briefcase, label: "Progress Order", href: "/operator/jobs", color: "text-cyan-400", bgColor: "bg-cyan-500/10" },
+      { icon: CreditCard, label: "Verifikasi Bayar", href: "/operator/payments", color: "text-green-400", bgColor: "bg-green-500/10" },
     ]
   },
   {
-    id: "ops",
-    group: "Operasional",
+    id: "field-ops",
+    group: "Sampling & Tim",
     icon: Truck,
     items: [
       { icon: Truck, label: "Biaya Transport", href: "/operator/transport-costs", color: "text-yellow-400", bgColor: "bg-yellow-500/10" },
       { icon: UserCheck, label: "Biaya Petugas Sampling", href: "/operator/engineer-costs", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
+      { icon: Users, label: "Asisten Lapangan", href: "/operator/assistants", color: "text-purple-400", bgColor: "bg-purple-500/10" },
     ]
   },
   {
-    id: "lab",
-    group: "Laboratorium",
+    id: "master-lab",
+    group: "Data Master",
     icon: FlaskConical,
     items: [
-      { icon: Tag, label: "Kategori", href: "/operator/categories", color: "text-teal-400", bgColor: "bg-teal-500/10" },
+      { icon: Tag, label: "Kategori Layanan", href: "/operator/categories", color: "text-teal-400", bgColor: "bg-teal-500/10" },
       { icon: FlaskConical, label: "Katalog Layanan", href: "/operator/services", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
-      { icon: Wrench, label: "Sewa Alat", href: "/operator/equipment", color: "text-orange-400", bgColor: "bg-orange-500/10" },
-      { icon: Users, label: "Asisten Lapangan", href: "/operator/assistants", color: "text-purple-400", bgColor: "bg-purple-500/10" },
+      { icon: Wrench, label: "Inventaris Alat", href: "/operator/equipment", color: "text-orange-400", bgColor: "bg-orange-500/10" },
     ]
   },
 ];
@@ -163,7 +164,7 @@ export const financeMenuItems = () => [
     group: "Keuangan",
     icon: CreditCard,
     items: [
-      { icon: Banknote, label: "Dashboard Keuangan", href: "/finance", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
+      { icon: Banknote, label: "Dashboard Keuangan", href: "/finance", exact: true, color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
       { icon: Building2, label: "Daftar Bank", href: "/finance/settings/banks", color: "text-sky-400", bgColor: "bg-sky-500/10" },
       { icon: Wallet, label: "Kas Tunai", href: "/finance/settings/cash", color: "text-amber-400", bgColor: "bg-amber-500/10" },
       { icon: ArrowUpRight, label: "Pemasukan", href: "/finance/income", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
@@ -176,11 +177,23 @@ export const financeMenuItems = () => [
   },
 ];
 
+function isPathActive(pathname: string, href: string, exact?: boolean) {
+  if (exact) return pathname === href;
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function inferRoleFromPath(pathname: string): string | null {
+  if (pathname.startsWith("/admin")) return "admin";
+  if (pathname.startsWith("/operator")) return "operator";
+  if (pathname.startsWith("/finance")) return "finance";
+  return null;
+}
+
 export function Sidebar({ className }: { className?: string }) {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [role, setRole] = useState<string | null>(null);
-  const [companyName, setCompanyName] = useState("WahfaLab");
+  const [role, setRole] = useState<string | null>(() => inferRoleFromPath(pathname));
+  const [companyName, setCompanyName] = useState("Perusahaan");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -197,7 +210,7 @@ export function Sidebar({ className }: { className?: string }) {
         const response = await fetch('/api/company-profile');
         const data = await response.json();
         if (data) {
-          setCompanyName(data.company_name || "WahfaLab");
+          setCompanyName(data.company_name?.trim() || "Perusahaan");
           setLogoUrl(data.logo_url);
         }
       } catch (error) {
@@ -234,6 +247,7 @@ export function Sidebar({ className }: { className?: string }) {
       
       <div className="flex-1 h-full overflow-y-auto overflow-x-hidden custom-scrollbar">
         <NavContent 
+          key={pathname}
           isCollapsed={isCollapsed} 
           menuItems={menuItems} 
           pathname={pathname} 
@@ -257,15 +271,12 @@ interface NavContentProps {
 }
 
 export function NavContent({ isCollapsed, menuItems, pathname, companyName, logoUrl, logout, onItemClick }: NavContentProps) {
-  const [openGroups, setOpenGroups] = useState<string[]>([]);
   const activeGroupId = menuItems.find(group =>
-    group.items.some((item: any) => pathname === item.href)
+    group.items.some((item: any) => isPathActive(pathname, item.href, item.exact))
   )?.id;
-
-  useEffect(() => {
-    if (isCollapsed) return;
-    setOpenGroups(activeGroupId ? [activeGroupId] : []);
-  }, [activeGroupId, isCollapsed]);
+  const [openGroups, setOpenGroups] = useState<string[]>(
+    activeGroupId && !isCollapsed ? [activeGroupId] : []
+  );
 
   const toggleGroup = (groupId: string) => {
     if (isCollapsed) return; // Prevent accordion in collapsed mode
@@ -298,7 +309,7 @@ export function NavContent({ isCollapsed, menuItems, pathname, companyName, logo
       <nav className="flex-1 px-3 space-y-2">
         {menuItems.map((group) => {
           const isOpen = openGroups.includes(group.id);
-          const hasActiveItem = group.items.some((item: any) => pathname === item.href);
+          const hasActiveItem = group.items.some((item: any) => isPathActive(pathname, item.href, item.exact));
 
           // Render Floating Menu if Collapsed
           if (isCollapsed) {
@@ -321,14 +332,16 @@ export function NavContent({ isCollapsed, menuItems, pathname, companyName, logo
                   <div className="px-3 py-2 mb-1 border-b border-white/5">
                     <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">{group.group}</p>
                   </div>
-                  {group.items.map((item: any) => (
-                    <DropdownMenuItem key={item.href} asChild>
+                  {group.items.map((item: any) => {
+                    const isItemActive = isPathActive(pathname, item.href, item.exact);
+                    return (
+                      <DropdownMenuItem key={item.href} asChild>
                       <Link
                         href={item.href}
                         onClick={onItemClick}
                         className={cn(
                           "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all cursor-pointer mb-1",
-                          pathname === item.href ? "bg-emerald-600 text-white" : "hover:bg-white/5 text-emerald-100/60 hover:text-white"
+                          isItemActive ? "bg-emerald-600 text-white" : "hover:bg-white/5 text-emerald-100/60 hover:text-white"
                         )}
                       >
                         <div className={cn("h-7 w-7 rounded-lg flex items-center justify-center shrink-0", item.bgColor)}>
@@ -336,8 +349,9 @@ export function NavContent({ isCollapsed, menuItems, pathname, companyName, logo
                         </div>
                         <span className="text-[11px] font-bold">{item.label}</span>
                       </Link>
-                    </DropdownMenuItem>
-                  ))}
+                      </DropdownMenuItem>
+                    );
+                  })}
                 </DropdownMenuContent>
               </DropdownMenu>
             );
@@ -368,25 +382,28 @@ export function NavContent({ isCollapsed, menuItems, pathname, companyName, logo
               <AnimatePresence>
                 {isOpen && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3 }} className="overflow-hidden pl-4 pr-2 space-y-1">
-                    {group.items.map((item: any) => (
+                    {group.items.map((item: any) => {
+                      const isItemActive = isPathActive(pathname, item.href, item.exact);
+                      return (
                       <Link
                         key={item.href}
                         href={item.href}
                         onClick={onItemClick}
                         className={cn(
                           "flex items-center gap-3 px-4 py-2 rounded-xl transition-all duration-300 relative group",
-                          pathname === item.href ? "text-white bg-emerald-600/20 shadow-inner" : "text-emerald-100/50 hover:text-white hover:bg-white/5"
+                          isItemActive ? "text-white bg-emerald-600/20 shadow-inner" : "text-emerald-100/50 hover:text-white hover:bg-white/5"
                         )}
                       >
                         <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0 border border-white/5", item.bgColor, "group-hover:scale-110")}>
                           <item.icon className={cn("h-4 w-4", item.color)} />
                         </div>
                         <span className="font-bold text-[11px] tracking-tight">{item.label}</span>
-                        {pathname === item.href && (
+                        {isItemActive && (
                            <motion.div layoutId="active-pill-v3" className="absolute left-[-4px] w-1 h-4 bg-emerald-400 rounded-r-full shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
                         )}
                       </Link>
-                    ))}
+                      );
+                    })}
                   </motion.div>
                 )}
               </AnimatePresence>
