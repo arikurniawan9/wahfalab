@@ -81,6 +81,7 @@ export default function FieldTravelOrderPreviewPage() {
           return_date: travelOrder.return_date,
           destination: travelOrder.destination,
           purpose: travelOrder.purpose,
+          quotation_title: quotation.title,
           transportation_type: travelOrder.transportation_type,
           accommodation_type: travelOrder.accommodation_type,
           daily_allowance: travelOrder.daily_allowance,
@@ -162,7 +163,7 @@ export default function FieldTravelOrderPreviewPage() {
       {/* Header Toolbar */}
       <div className="flex items-center justify-between mb-8 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex items-center gap-4">
-          <Link href="/field/assignments">
+          <Link href="/field/travel-orders">
             <Button variant="ghost" size="icon" className="rounded-full hover:bg-slate-100">
               <ArrowLeft className="h-5 w-5 text-slate-600" />
             </Button>

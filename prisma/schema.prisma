@@ -579,6 +579,10 @@ model CompanyProfile {
   leader_name     String?   // Nama Kepala/Ketua
   signature_url   String?   // URL Tanda Tangan Digital
   stamp_url       String?   // URL Stempel Digital
+  upload_storage_provider String  @default("supabase")
+  upload_storage_public_path String?
+  upload_storage_external_url String?
+  upload_storage_note String?
   created_at      DateTime @default(now())
   updated_at      DateTime @default(now())
 

@@ -24,6 +24,7 @@ interface TravelOrderData {
   return_date: string;
   destination: string;
   purpose: string;
+  quotation_title?: string | null;
   transportation_type?: string | null;
   accommodation_type?: string | null;
   daily_allowance?: number | null;
@@ -90,18 +91,18 @@ interface TravelOrderPDFProps {
 
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 30,
-    paddingBottom: 50,
-    paddingLeft: 60,
-    paddingRight: 60,
-    fontSize: 10,
+    paddingTop: 24,
+    paddingBottom: 32,
+    paddingLeft: 46,
+    paddingRight: 46,
+    fontSize: 9,
     fontFamily: 'Helvetica',
-    lineHeight: 1.5,
+    lineHeight: 1.3,
     color: '#1a1a1a'
   },
   header: {
-    marginBottom: 5,
-    paddingBottom: 5,
+    marginBottom: 4,
+    paddingBottom: 4,
     borderBottom: '2pt solid #000',
   },
   headerRow: {
@@ -124,14 +125,14 @@ const styles = StyleSheet.create({
     paddingRight: 70 // Balance for the logo on the left
   },
   companyName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
     textTransform: 'uppercase',
     marginBottom: 2,
     color: '#064e3b' // Emerald 900
   },
   companyTagline: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: 'bold',
     color: '#059669', // Emerald 600
     marginBottom: 2,
@@ -139,38 +140,38 @@ const styles = StyleSheet.create({
     letterSpacing: 1
   },
   companyAddress: {
-    fontSize: 8,
+    fontSize: 7.5,
     color: '#4b5563', // Slate 600
     lineHeight: 1.2
   },
   titleContainer: {
-    marginTop: 25,
-    marginBottom: 20,
+    marginTop: 14,
+    marginBottom: 12,
     alignItems: 'center'
   },
   title: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: 'bold',
     textDecoration: 'underline',
     textTransform: 'uppercase',
     letterSpacing: 1
   },
   docNumber: {
-    fontSize: 10,
+    fontSize: 9,
     marginTop: 2
   },
   mainContent: {
-    marginTop: 10
+    marginTop: 6
   },
   section: {
-    marginBottom: 15
+    marginBottom: 9
   },
   sectionHeader: {
     flexDirection: 'row',
-    marginBottom: 8
+    marginBottom: 5
   },
   sectionLabel: {
-    width: 100,
+    width: 86,
     fontWeight: 'bold',
     textTransform: 'uppercase'
   },
@@ -181,20 +182,20 @@ const styles = StyleSheet.create({
     flex: 1
   },
   instructionText: {
-    fontSize: 10,
-    marginBottom: 10,
+    fontSize: 8.5,
+    marginBottom: 6,
     textAlign: 'justify'
   },
   detailsGrid: {
-    marginLeft: 20,
-    marginBottom: 15
+    marginLeft: 14,
+    marginBottom: 8
   },
   detailRow: {
     flexDirection: 'row',
-    marginBottom: 5
+    marginBottom: 3
   },
   detailLabel: {
-    width: 120,
+    width: 104,
     color: '#4b5563'
   },
   detailSeparator: {
@@ -203,10 +204,11 @@ const styles = StyleSheet.create({
   },
   detailValue: {
     flex: 1,
-    fontWeight: 'bold'
+    fontWeight: 'bold',
+    fontSize: 8.5
   },
   table: {
-    marginTop: 10,
+    marginTop: 6,
     borderWidth: 1,
     borderColor: '#000',
   },
@@ -221,12 +223,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderBottomWidth: 0.5,
     borderBottomColor: '#000',
-    minHeight: 25,
+    minHeight: 20,
     alignItems: 'center'
   },
   tableCell: {
-    padding: 5,
-    fontSize: 8,
+    padding: 4,
+    fontSize: 7,
     borderRightWidth: 0.5,
     borderRightColor: '#000',
   },
@@ -236,60 +238,60 @@ const styles = StyleSheet.create({
   tableCellParams: { flex: 3, borderRightWidth: 0 },
   
   signatureArea: {
-    marginTop: 40,
+    marginTop: 18,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingLeft: 20,
-    paddingRight: 20
+    paddingLeft: 10,
+    paddingRight: 10
   },
   signatureBox: {
-    width: 200,
+    width: 180,
     alignItems: 'center'
   },
   signatureTitle: {
-    fontSize: 10,
-    marginBottom: 40,
+    fontSize: 8.5,
+    marginBottom: 24,
     textAlign: 'center'
   },
   signatureName: {
-    fontSize: 10,
+    fontSize: 8.5,
     fontWeight: 'bold',
     textDecoration: 'underline',
     textTransform: 'uppercase'
   },
   signatureMeta: {
-    fontSize: 8,
+    fontSize: 7.5,
     color: '#6b7280',
     marginTop: 2
   },
   stampContainer: {
     position: 'absolute',
-    top: -20,
-    left: -30,
-    width: 80,
-    height: 80,
+    top: -12,
+    left: -20,
+    width: 64,
+    height: 64,
     opacity: 0.5,
     zIndex: 1
   },
   signatureImage: {
     position: 'absolute',
-    top: -35,
-    width: 100,
-    height: 60,
+    top: -18,
+    width: 84,
+    height: 48,
     zIndex: 2,
     objectFit: 'contain'
   },
   footer: {
     position: 'absolute',
-    bottom: 30,
-    left: 60,
-    right: 60,
+    bottom: 22,
+    left: 46,
+    right: 46,
     borderTopWidth: 0.5,
     borderTopColor: '#d1d5db',
-    paddingTop: 8,
+    paddingTop: 5,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    fontSize: 7,
+    fontSize: 6.5,
     color: '#9ca3af',
     fontStyle: 'italic'
   }
@@ -324,6 +326,9 @@ export const TravelOrderPDF: React.FC<TravelOrderPDFProps> = ({
   const fullLogoUrl = company.logo_url?.startsWith('/') ? `${getBaseUrl()}${company.logo_url}` : company.logo_url;
   const fullSignatureUrl = company.signature_url?.startsWith('/') ? `${getBaseUrl()}${company.signature_url}` : company.signature_url;
   const fullStampUrl = company.stamp_url?.startsWith('/') ? `${getBaseUrl()}${company.stamp_url}` : company.stamp_url;
+  const quotationTitle = data.quotation_title?.trim() || data.assignment.job_order.quotation.items
+    .map((item) => item.service?.name || item.equipment?.name || '')
+    .find(Boolean) || data.purpose || 'Surat Tugas Pengambilan Contoh';
 
   return (
     <Document title={`SURAT TUGAS - ${data.document_number}`}>
@@ -358,20 +363,29 @@ export const TravelOrderPDF: React.FC<TravelOrderPDFProps> = ({
 
         {/* Isi Surat */}
         <View style={styles.mainContent}>
+          {/* Perihal */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>PERIHAL</Text>
+              <Text style={styles.sectionSeparator}>:</Text>
+              <Text style={styles.sectionValue}>{quotationTitle}</Text>
+            </View>
+          </View>
+
           {/* Dasar */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionLabel}>DASAR</Text>
               <Text style={styles.sectionSeparator}>:</Text>
               <Text style={styles.sectionValue}>
-                Permohonan Pengujian/Sampling dari {data.assignment.job_order.quotation.profile.company_name || data.assignment.job_order.quotation.profile.full_name} 
-                dengan Nomor Penawaran {data.assignment.job_order.quotation.quotation_number}.
+                Berdasarkan permohonan pengujian/sampling dari {data.assignment.job_order.quotation.profile.company_name || data.assignment.job_order.quotation.profile.full_name}
+                dengan Nomor Penawaran {data.assignment.job_order.quotation.quotation_number}, bersama ini ditetapkan surat tugas pelaksanaan di lapangan.
               </Text>
             </View>
           </View>
 
           <Text style={[styles.instructionText, { fontWeight: 'bold', textAlign: 'center', marginBottom: 15 }]}>
-            MENUGASKAN :
+            MENUGASKAN KEPADA :
           </Text>
 
           {/* Kepada */}
@@ -394,7 +408,7 @@ export const TravelOrderPDF: React.FC<TravelOrderPDFProps> = ({
               <Text style={styles.sectionLabel}>UNTUK</Text>
               <Text style={styles.sectionSeparator}>:</Text>
               <View style={styles.sectionValue}>
-                <Text style={styles.instructionText}>Melaksanakan pengambilan contoh uji (sampling) dan pengukuran lapangan dengan rincian sebagai berikut:</Text>
+                <Text style={styles.instructionText}>Untuk melaksanakan kegiatan pengambilan contoh uji (sampling) dan pengukuran lapangan dengan rincian sebagai berikut:</Text>
                 
                 <View style={styles.detailsGrid}>
                   <View style={styles.detailRow}>
@@ -408,9 +422,9 @@ export const TravelOrderPDF: React.FC<TravelOrderPDFProps> = ({
                     <Text style={styles.detailValue}>{formatDate(data.departure_date)} s/d {formatDate(data.return_date)}</Text>
                   </View>
                   <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Maksud Perjalanan</Text>
+                    <Text style={styles.detailLabel}>Keterangan</Text>
                     <Text style={styles.detailSeparator}>:</Text>
-                    <Text style={styles.detailValue}>{data.purpose}</Text>
+                    <Text style={styles.detailValue}>{data.purpose || 'Sampling'}</Text>
                   </View>
                 </View>
               </View>
@@ -440,7 +454,7 @@ export const TravelOrderPDF: React.FC<TravelOrderPDFProps> = ({
 
           {/* Penutup */}
           <Text style={[styles.instructionText, { marginTop: 10 }]}>
-            Demikian surat tugas ini diberikan agar dilaksanakan dengan penuh tanggung jawab dan melaporkan hasilnya setelah selesai melaksanakan tugas.
+            Demikian surat tugas ini dibuat untuk dilaksanakan dengan penuh tanggung jawab, serta melaporkan hasil pelaksanaan kepada pihak yang berwenang setelah tugas selesai dikerjakan.
           </Text>
         </View>
 

@@ -27,7 +27,6 @@ import { getJobOrders } from "@/lib/actions/jobs";
 import { getProfile } from "@/lib/actions/auth";
 import { getAllServices } from "@/lib/actions/services";
 import { getAllCategories } from "@/lib/actions/categories";
-import { getAuditLogsAction as getAuditLogs } from "@/lib/actions/audit";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -44,7 +43,6 @@ export default function OperatorDashboard() {
   const router = useRouter();
   const [profile, setProfile] = useState<any>(null);
   const [jobs, setJobs] = useState<any[]>([]);
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
@@ -76,19 +74,17 @@ export default function OperatorDashboard() {
     else setLoading(true);
 
     try {
-      const [prof, jobsData, servicesData, categoriesData, auditData] = await Promise.all([
+      const [prof, jobsData, servicesData, categoriesData] = await Promise.all([
         getProfile(),
         getJobOrders(1, 50),
         getAllServices(),
-        getAllCategories(),
-        getAuditLogs({ page: 1, limit: 5 }) // Ambil 5 riwayat aktivitas terbaru
+        getAllCategories()
       ]);
 
       setProfile(prof);
       setJobs(jobsData.items || []);
       setServices(servicesData);
       setCategories(categoriesData);
-      setAuditLogs(auditData.logs || []);
 
       // Calculate stats
       const jobList = jobsData.items || [];
@@ -368,47 +364,6 @@ export default function OperatorDashboard() {
                  </Button>
               </div>
             </div>
-          </div>
-
-          {/* Recent Activity Widget (Audit Log) */}
-          <div className="bg-white rounded-[2rem] border border-slate-200 p-6 shadow-sm overflow-hidden relative">
-             <div className="flex items-center justify-between mb-6">
-               <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest flex items-center gap-2">
-                  <ClipboardList className="h-4 w-4 text-emerald-600" />
-                  Aktivitas Terbaru
-                </h3>
-                <span className="text-[9px] font-black uppercase text-slate-400">
-                  5 Aktivitas Terakhir
-                </span>
-              </div>
-             
-             <div className="space-y-6">
-                {auditLogs.length === 0 ? (
-                  <p className="text-[10px] text-slate-400 font-bold text-center py-4">{OPERATOR_EMPTY_TEXT.noActivity}</p>
-                ) : (
-                  auditLogs.map((log) => (
-                    <div key={log.id} className="relative pl-6 pb-6 border-l-2 border-slate-50 last:border-0 last:pb-0">
-                      <div className="absolute left-[-5px] top-0 h-2 w-2 rounded-full bg-emerald-500 ring-4 ring-emerald-50" />
-                      <div className="space-y-1">
-                        <div className="flex justify-between items-start">
-                          <p className="text-[10px] font-black text-emerald-700 uppercase leading-none">
-                            {log.action.replace('_', ' ')}
-                          </p>
-                          <span className="text-[8px] font-bold text-slate-300 uppercase">
-                            {new Date(log.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                        <p className="text-[11px] font-bold text-slate-800 leading-tight">
-                          {log.user_email?.split('@')[0]} mengelola {log.entity_type.replace('_', ' ')}
-                        </p>
-                        {log.metadata?.tracking_code && (
-                           <p className="text-[9px] font-mono font-bold text-slate-400">#{log.metadata.tracking_code}</p>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-             </div>
           </div>
 
           {/* Quick Info Alerts */}

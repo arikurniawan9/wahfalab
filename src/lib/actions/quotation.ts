@@ -12,6 +12,30 @@ import { notifyInvoiceGenerated } from '@/lib/actions/notifications'
 import type { Prisma } from '@/generated/prisma'
 
 const INVOICE_REQUEST_MARKER = '[INVOICE_REQUESTED]'
+const DIRECT_REPORTING_MARKER = '[DIRECT_REPORTING_ONLY]'
+const DIRECT_REPORTING_ACCEPTED_MARKER = '[DIRECT_REPORTING_ACCEPTED]'
+
+function appendNoteMarker(notes: string | null | undefined, marker: string) {
+  return [notes, marker].filter(Boolean).join('\n')
+}
+
+async function getAuthorizedActor(allowedRoles: string[]) {
+  const session = await auth()
+  if (!session?.user?.email) {
+    return { error: 'Unauthorized' as const }
+  }
+
+  const actor = await prisma.profile.findUnique({
+    where: { email: session.user.email },
+    select: { id: true, role: true, full_name: true, email: true }
+  })
+
+  if (!actor || !allowedRoles.includes(actor.role)) {
+    return { error: 'Forbidden' as const }
+  }
+
+  return { actor }
+}
 
 export async function getNextInvoiceNumber() {
   return await generateInvoiceNumber()
@@ -359,6 +383,239 @@ export async function publishInvoiceRequest(quotationId: string) {
   } catch (error: any) {
     console.error('Publish invoice request error:', error)
     return { error: error.message || 'Gagal menerbitkan permintaan invoice' }
+  }
+}
+
+export async function sendQuotationToReportingDirect(quotationId: string) {
+  try {
+    const authResult = await getAuthorizedActor(['admin', 'operator'])
+    if ('error' in authResult) {
+      return { error: authResult.error }
+    }
+    const { actor } = authResult
+
+    const quotation = await prisma.quotation.findUnique({
+      where: { id: quotationId },
+      include: {
+        profile: { select: { full_name: true, company_name: true } },
+        job_orders: {
+          include: {
+            invoice: { select: { id: true } }
+          },
+          orderBy: { created_at: 'desc' },
+          take: 1
+        }
+      }
+    })
+
+    if (!quotation) {
+      return { error: 'Penawaran tidak ditemukan' }
+    }
+
+    if (quotation.status !== 'accepted') {
+      return { error: 'Hanya penawaran berstatus diterima yang bisa dikirim ke reporting langsung' }
+    }
+
+    const latestJob = quotation.job_orders[0]
+    if (latestJob?.invoice) {
+      return { error: 'Penawaran sudah memiliki invoice, tidak bisa dialihkan ke alur direct reporting' }
+    }
+
+    const markerStamp = `${DIRECT_REPORTING_MARKER} by=${actor.full_name || actor.email} at=${new Date().toISOString()}`
+    let jobOrderId = latestJob?.id || ''
+    let alreadySent = false
+
+    if (!latestJob) {
+      const createdJob = await prisma.jobOrder.create({
+        data: {
+          quotation_id: quotation.id,
+          tracking_code: `JOB-${Date.now()}`,
+          status: 'reporting',
+          notes: markerStamp
+        }
+      })
+      jobOrderId = createdJob.id
+    } else {
+      alreadySent = !!latestJob.notes?.includes(DIRECT_REPORTING_MARKER)
+      if (!alreadySent) {
+        await prisma.jobOrder.update({
+          where: { id: latestJob.id },
+          data: {
+            status: latestJob.status === 'completed' ? latestJob.status : 'reporting',
+            notes: appendNoteMarker(latestJob.notes, markerStamp)
+          }
+        })
+      } else if (latestJob.status !== 'reporting' && latestJob.status !== 'completed') {
+        await prisma.jobOrder.update({
+          where: { id: latestJob.id },
+          data: { status: 'reporting' }
+        })
+      }
+      jobOrderId = latestJob.id
+    }
+
+    const reportingUsers = await prisma.profile.findMany({
+      where: { role: 'reporting' },
+      select: { id: true }
+    })
+
+    if (reportingUsers.length > 0 && !alreadySent) {
+      await prisma.notification.createMany({
+        data: reportingUsers.map((recipient: { id: string }) => ({
+          user_id: recipient.id,
+          type: 'job_assigned',
+          title: 'Tugas Direct LHU Baru',
+          message: `${actor.role === 'admin' ? 'Admin' : 'Operator'} ${actor.full_name || actor.email} mengirim penawaran ${quotation.quotation_number} untuk diproses langsung oleh reporting (tanpa sampling & analisis).`,
+          link: '/reporting/direct-requests',
+          metadata: {
+            quotation_id: quotation.id,
+            quotation_number: quotation.quotation_number,
+            job_order_id: jobOrderId,
+            direct_reporting_only: true
+          }
+        }))
+      })
+    }
+
+    revalidatePath('/admin/quotations')
+    revalidatePath('/operator/quotations')
+    revalidatePath('/reporting/jobs')
+    revalidatePath('/reporting/direct-requests')
+    revalidatePath('/api/notifications')
+
+    return { success: true, alreadySent }
+  } catch (error: any) {
+    console.error('Send quotation to reporting direct error:', error)
+    return { error: error.message || 'Gagal mengirim penawaran ke reporting' }
+  }
+}
+
+export async function getDirectReportingTasks(page = 1, limit = 20, search = '') {
+  try {
+    const skip = (page - 1) * limit
+    const trimmedSearch = search.trim()
+
+    const where: Prisma.JobOrderWhereInput = {
+      notes: { contains: DIRECT_REPORTING_MARKER },
+      status: { in: ['analysis_done', 'reporting', 'completed'] }
+    }
+
+    if (trimmedSearch) {
+      where.OR = [
+        { tracking_code: { contains: trimmedSearch, mode: 'insensitive' } },
+        { quotation: { quotation_number: { contains: trimmedSearch, mode: 'insensitive' } } },
+        { quotation: { profile: { full_name: { contains: trimmedSearch, mode: 'insensitive' } } } },
+        { quotation: { profile: { company_name: { contains: trimmedSearch, mode: 'insensitive' } } } }
+      ]
+    }
+
+    const [items, total] = await Promise.all([
+      prisma.jobOrder.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { created_at: 'desc' },
+        include: {
+          quotation: {
+            include: {
+              profile: {
+                select: {
+                  full_name: true,
+                  company_name: true
+                }
+              }
+            }
+          }
+        }
+      }),
+      prisma.jobOrder.count({ where })
+    ])
+
+    return serializeData({
+      items,
+      total,
+      pages: Math.ceil(total / limit)
+    })
+  } catch (error) {
+    console.error('Get direct reporting tasks error:', error)
+    return { items: [], total: 0, pages: 1 }
+  }
+}
+
+export async function acceptDirectReportingTask(jobOrderId: string) {
+  try {
+    const authResult = await getAuthorizedActor(['reporting', 'admin'])
+    if ('error' in authResult) {
+      return { error: authResult.error }
+    }
+    const { actor } = authResult
+
+    const jobOrder = await prisma.jobOrder.findUnique({
+      where: { id: jobOrderId },
+      select: {
+        id: true,
+        status: true,
+        notes: true,
+        quotation_id: true,
+        quotation: { select: { quotation_number: true } }
+      }
+    })
+
+    if (!jobOrder) {
+      return { error: 'Job order tidak ditemukan' }
+    }
+
+    if (!jobOrder.notes?.includes(DIRECT_REPORTING_MARKER)) {
+      return { error: 'Job order ini bukan alur direct reporting' }
+    }
+
+    const alreadyAccepted = jobOrder.notes.includes(DIRECT_REPORTING_ACCEPTED_MARKER)
+    if (alreadyAccepted) {
+      return { success: true, alreadyAccepted: true }
+    }
+
+    const acceptedStamp = `${DIRECT_REPORTING_ACCEPTED_MARKER} by=${actor.full_name || actor.email} at=${new Date().toISOString()}`
+    await prisma.jobOrder.update({
+      where: { id: jobOrderId },
+      data: {
+        status: jobOrder.status === 'completed' ? jobOrder.status : 'reporting',
+        notes: appendNoteMarker(jobOrder.notes, acceptedStamp)
+      }
+    })
+
+    const adminAndOperatorUsers = await prisma.profile.findMany({
+      where: {
+        role: { in: ['admin', 'operator'] }
+      },
+      select: { id: true }
+    })
+
+    if (adminAndOperatorUsers.length > 0) {
+      await prisma.notification.createMany({
+        data: adminAndOperatorUsers.map((recipient: { id: string }) => ({
+          user_id: recipient.id,
+          type: 'reporting_completed',
+          title: 'Tugas Direct LHU Diterima',
+          message: `Tim reporting menerima tugas direct LHU untuk penawaran ${jobOrder.quotation?.quotation_number}.`,
+          link: '/reporting/direct-requests',
+          metadata: {
+            quotation_id: jobOrder.quotation_id,
+            quotation_number: jobOrder.quotation?.quotation_number,
+            job_order_id: jobOrder.id,
+            direct_reporting_only: true
+          }
+        }))
+      })
+    }
+
+    revalidatePath('/reporting/direct-requests')
+    revalidatePath('/admin/quotations')
+    revalidatePath('/operator/quotations')
+    revalidatePath('/api/notifications')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Accept direct reporting task error:', error)
+    return { error: error.message || 'Gagal menerima tugas direct reporting' }
   }
 }
 

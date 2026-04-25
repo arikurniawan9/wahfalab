@@ -27,7 +27,11 @@ export async function GET() {
       npwp: p.npwp,
       leader_name: p.leader_name,
       signature_url: p.signature_url,
-      stamp_url: p.stamp_url
+      stamp_url: p.stamp_url,
+      upload_storage_provider: p.upload_storage_provider,
+      upload_storage_public_path: p.upload_storage_public_path,
+      upload_storage_external_url: p.upload_storage_external_url,
+      upload_storage_note: p.upload_storage_note
     })
   } catch (error) {
     console.error('Error fetching company profile:', error)

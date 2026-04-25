@@ -12,7 +12,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Table,
   TableBody,
@@ -54,6 +54,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import * as XLSX from "xlsx";
 import {
   Dialog,
   DialogContent,
@@ -92,7 +93,7 @@ export default function EquipmentPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
-  const [importData, setImportData] = useState<string>("");
+  const [importFile, setImportFile] = useState<File | null>(null);
   const [quickEditId, setQuickEditId] = useState<string | null>(null);
   const [quickEditPrice, setQuickEditPrice] = useState<number>(0);
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -102,6 +103,7 @@ export default function EquipmentPage() {
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [creatingCategory, setCreatingCategory] = useState(false);
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   const { register, handleSubmit, reset, setValue, watch } = useForm();
 
@@ -311,29 +313,113 @@ export default function EquipmentPage() {
     });
   };
 
-  // Import CSV
+  const handleDownloadTemplate = () => {
+    const templateHeaders = [
+      "Nama",
+      "Kategori",
+      "Spesifikasi",
+      "Harga",
+      "Status",
+      "Jumlah",
+      "Deskripsi",
+      "Unit",
+      "Image URL"
+    ];
+    const templateRow = [
+      "Gas Chromatograph",
+      "Instrumentasi",
+      "GC-2010 Plus",
+      "500000",
+      "available",
+      "1",
+      "Alat untuk analisis sampel",
+      "unit",
+      ""
+    ];
+
+    const worksheet = XLSX.utils.aoa_to_sheet([templateHeaders, templateRow]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Equipment Template");
+    XLSX.writeFile(workbook, `template-equipment-${new Date().toISOString().split("T")[0]}.xlsx`);
+    toast.success("Template berhasil diunduh");
+  };
+
+  const resetImportState = () => {
+    setImportFile(null);
+    if (importFileRef.current) {
+      importFileRef.current.value = "";
+    }
+  };
+
+  const parseImportRows = async (file: File) => {
+    const fileName = file.name.toLowerCase();
+    if (fileName.endsWith(".csv")) {
+      const text = await file.text();
+      const workbook = XLSX.read(text, { type: "string" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      return XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: "" });
+    }
+
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: "array" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    return XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: "" });
+  };
+
+  // Import Excel/CSV
   const handleImport = async () => {
     try {
-      const lines = importData.trim().split("\n");
-      
-      for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(",").map(v => v.trim().replace(/"/g, ""));
-        await createOrUpdateEquipment({
-          name: values[0],
-          category: values[1],
-          specification: values[2],
-          price: parseFloat(values[3]),
-          availability_status: values[4] || "available",
-          quantity: parseInt(values[5]) || 1,
-          description: values[6] || ""
-        });
+      if (!importFile) {
+        toast.error("Pilih file Excel atau CSV terlebih dahulu");
+        return;
       }
-      
+
+      const rows = await parseImportRows(importFile);
+      if (!rows || rows.length < 2) {
+        toast.error("File tidak memiliki data yang valid");
+        return;
+      }
+
+      const headerRow = rows[0].map((cell) => String(cell).trim().toLowerCase());
+      const getValue = (row: any[], keys: string[], fallbackIndex?: number) => {
+        for (const key of keys) {
+          const idx = headerRow.findIndex((header) => header === key);
+          if (idx !== -1) return row[idx];
+        }
+        return fallbackIndex !== undefined ? row[fallbackIndex] : "";
+      };
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i] || [];
+        const name = String(getValue(row, ["nama alat", "nama", "name"], 0)).trim();
+        if (!name) continue;
+
+        try {
+          await createOrUpdateEquipment({
+            name,
+            category: String(getValue(row, ["kategori", "category"], 1)).trim(),
+            specification: String(getValue(row, ["spesifikasi", "specification"], 2)).trim(),
+            price: parseFloat(String(getValue(row, ["harga sewa", "harga", "price"], 3))) || 0,
+            availability_status: String(getValue(row, ["status", "availability_status"], 4)).trim() || "available",
+            quantity: parseInt(String(getValue(row, ["jumlah", "quantity"], 5))) || 1,
+            description: String(getValue(row, ["deskripsi", "description"], 6)).trim(),
+            unit: String(getValue(row, ["unit", "satuan"], 7)).trim() || "unit",
+            image_url: String(getValue(row, ["image_url", "url gambar", "gambar"], 8)).trim(),
+          });
+          successCount++;
+        } catch {
+          errorCount++;
+        }
+      }
+
       toast.success("Import berhasil", {
-        description: `${lines.length - 1} alat berhasil diimport`
+        description: `${successCount} alat berhasil diimport${errorCount > 0 ? `, ${errorCount} gagal` : ""}`
       });
       setIsImportDialogOpen(false);
-      setImportData("");
+      resetImportState();
       loadData();
     } catch (error: any) {
       toast.error("Gagal import data", {
@@ -864,35 +950,80 @@ export default function EquipmentPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Upload className="h-5 w-5" />
-              Import Data CSV
+              Import Data Excel / CSV
             </DialogTitle>
             <DialogDescription>
-              Paste data CSV dengan format: Nama, Kategori, Spesifikasi, Harga, Status, Jumlah, Deskripsi
+              Pilih file Excel atau CSV dengan kolom: Nama, Kategori, Spesifikasi, Harga, Status, Jumlah, Deskripsi.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="bg-slate-50 p-3 rounded-lg text-xs font-mono">
-              <p className="font-semibold mb-1">Format:</p>
-              <p>Nama,Kategori,Spesifikasi,Harga,Status,Jumlah,Deskripsi</p>
-              <p className="text-slate-500">Gas Chromatograph,Instrumentasi,GC-2010 Plus,500000,available,1,Alat untuk...</p>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-slate-800">Format kolom</p>
+                  <p className="text-xs text-slate-500">Nama, Kategori, Spesifikasi, Harga, Status, Jumlah, Deskripsi</p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={handleDownloadTemplate}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    Template
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={() => importFileRef.current?.click()}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    Pilih File
+                  </Button>
+                </div>
+              </div>
+              <input
+                ref={importFileRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+              />
+              <div className="rounded-lg border border-dashed border-emerald-200 bg-white p-3 text-xs text-slate-600">
+                {importFile ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-800 truncate">{importFile.name}</p>
+                      <p className="text-slate-500">
+                        {Math.round(importFile.size / 1024)} KB
+                      </p>
+                    </div>
+                    <Button type="button" variant="ghost" size="sm" onClick={resetImportState} className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                      Hapus
+                    </Button>
+                  </div>
+                ) : (
+                  <p>Belum ada file dipilih. Format yang didukung: .xlsx, .xls, .csv</p>
+                )}
+              </div>
             </div>
-            <textarea
-              className="w-full h-40 p-3 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-              placeholder="Paste CSV data here..."
-              value={importData}
-              onChange={(e) => setImportData(e.target.value)}
-            />
           </div>
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setIsImportDialogOpen(false)}
+              onClick={() => {
+                setIsImportDialogOpen(false);
+                resetImportState();
+              }}
               className="cursor-pointer"
             >
               Batal
             </Button>
             <Button
               onClick={handleImport}
+              disabled={!importFile}
               className="bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
             >
               <Upload className="mr-2 h-4 w-4" /> Import

@@ -7,7 +7,8 @@ import { logAudit } from "@/lib/audit-log";
 import { cache } from "react";
 import { createNotifications } from "@/lib/actions/notifications";
 import { serializeData } from "@/lib/utils/serialize";
-import { STORAGE_BUCKETS, uploadToSupabaseStorage } from "@/lib/supabase/storage";
+import { STORAGE_BUCKETS } from "@/lib/supabase/storage";
+import { uploadManagedStorageFile } from "@/lib/storage/upload-router";
 
 /**
  * Server Actions untuk Analyst (Analis Laboratorium)
@@ -262,13 +263,14 @@ export async function uploadAnalysisPDF(
     const renamedFile = new File([await file.arrayBuffer()], `LAPORAN-${invoicePart}.${file.name.split(".").pop()}`, {
       type: file.type,
     });
-    const { publicUrl } = await uploadToSupabaseStorage({
+    const uploadResult = await uploadManagedStorageFile({
       bucket: STORAGE_BUCKETS.labResults,
       folder: `analysis-pdf/${jobOrderId}`,
       file: renamedFile,
       allowedMimeTypes: ['application/pdf'],
       maxSizeBytes: 15 * 1024 * 1024,
     });
+    const { publicUrl, provider } = uploadResult;
 
     // Update lab analysis
     const labAnalysis = await prisma.labAnalysis.upsert({
@@ -285,13 +287,13 @@ export async function uploadAnalysisPDF(
     });
 
     await logAudit({
-      action: "analysis_pdf_uploaded_supabase",
+      action: "analysis_pdf_uploaded",
       entity_type: "lab_analysis",
       entity_id: labAnalysis.id,
       user_id: profile.id!,
       user_email: profile.email!,
       user_role: profile.role,
-      new_data: { result_pdf_url: publicUrl, storage: "supabase" },
+      new_data: { result_pdf_url: publicUrl, storage: provider },
     });
 
     revalidatePath("/analyst");
@@ -339,7 +341,7 @@ export async function uploadRawData(
     const renamedFile = new File([await file.arrayBuffer()], `RAW-${invoicePart}.${file.name.split(".").pop()}`, {
       type: file.type,
     });
-    const { publicUrl } = await uploadToSupabaseStorage({
+    const uploadResult = await uploadManagedStorageFile({
       bucket: STORAGE_BUCKETS.labResults,
       folder: `raw-data/${jobOrderId}`,
       file: renamedFile,
@@ -353,6 +355,7 @@ export async function uploadRawData(
       ],
       maxSizeBytes: 20 * 1024 * 1024,
     });
+    const { publicUrl, provider } = uploadResult;
 
     // Update lab analysis
     const labAnalysis = await prisma.labAnalysis.upsert({
@@ -369,13 +372,13 @@ export async function uploadRawData(
     });
 
     await logAudit({
-      action: "raw_data_uploaded_supabase",
+      action: "raw_data_uploaded",
       entity_type: "lab_analysis",
       entity_id: labAnalysis.id,
       user_id: profile.id!,
       user_email: profile.email!,
       user_role: profile.role,
-      new_data: { raw_data_url: publicUrl, storage: "supabase" },
+      new_data: { raw_data_url: publicUrl, storage: provider },
     });
 
     revalidatePath("/analyst");

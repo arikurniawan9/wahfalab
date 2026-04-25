@@ -14,6 +14,7 @@ interface TravelOrderData {
   return_date: string;
   destination: string;
   purpose: string;
+  quotation_title?: string | null;
   transportation_type?: string | null;
   accommodation_type?: string | null;
   daily_allowance?: number | null;

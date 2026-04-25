@@ -459,6 +459,11 @@ export async function sendTravelOrderToField(jobOrderId: string) {
           select: {
             id: true,
             scheduled_date: true,
+            travel_order: {
+              select: {
+                id: true
+              }
+            },
             field_officer: {
               select: {
                 id: true,
@@ -479,6 +484,7 @@ export async function sendTravelOrderToField(jobOrderId: string) {
     }
 
     const assignment = jobOrder.sampling_assignment
+    const travelOrderId = assignment.travel_order?.id
     const scheduleText = assignment.scheduled_date
       ? new Date(assignment.scheduled_date).toLocaleDateString('id-ID')
       : 'sesuai jadwal'
@@ -489,10 +495,13 @@ export async function sendTravelOrderToField(jobOrderId: string) {
         type: 'job_assigned',
         title: 'Surat Tugas Dikirim',
         message: `Surat tugas untuk ${jobOrder.tracking_code} telah dikirim oleh ${sender.full_name || sender.email}. Jadwal: ${scheduleText}.`,
-        link: `/field/assignments/${assignment.id}`,
+        link: travelOrderId
+          ? `/field/travel-orders/${travelOrderId}/preview`
+          : `/field/assignments/${assignment.id}`,
         metadata: {
           job_order_id: jobOrder.id,
           assignment_id: assignment.id,
+          travel_order_id: travelOrderId,
           tracking_code: jobOrder.tracking_code,
           sent_by: sender.id
         }

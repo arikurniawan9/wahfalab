@@ -34,6 +34,7 @@ import {
   Activity,
   Database,
   Settings,
+  FolderUp,
   ArrowUpRight,
   ArrowDownRight,
   Banknote,
@@ -111,6 +112,7 @@ export const adminMenuItems = () => [
       { icon: Building2, label: "Profil Perusahaan", href: "/admin/settings/company", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
       { icon: Globe, label: "Konten Website", href: "/admin/content-management", color: "text-sky-400", bgColor: "bg-sky-500/10" },
       { icon: HardDrive, label: "Infrastruktur", href: "/admin/settings/system", color: "text-slate-400", bgColor: "bg-slate-500/10" },
+      { icon: FolderUp, label: "Upload Storage", href: "/admin/settings/upload-storage", color: "text-violet-400", bgColor: "bg-violet-500/10" },
       { icon: History, label: "Audit Log", href: "/admin/settings/audit-logs", color: "text-blue-400", bgColor: "bg-blue-500/10" },
       { icon: User, label: "Profil Saya", href: "/admin/settings/profile", color: "text-purple-400", bgColor: "bg-purple-500/10" },
     ]
@@ -158,6 +160,27 @@ export const operatorMenuItems = [
   },
 ];
 
+export const fieldOfficerMenuItems = [
+  {
+    id: "overview",
+    group: "Ringkasan",
+    icon: LayoutDashboard,
+    items: [
+      { icon: LayoutDashboard, label: "Beranda", href: "/field", exact: true, color: "text-sky-400", bgColor: "bg-sky-500/10" },
+    ]
+  },
+  {
+    id: "sampling",
+    group: "Operasional Sampling",
+    icon: MapPin,
+    items: [
+      { icon: MapPin, label: "Tugas Sampling", href: "/field/assignments", color: "text-amber-400", bgColor: "bg-amber-500/10" },
+      { icon: FileText, label: "Surat Tugas", href: "/field/travel-orders", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
+      { icon: History, label: "Riwayat Sampling", href: "/field/history", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
+    ]
+  }
+];
+
 export const financeMenuItems = () => [
   {
     id: "finance",
@@ -185,6 +208,9 @@ function isPathActive(pathname: string, href: string, exact?: boolean) {
 function inferRoleFromPath(pathname: string): string | null {
   if (pathname.startsWith("/admin")) return "admin";
   if (pathname.startsWith("/operator")) return "operator";
+  if (pathname.startsWith("/field")) return "field_officer";
+  if (pathname.startsWith("/analyst")) return "analyst";
+  if (pathname.startsWith("/reporting")) return "reporting";
   if (pathname.startsWith("/finance")) return "finance";
   return null;
 }
@@ -224,6 +250,8 @@ export function Sidebar({ className }: { className?: string }) {
     ? adminMenuItems()
     : role === 'operator'
       ? operatorMenuItems
+      : role === 'field_officer'
+        ? fieldOfficerMenuItems
       : role === 'finance'
         ? financeMenuItems()
         : [];

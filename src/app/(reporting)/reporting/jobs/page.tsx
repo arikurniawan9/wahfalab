@@ -43,8 +43,17 @@ export default function ReportingJobsPage() {
   return (
     <div className="p-4 md:p-10 pb-24 md:pb-10">
       <div className="mb-10">
-        <h1 className="text-3xl font-bold text-emerald-900 tracking-tight">Laporan Hasil Uji</h1>
-        <p className="text-slate-500 text-sm mt-1">Kelola penerbitan LHU</p>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-emerald-900 tracking-tight">Laporan Hasil Uji</h1>
+            <p className="text-slate-500 text-sm mt-1">Kelola penerbitan LHU</p>
+          </div>
+          <Link href="/reporting/direct-requests">
+            <Button className="bg-violet-600 hover:bg-violet-700 text-white font-black text-[10px] uppercase tracking-widest rounded-xl h-10 px-5">
+              Direct LHU Queue
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <Card className="shadow-xl shadow-emerald-900/5">

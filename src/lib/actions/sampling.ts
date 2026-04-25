@@ -6,7 +6,8 @@ import { serializeData } from '@/lib/utils/serialize'
 import { auth } from '@/lib/auth'
 import { generateInvoice } from '@/lib/actions/payment'
 import { notifySamplingCompleted, notifyInvoiceGenerated, notifyJobAssigned } from '@/lib/actions/notifications'
-import { STORAGE_BUCKETS, deleteFromSupabaseStorage, uploadToSupabaseStorage } from '@/lib/supabase/storage'
+import { STORAGE_BUCKETS } from '@/lib/supabase/storage'
+import { deleteManagedStorageFile, uploadManagedStorageFile } from '@/lib/storage/upload-router'
 
 const INVOICE_REQUEST_MARKER = '[INVOICE_REQUESTED]'
 
@@ -22,7 +23,7 @@ export async function uploadSamplingPdf(assignmentId: string, file: File) {
       return { error: 'Hanya file PDF yang diizinkan' }
     }
 
-    const { publicUrl } = await uploadToSupabaseStorage({
+    const { publicUrl } = await uploadManagedStorageFile({
       bucket: STORAGE_BUCKETS.travelOrders,
       folder: `sampling-documents/${assignmentId}`,
       file,
@@ -53,7 +54,7 @@ export async function deleteSamplingPdf(assignmentId: string) {
     })
 
     if (assignment?.signed_travel_order_url) {
-      await deleteFromSupabaseStorage(STORAGE_BUCKETS.travelOrders, assignment.signed_travel_order_url)
+      await deleteManagedStorageFile(STORAGE_BUCKETS.travelOrders, assignment.signed_travel_order_url)
 
       await prisma.samplingAssignment.update({
         where: { id: assignmentId },
@@ -101,7 +102,7 @@ export async function uploadSamplingPhotos(assignmentId: string, formData: FormD
 
     const uploaded = await Promise.all(
       files.map(async (file) => {
-        const { publicUrl } = await uploadToSupabaseStorage({
+        const { publicUrl } = await uploadManagedStorageFile({
           bucket: STORAGE_BUCKETS.samplingPhotos,
           folder: `assignments/${assignmentId}`,
           file,
@@ -125,7 +126,7 @@ export async function uploadSamplingPhotos(assignmentId: string, formData: FormD
 
 export async function deleteSamplingPhoto(photoUrl: string) {
   try {
-    await deleteFromSupabaseStorage(STORAGE_BUCKETS.samplingPhotos, photoUrl)
+    await deleteManagedStorageFile(STORAGE_BUCKETS.samplingPhotos, photoUrl)
     return { success: true }
   } catch (error: any) {
     console.error('Error deleting sampling photo:', error)

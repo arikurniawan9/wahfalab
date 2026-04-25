@@ -1,6 +1,21 @@
 import { withAccelerate } from '@prisma/extension-accelerate'
+import dotenv from 'dotenv'
+import fs from 'fs'
+import path from 'path'
 
-const PRISMA_CLIENT_VERSION = '2026-04-23-sampling-location-v3'
+const PRISMA_CLIENT_VERSION = '2026-04-25-upload-storage-v2'
+
+if (process.env.NODE_ENV !== 'production') {
+  const envPath = path.join(process.cwd(), '.env')
+  const envLocalPath = path.join(process.cwd(), '.env.local')
+
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath, override: true })
+  }
+  if (fs.existsSync(envLocalPath)) {
+    dotenv.config({ path: envLocalPath, override: true })
+  }
+}
 
 // Force a fresh load of the generated Prisma client so schema changes are picked up
 // even if the dev server keeps module cache around between hot reloads.
@@ -11,11 +26,7 @@ delete require.cache[generatedPrismaPath]
 const { PrismaClient } = require('../generated/prisma') as typeof import('../generated/prisma')
 
 const prismaClientSingleton = () => {
-  const databaseUrl =
-    process.env.APP_DATABASE_URL ||
-    process.env.NEXT_PUBLIC_APP_DATABASE_URL ||
-    process.env.DATABASE_URL ||
-    ''
+  const databaseUrl = process.env.DATABASE_URL || ''
 
   const client = new PrismaClient({
     datasources: databaseUrl

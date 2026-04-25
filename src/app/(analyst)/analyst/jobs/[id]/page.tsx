@@ -101,6 +101,7 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
   const [analysis, setAnalysis] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [companyProfile, setCompanyProfile] = useState<any>(null);
+  const [storageConfig, setStorageConfig] = useState<any>(null);
 
   // Form state
   const [analysisNotes, setAnalysisNotes] = useState("");
@@ -160,6 +161,52 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
     loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    const loadStorageConfig = async () => {
+      try {
+        const response = await fetch("/api/company-profile", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = await response.json();
+        setStorageConfig({
+          provider: data.upload_storage_provider || "supabase",
+          publicPath: data.upload_storage_public_path || "",
+          externalUrl: data.upload_storage_external_url || "",
+          note: data.upload_storage_note || "",
+        });
+      } catch {
+        setStorageConfig(null);
+      }
+    };
+
+    loadStorageConfig();
+  }, []);
+
+  const storageLabel =
+    storageConfig?.provider === "public"
+      ? "Project / Public"
+      : storageConfig?.provider === "google_drive"
+        ? "Google Drive"
+        : storageConfig?.provider === "google_form"
+          ? "Google Form"
+          : "Supabase Storage";
+  const storageHint =
+    storageConfig?.provider === "public"
+      ? storageConfig?.publicPath || "disimpan ke folder public"
+      : storageConfig?.provider === "google_drive"
+        ? storageConfig?.externalUrl || "mode manual Google Drive"
+        : storageConfig?.provider === "google_form"
+          ? storageConfig?.externalUrl || "mode manual Google Form"
+          : "storage utama sistem";
+  const storageBadgeClass =
+    storageConfig?.provider === "public"
+      ? "bg-blue-600 text-white"
+      : storageConfig?.provider === "google_drive"
+        ? "bg-violet-600 text-white"
+        : storageConfig?.provider === "google_form"
+          ? "bg-orange-600 text-white"
+          : "bg-emerald-600 text-white";
+  const isExternalFormMode = storageConfig?.provider === "google_form";
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: "pdf" | "raw") => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -169,20 +216,18 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
       formData.append("file", file);
       if (type === "pdf") {
         const res = await uploadAnalysisPDF(id, formData);
-        if (res.success) {
+        if (!res.success) throw new Error(res.error || "Gagal mengunggah berkas analisis");
           toast.success("✅ Berkas analisis tersimpan");
           setAnalysis((prev: any) => ({ ...prev, result_pdf_url: res.url }));
-        }
       } else {
         const res = await uploadRawData(id, formData);
-        if (res.success) {
+        if (!res.success) throw new Error(res.error || "Gagal mengunggah data mentah");
           toast.success("✅ Data mentah tersimpan");
           setAnalysis((prev: any) => ({ ...prev, raw_data_url: res.url }));
-        }
       }
       loadData();
     } catch (error: any) {
-      toast.error("Gagal mengunggah file");
+      toast.error(error?.message || "Gagal mengunggah file");
     } finally {
       setSubmitting(false);
     }
@@ -451,8 +496,37 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
               <CardHeader className="p-6 pb-2">
                  <div className="flex items-center gap-3">
                     <div className="p-2 rounded-xl bg-indigo-900 border border-indigo-800"><Upload className="h-5 w-5 text-indigo-400" /></div>
-                    <CardTitle className="text-sm font-black uppercase tracking-tight">Berkas Analisis</CardTitle>
-                 </div>
+                    <div className="space-y-1">
+                      <CardTitle className="text-sm font-black uppercase tracking-tight">Berkas Analisis</CardTitle>
+                      {storageConfig && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge className={cn("border border-white/10 text-[8px] font-black uppercase px-2.5 py-1 rounded-full", storageBadgeClass)}>
+                            Mode: {storageLabel}
+                          </Badge>
+                          <span className="text-[8px] font-bold text-indigo-200/70 uppercase tracking-wider">{storageHint}</span>
+                        </div>
+                      )}
+                      {isExternalFormMode && (
+                        <div className="mt-3 rounded-2xl border border-orange-400/20 bg-orange-500/10 p-3 space-y-2">
+                          <p className="text-[9px] font-black text-orange-100 uppercase tracking-widest">
+                            Mode form eksternal aktif
+                          </p>
+                          <p className="text-[10px] text-orange-100/80 font-medium">
+                            Upload langsung dinonaktifkan. Gunakan form admin untuk mengirim file atau link pendukung.
+                          </p>
+                          {storageConfig?.externalUrl && (
+                            <Button
+                              type="button"
+                              onClick={() => window.open(storageConfig.externalUrl, "_blank")}
+                              className="h-9 rounded-xl bg-orange-500 hover:bg-orange-400 text-white font-black text-[9px] uppercase tracking-widest"
+                            >
+                              Buka Form Eksternal
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
               </CardHeader>
               <CardContent className="p-6 space-y-4">
                  <div className="space-y-4">
@@ -461,16 +535,25 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
                        <Label className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-2 block">Laporan PDF</Label>
                        <div className="flex items-center gap-2">
                           <div className="flex-1 relative">
-                             <Input 
-                               type="file" accept=".pdf"
-                               onChange={(e) => handleFileUpload(e, "pdf")}
-                               className="bg-indigo-900/50 border-none text-[10px] text-indigo-200 file:bg-indigo-600 file:text-white file:border-none file:rounded-lg file:mr-2 file:px-2 file:py-1 cursor-pointer h-10"
-                             />
+                              <Input 
+                                type="file" accept=".pdf"
+                                onChange={(e) => handleFileUpload(e, "pdf")}
+                                disabled={isExternalFormMode}
+                                className={cn(
+                                  "border-none text-[10px] file:border-none file:rounded-lg file:mr-2 file:px-2 file:py-1 cursor-pointer h-10",
+                                  isExternalFormMode ? "bg-orange-500/20 text-orange-100 file:bg-orange-500 file:text-white cursor-not-allowed opacity-80" : "bg-indigo-900/50 text-indigo-200 file:bg-indigo-600 file:text-white"
+                                )}
+                              />
                              {analysis?.result_pdf_url && (
                                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
                                    <div className="h-6 w-6 rounded-lg bg-emerald-500 flex items-center justify-center text-white"><FileCheck className="h-3 w-3" /></div>
                                    <Link href={analysis.result_pdf_url} target="_blank" className="text-white hover:text-indigo-300"><Eye className="h-4 w-4" /></Link>
                                 </div>
+                             )}
+                             {storageConfig && (
+                                <p className={cn("absolute left-3 -bottom-5 text-[8px] font-black uppercase tracking-widest", storageConfig?.provider === "google_drive" ? "text-violet-200" : storageConfig?.provider === "public" ? "text-blue-200" : storageConfig?.provider === "google_form" ? "text-orange-200" : "text-emerald-200")}>
+                                  Penyimpanan aktif: {storageLabel}
+                                </p>
                              )}
                           </div>
                        </div>
@@ -481,16 +564,25 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
                        <Label className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-2 block">Data Mentah / Foto</Label>
                        <div className="flex items-center gap-2">
                           <div className="flex-1 relative">
-                             <Input 
-                               type="file" accept="image/*,.pdf"
-                               onChange={(e) => handleFileUpload(e, "raw")}
-                               className="bg-indigo-900/50 border-none text-[10px] text-indigo-200 file:bg-indigo-600 file:text-white file:border-none file:rounded-lg file:mr-2 file:px-2 file:py-1 cursor-pointer h-10"
-                             />
+                              <Input 
+                                type="file" accept="image/*,.pdf"
+                                onChange={(e) => handleFileUpload(e, "raw")}
+                                disabled={isExternalFormMode}
+                                className={cn(
+                                  "border-none text-[10px] file:border-none file:rounded-lg file:mr-2 file:px-2 file:py-1 cursor-pointer h-10",
+                                  isExternalFormMode ? "bg-orange-500/20 text-orange-100 file:bg-orange-500 file:text-white cursor-not-allowed opacity-80" : "bg-indigo-900/50 text-indigo-200 file:bg-indigo-600 file:text-white"
+                                )}
+                              />
                              {analysis?.raw_data_url && (
                                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
                                    <div className="h-6 w-6 rounded-lg bg-emerald-500 flex items-center justify-center text-white"><FileCheck className="h-3 w-3" /></div>
                                    <Link href={analysis.raw_data_url} target="_blank" className="text-white hover:text-indigo-300"><Eye className="h-4 w-4" /></Link>
                                 </div>
+                             )}
+                             {storageConfig && (
+                                <p className={cn("absolute left-3 -bottom-5 text-[8px] font-black uppercase tracking-widest", storageConfig?.provider === "google_drive" ? "text-violet-200" : storageConfig?.provider === "public" ? "text-blue-200" : storageConfig?.provider === "google_form" ? "text-orange-200" : "text-emerald-200")}>
+                                  Penyimpanan aktif: {storageLabel}
+                                </p>
                              )}
                           </div>
                        </div>

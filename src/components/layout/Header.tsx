@@ -1,11 +1,11 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Bell, Menu, X, Search } from 'lucide-react'
+import { Menu, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NotificationBell } from '@/components/ui/notification-bell'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
-import { NavContent, adminMenuItems, operatorMenuItems, financeMenuItems } from './Sidebar'
+import { NavContent, adminMenuItems, operatorMenuItems, financeMenuItems, fieldOfficerMenuItems } from './Sidebar'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { logout } from '@/lib/actions/auth'
@@ -42,6 +42,7 @@ export function Header({ title, subtitle, profile }: HeaderProps) {
       case 'admin': return '/admin/settings/profile';
       case 'operator': return '/operator/settings/profile';
       case 'client': return '/dashboard/settings';
+      case 'field_officer': return '/field';
       default: return '#';
     }
   };
@@ -69,6 +70,8 @@ export function Header({ title, subtitle, profile }: HeaderProps) {
     ? adminMenuItems()
     : profile?.role === 'operator'
       ? operatorMenuItems
+      : profile?.role === 'field_officer'
+        ? fieldOfficerMenuItems
       : profile?.role === 'finance'
         ? financeMenuItems()
       : [];

@@ -204,6 +204,10 @@ export const companyProfileSchema = z.object({
   logo_url: z.string().optional(),
   npwp: z.string().optional(),
   nib: z.string().optional(),
+  upload_storage_provider: z.string().optional(),
+  upload_storage_public_path: z.string().optional(),
+  upload_storage_external_url: z.string().optional(),
+  upload_storage_note: z.string().optional(),
 });
 
 export const updateCompanyProfileSchema = companyProfileSchema.partial();

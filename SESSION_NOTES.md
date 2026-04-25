@@ -330,3 +330,29 @@ Lanjutkan proyek wahfalab dari SESSION_NOTES.md dan fokus ke area admin dan fina
   - menu `Invoice` diarahkan ke `/finance/invoices`
   - ditambahkan shortcut `Pembayaran` ke `/finance/payments`
 - Verifikasi tipe setelah perubahan navigasi finance: `npx tsc --noEmit` lulus.
+
+## Update Sesi (2026-04-25)
+
+- Bug edit penawaran setelah create sudah diperbaiki.
+  - Akar masalah: parsing `parameter_snapshot` di halaman edit admin memaksa `JSON.parse`, padahal data terbaru tersimpan sebagai string comma-separated.
+  - Perbaikan: parser dibuat kompatibel untuk format array, JSON lama, dan string biasa.
+  - File:
+    - `src/app/(admin)/admin/quotations/[id]/edit/page.tsx`
+- Header detail quotation operator sudah disesuaikan:
+  - posisi `No Penawaran` dan `Perihal` ditukar sesuai permintaan.
+  - File:
+    - `src/app/(operator)/operator/quotations/[id]/page.tsx`
+- Template cetak draft penawaran (`Quotation PDF`) sudah dirapikan khusus bagian metadata kanan:
+  - pemisah `:` dibuat stabil/tidak loncat,
+  - isi `Tanggal` dan `Nomor` dibuat rata kanan sesuai permintaan final.
+  - File:
+    - `src/components/pdf/QuotationDocument.tsx`
+- Verifikasi:
+  - `npx tsc --noEmit` lulus setelah perbaikan.
+
+## Commit Terakhir
+
+- Commit message: `perubahan pada operator`
+- Commit hash: `f4c98a6`
+- Branch: `main`
+- Remote push: `origin/main` berhasil

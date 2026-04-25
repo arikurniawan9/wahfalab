@@ -7,11 +7,9 @@ import {
   LayoutDashboard,
   FileText,
   Briefcase,
-  Users,
   FlaskConical,
   MapPin,
   Settings,
-  Wrench,
   CreditCard,
   History,
   Wallet
@@ -34,8 +32,9 @@ const clientNavItems: BottomNavItem[] = [
 ];
 
 const fieldOfficerNavItems: BottomNavItem[] = [
-  { icon: LayoutDashboard, label: "Beranda", href: "/field" },
-  { icon: FileText, label: "Tugas", href: "/field/assignments" },
+  { icon: LayoutDashboard, label: "Beranda", href: "/field", exact: true },
+  { icon: MapPin, label: "Sampling", href: "/field/assignments" },
+  { icon: FileText, label: "Surat Tugas", href: "/field/travel-orders" },
   { icon: History, label: "Riwayat", href: "/field/history" },
 ];
 
@@ -111,7 +110,7 @@ export function BottomNav() {
             : [];
 
   if (navItems.length === 0) return null;
-  const isDenseLayout = navItems.length >= 5;
+  const isDenseLayout = navItems.length >= 4;
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 px-4 pb-4">
@@ -145,7 +144,7 @@ export function BottomNav() {
               <span
                 className={cn(
                   "mt-1 font-medium transition-all duration-300 leading-none",
-                  isDenseLayout ? "text-[9px]" : "text-[10px]",
+                  isDenseLayout ? "text-[8px]" : "text-[10px]",
                   isActive ? "text-white opacity-100" : "text-emerald-100/40 opacity-70"
                 )}
               >

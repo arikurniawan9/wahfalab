@@ -132,6 +132,7 @@ export async function getTravelOrderByAssignmentId(assignmentId: string) {
               include: {
                 quotation: {
                   include: {
+                    title: true,
                     profile: true,
                     items: {
                       include: {
@@ -292,7 +293,7 @@ export async function getMyTravelOrders(userId: string) {
       }
     })
 
-    return travelOrders
+    return serializeData(travelOrders)
   } catch (error: any) {
     console.error('Error fetching travel orders:', error)
     return []

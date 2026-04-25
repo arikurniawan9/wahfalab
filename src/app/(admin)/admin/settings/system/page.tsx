@@ -261,9 +261,16 @@ export default function SystemMaintenancePage() {
             <p className="text-slate-400 text-[8px] font-black uppercase tracking-[0.3em] mt-1">Control Center • v2.0</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" className="rounded-lg font-black text-[9px] uppercase tracking-widest gap-2 h-9 px-4 bg-white shadow-sm hover:bg-slate-50 transition-all" onClick={loadAllData}>
-          <RefreshCw className={cn("h-3.5 w-3.5 text-emerald-600", loading && "animate-spin")} /> Segarkan Status
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link href="/admin/settings/upload-storage">
+            <Button variant="outline" size="sm" className="rounded-lg font-black text-[9px] uppercase tracking-widest gap-2 h-9 px-4 bg-white shadow-sm hover:bg-slate-50 transition-all">
+              <HardDrive className="h-3.5 w-3.5 text-blue-600" /> Upload Storage
+            </Button>
+          </Link>
+          <Button variant="outline" size="sm" className="rounded-lg font-black text-[9px] uppercase tracking-widest gap-2 h-9 px-4 bg-white shadow-sm hover:bg-slate-50 transition-all" onClick={loadAllData}>
+            <RefreshCw className={cn("h-3.5 w-3.5 text-emerald-600", loading && "animate-spin")} /> Segarkan Status
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

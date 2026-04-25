@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## WahfaLab
+
+Next.js app dengan Prisma, PostgreSQL, dan Supabase storage.
 
 ## Getting Started
 
-First, run the development server:
+Jalankan development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Database Setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+File env yang dipakai:
+- `.env`
+- `.env.local`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Command utama:
 
-## Learn More
+```bash
+npm run db:migrate
+npm run db:seed
+npm run db:seed:operational
+```
 
-To learn more about Next.js, take a look at the following resources:
+Command gabungan:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run db:setup
+npm run db:setup:verify
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Manual schema bundle:
 
-## Deploy on Vercel
+```bash
+prisma/manual-setup.sql
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Gunakan file ini kalau Anda ingin menjalankan semua migration schema lewat Supabase SQL Editor.
+Setelah schema selesai, lanjutkan dengan seed:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run db:seed
+npm run db:seed:operational
+```
+
+Reset command:
+
+```bash
+npm run db:reset:schema
+npm run db:setup:reset
+```
+
+Utility command:
+
+```bash
+npm run db:check-roles
+npm run db:fix-roles
+npm run db:restore
+npm run db:debug-login
+```
+
+## Notes
+
+- Prisma memakai `DATABASE_URL` di `src/lib/prisma.ts`.
+- Seed akun inti ada di `prisma/seed.ts`.
+- Seed biaya operasional ada di `prisma/seed-operational-costs.ts`.

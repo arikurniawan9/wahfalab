@@ -7,6 +7,18 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
+    "db:seed:operational": "tsx prisma/seed-operational-costs.ts",
+    "db:setup": "npm run db:migrate && npm run db:seed && npm run db:seed:operational",
+    "db:setup:reset": "prisma migrate reset --force && npm run db:seed:operational",
+    "db:reset:schema": "prisma migrate reset --force --skip-seed",
+    "db:setup:verify": "npm run db:setup && npm run db:check-roles",
+    "db:generate": "prisma generate",
+    "db:check-roles": "tsx src/check-roles.ts",
+    "db:fix-roles": "tsx src/fix-roles-final.ts",
+    "db:restore": "tsx src/restore-db.ts",
+    "db:debug-login": "tsx debug-login.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

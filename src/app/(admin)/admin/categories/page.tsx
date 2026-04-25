@@ -502,25 +502,19 @@ export default function CategoriesPage() {
 
       {/* Delete Confirmation AlertDialog */}
       <AlertDialog open={deleteItemId !== null} onOpenChange={(open) => !open && setDeleteItemId(null)}>
-        <AlertDialogContent className="rounded-[2rem] border-none shadow-2xl p-8">
+        <AlertDialogContent className="sm:max-w-[425px] rounded-3xl">
           <AlertDialogHeader>
-            <div className="h-16 w-16 rounded-3xl bg-red-50 text-red-500 flex items-center justify-center mb-6 border border-red-100 shadow-inner">
-              <Trash2 className="h-8 w-8" />
-            </div>
-            <AlertDialogTitle className="text-2xl font-black text-slate-800 leading-tight">
-              Hapus Kategori?
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" /> Konfirmasi Hapus
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-slate-500 pt-2 text-sm leading-relaxed">
-              Tindakan ini tidak dapat dibatalkan. Pastikan kategori ini tidak memiliki layanan aktif.
+            <AlertDialogDescription>
+              Hapus kategori ini dari katalog secara permanen?
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="gap-3 pt-8">
-            <AlertDialogCancel className="rounded-2xl h-14 border-slate-200 text-slate-500 font-bold px-6">Batal</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDelete}
-              className="bg-red-600 hover:bg-red-700 rounded-2xl h-14 px-8 font-black shadow-xl shadow-red-200 transition-all active:scale-95"
-            >
-              YA, HAPUS
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700 rounded-xl">
+              Hapus
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

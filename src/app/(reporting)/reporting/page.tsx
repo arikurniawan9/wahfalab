@@ -93,6 +93,11 @@ export default function LabReportListPage() {
               <Plus className="h-4 w-4" /> Buat LHU Manual
             </Button>
           </Link>
+          <Link href="/reporting/direct-requests" className="flex-1 md:flex-none">
+            <Button variant="outline" className="w-full h-12 px-6 rounded-xl border-violet-200 text-violet-700 hover:bg-violet-50 font-bold uppercase text-[10px] tracking-widest gap-2">
+              <AlertCircle className="h-4 w-4" /> Direct LHU
+            </Button>
+          </Link>
         </div>
       </div>
 

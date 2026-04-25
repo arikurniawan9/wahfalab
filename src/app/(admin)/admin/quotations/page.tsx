@@ -49,7 +49,8 @@ import {
   cloneQuotation,
   updateQuotationStatus,
   getQuotationById,
-  publishInvoiceRequest
+  publishInvoiceRequest,
+  sendQuotationToReportingDirect
 } from "@/lib/actions/quotation";
 import { getClients, createOrUpdateUser } from "@/lib/actions/users";
 import { getAllServices } from "@/lib/actions/services";
@@ -119,6 +120,7 @@ export default function QuotationListPage() {
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [publishingInvoice, setPublishingInvoice] = useState(false);
+  const [sendingToReportingId, setSendingToReportingId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [confirmInvoiceQuotationId, setConfirmInvoiceQuotationId] = useState<string | null>(null);
@@ -219,6 +221,22 @@ export default function QuotationListPage() {
     } finally {
       setPublishingInvoice(false);
       setConfirmInvoiceQuotationId(null);
+    }
+  };
+
+  const handleSendDirectToReporting = async (quotationId: string) => {
+    try {
+      setSendingToReportingId(quotationId);
+      const result = await sendQuotationToReportingDirect(quotationId);
+      if ((result as any)?.error) {
+        throw new Error((result as any).error);
+      }
+      toast.success((result as any)?.alreadySent ? "Penawaran sudah pernah dikirim ke reporting direct" : "Penawaran dikirim ke reporting direct");
+      loadData();
+    } catch (error: any) {
+      toast.error(error?.message || "Gagal mengirim ke reporting");
+    } finally {
+      setSendingToReportingId(null);
     }
   };
 
@@ -345,6 +363,7 @@ export default function QuotationListPage() {
                   const latestJobOrder = item.job_orders?.[0];
                   const invoiceRequested = !!latestJobOrder?.notes?.includes("[INVOICE_REQUESTED]");
                   const hasInvoice = !!latestJobOrder?.invoice;
+                  const directReportingSent = !!latestJobOrder?.notes?.includes("[DIRECT_REPORTING_ONLY]");
                   return (
                   <TableRow key={item.id} className="hover:bg-emerald-50/30 transition-all border-b border-slate-50 group">
                     <TableCell className="pl-6"><Checkbox checked={selectedIds.includes(item.id)} onCheckedChange={() => toggleSelect(item.id)} /></TableCell>
@@ -373,8 +392,8 @@ export default function QuotationListPage() {
                     <TableCell className="text-center px-6">
                       <div className="flex justify-center gap-2">
                              {item.status === 'accepted' && latestJobOrder && !hasInvoice && (
-                           <Button
-                             onClick={() => setConfirmInvoiceQuotationId(item.id)}
+                            <Button
+                              onClick={() => setConfirmInvoiceQuotationId(item.id)}
                              disabled={invoiceRequested || publishingInvoice}
                              variant={invoiceRequested ? "outline" : "default"}
                              className={cn(
@@ -385,10 +404,25 @@ export default function QuotationListPage() {
                              )}
                            >
                              <Send className="h-3.5 w-3.5 mr-1.5" />
-                             {invoiceRequested ? "Terkirim" : "Invoice"}
-                           </Button>
-                         )}
-                         <Link href={`/admin/quotations/${item.id}`}><Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl bg-slate-100 text-slate-600 hover:bg-emerald-600 hover:text-white"><Eye className="h-4 w-4" /></Button></Link>
+                              {invoiceRequested ? "Terkirim" : "Invoice"}
+                            </Button>
+                          )}
+                          {item.status === 'accepted' && (
+                            <Button
+                              onClick={() => handleSendDirectToReporting(item.id)}
+                              disabled={sendingToReportingId === item.id || directReportingSent}
+                              className={cn(
+                                "h-9 rounded-xl px-3 text-[9px] font-black uppercase tracking-widest",
+                                directReportingSent
+                                  ? "border-slate-200 bg-slate-100 text-slate-500"
+                                  : "bg-violet-600 hover:bg-violet-700 text-white"
+                              )}
+                            >
+                              <Send className="h-3.5 w-3.5 mr-1.5" />
+                              {sendingToReportingId === item.id ? "Mengirim..." : directReportingSent ? "Direct Terkirim" : "Direct LHU"}
+                            </Button>
+                          )}
+                          <Link href={`/admin/quotations/${item.id}`}><Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl bg-slate-100 text-slate-600 hover:bg-emerald-600 hover:text-white"><Eye className="h-4 w-4" /></Button></Link>
                          <DropdownMenu>
                           <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl text-slate-400 hover:text-emerald-600"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-56 p-2 rounded-2xl border-slate-100 shadow-2xl z-[100]">
@@ -396,9 +430,19 @@ export default function QuotationListPage() {
                               {item.status !== 'accepted' && (
                                 <DropdownMenuItem onClick={() => handleStatusUpdate(item.id, 'accepted')} className="rounded-xl p-3 text-[10px] font-black uppercase text-emerald-600"><CheckCircle className="mr-2 h-4 w-4" /> Terima</DropdownMenuItem>
                               )}
-                             {item.status === 'accepted' && latestJobOrder && !hasInvoice && (
+                            {item.status === 'accepted' && latestJobOrder && !hasInvoice && (
                               <DropdownMenuItem onClick={() => setConfirmInvoiceQuotationId(item.id)} disabled={invoiceRequested || publishingInvoice} className="rounded-xl p-3 text-[10px] font-black uppercase text-blue-600 disabled:text-slate-400">
                                 <Send className="mr-2 h-4 w-4" /> {invoiceRequested ? 'Permintaan Terkirim' : 'Terbitkan Invoice'}
+                              </DropdownMenuItem>
+                            )}
+                            {item.status === 'accepted' && (
+                              <DropdownMenuItem
+                                onClick={() => handleSendDirectToReporting(item.id)}
+                                disabled={sendingToReportingId === item.id || directReportingSent}
+                                className="rounded-xl p-3 text-[10px] font-black uppercase text-violet-700 disabled:text-slate-400"
+                              >
+                                <Send className="mr-2 h-4 w-4" />
+                                {sendingToReportingId === item.id ? "Mengirim..." : directReportingSent ? "Direct Sudah Terkirim" : "Kirim Direct LHU"}
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuItem onClick={() => setDeleteId(item.id)} className="rounded-xl p-3 text-[10px] font-black uppercase text-rose-600"> <Trash2 className="mr-2 h-4 w-4" /> Hapus</DropdownMenuItem>

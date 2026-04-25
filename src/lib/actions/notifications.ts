@@ -92,7 +92,7 @@ export async function getMyNotifications(page = 1, limit = 20, unreadOnly = fals
       ...(unreadOnly ? { is_read: false } : {})
     }
 
-    const [notifications, total, unreadCount] = await Promise.all([
+    const [rawNotifications, total, unreadCount] = await Promise.all([
       prisma.notification.findMany({
         where,
         skip,
@@ -112,6 +112,53 @@ export async function getMyNotifications(page = 1, limit = 20, unreadOnly = fals
         where: { user_id: profile?.id, is_read: false }
       })
     ])
+
+    // Normalize legacy "Surat Tugas" links to dedicated field travel-order preview page.
+    const suratTugasLegacy = rawNotifications.filter((n: any) =>
+      n.type === 'job_assigned' &&
+      n.title?.toLowerCase().includes('surat tugas') &&
+      n.link?.startsWith('/field/assignments/')
+    )
+
+    let notifications = rawNotifications
+    if (suratTugasLegacy.length > 0) {
+      const assignmentIds = Array.from(
+        new Set(
+          suratTugasLegacy
+            .map((n: any) => n?.metadata?.assignment_id)
+            .filter(Boolean)
+        )
+      ) as string[]
+
+      if (assignmentIds.length > 0) {
+        const travelOrders = await prisma.travelOrder.findMany({
+          where: { assignment_id: { in: assignmentIds } },
+          select: { id: true, assignment_id: true }
+        })
+
+        const byAssignment = new Map(travelOrders.map((t: any) => [t.assignment_id, t.id]))
+        notifications = rawNotifications.map((n: any) => {
+          const assignmentId = n?.metadata?.assignment_id
+          const travelOrderId = assignmentId ? byAssignment.get(assignmentId) : null
+          if (
+            n.type === 'job_assigned' &&
+            n.title?.toLowerCase().includes('surat tugas') &&
+            n.link?.startsWith('/field/assignments/') &&
+            travelOrderId
+          ) {
+            return {
+              ...n,
+              link: `/field/travel-orders/${travelOrderId}/preview`,
+              metadata: {
+                ...(n.metadata || {}),
+                travel_order_id: travelOrderId
+              }
+            }
+          }
+          return n
+        })
+      }
+    }
 
     return serializeData({
       items: notifications,

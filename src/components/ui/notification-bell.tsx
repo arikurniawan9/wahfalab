@@ -124,9 +124,9 @@ export function NotificationBell() {
                     notification.is_read ? "bg-white border-transparent" : "bg-white border-emerald-500",
                     getNotificationColor(notification.type)
                   )}
-                  onClick={() => {
+                  onClick={async () => {
                     if (!notification.is_read) {
-                      markAsRead(notification.id)
+                      await markAsRead(notification.id)
                     }
                     if (notification.link) {
                       router.push(notification.link)

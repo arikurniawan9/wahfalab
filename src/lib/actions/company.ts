@@ -33,7 +33,11 @@ export async function getCompanyProfile() {
           whatsapp: '',
           email: '',
           website: '',
-          npwp: ''
+          npwp: '',
+          upload_storage_provider: 'supabase',
+          upload_storage_public_path: '',
+          upload_storage_external_url: '',
+          upload_storage_note: ''
         }
       })
     }
@@ -58,6 +62,10 @@ export async function updateCompanyProfile(data: {
   leader_name?: string
   signature_url?: string
   stamp_url?: string
+  upload_storage_provider?: string
+  upload_storage_public_path?: string
+  upload_storage_external_url?: string
+  upload_storage_note?: string
 }) {
   try {
     // Get the first company profile
@@ -78,7 +86,11 @@ export async function updateCompanyProfile(data: {
           npwp: data.npwp,
           leader_name: data.leader_name,
           signature_url: data.signature_url,
-          stamp_url: data.stamp_url
+          stamp_url: data.stamp_url,
+          upload_storage_provider: data.upload_storage_provider || 'supabase',
+          upload_storage_public_path: data.upload_storage_public_path,
+          upload_storage_external_url: data.upload_storage_external_url,
+          upload_storage_note: data.upload_storage_note
         }
       })
     } else {
@@ -99,6 +111,10 @@ export async function updateCompanyProfile(data: {
       if (data.leader_name !== undefined) updateData.leader_name = data.leader_name
       if (data.signature_url !== undefined) updateData.signature_url = data.signature_url
       if (data.stamp_url !== undefined) updateData.stamp_url = data.stamp_url
+      if (data.upload_storage_provider !== undefined) updateData.upload_storage_provider = data.upload_storage_provider
+      if (data.upload_storage_public_path !== undefined) updateData.upload_storage_public_path = data.upload_storage_public_path
+      if (data.upload_storage_external_url !== undefined) updateData.upload_storage_external_url = data.upload_storage_external_url
+      if (data.upload_storage_note !== undefined) updateData.upload_storage_note = data.upload_storage_note
 
       profile = await (prisma.companyProfile as any).update({
         where: { id: profile.id },
