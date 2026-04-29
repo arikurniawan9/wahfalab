@@ -52,6 +52,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PDFDownloadLink } from "@react-pdf/renderer";
 import { SampleHandoverPDF } from "@/components/pdf/SampleHandoverPDF";
+import { ANALYST_CLAIM_LABELS, ANALYST_STATUS_LABELS } from "@/lib/constants/workflow-copy";
 
 export default function AnalystJobsPage() {
   const [loading, setLoading] = useState(true);
@@ -158,19 +159,49 @@ export default function AnalystJobsPage() {
   };
 
   const statusLabels: any = {
-    scheduled: "Terjadwal",
-    sampling: "Sampling",
-    analysis_ready: "Siap Analisis",
-    analysis: "Analisis",
-    analysis_done: "Selesai Analisis",
-    reporting: "Reporting",
-    completed: "Selesai"
+    ...ANALYST_STATUS_LABELS,
+  };
+
+  const filteredJobs = jobs.filter((job: any) => {
+    const keyword = search.trim().toLowerCase();
+    if (!keyword) return true;
+    return [
+      job.tracking_code,
+      job.quotation?.profile?.company_name,
+      job.quotation?.profile?.full_name,
+      job.sampling_assignment?.location,
+    ]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(keyword));
+  });
+
+  const getClaimState = (job: any) => {
+    if (job.status !== "analysis_ready") return null;
+
+    if (job.analyst_id && job.analyst_id === profile?.id) {
+      return {
+        label: ANALYST_CLAIM_LABELS.claimed,
+        className: "bg-sky-100 text-sky-700 border-sky-200",
+      };
+    }
+
+    if (!job.analyst_id) {
+      return {
+        label: ANALYST_CLAIM_LABELS.unclaimed,
+        className: "bg-amber-100 text-amber-700 border-amber-200",
+      };
+    }
+
+    return {
+      label: ANALYST_CLAIM_LABELS.claimedByOther,
+      className: "bg-slate-100 text-slate-700 border-slate-200",
+    };
   };
 
   return (
     <div className="p-4 md:p-10 pb-24 md:pb-10">
       {/* Header */}
-      <div className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="mb-8 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-emerald-900 tracking-tight flex items-center gap-3">
             <FlaskConical className="h-8 w-8 text-emerald-600" />
@@ -178,7 +209,7 @@ export default function AnalystJobsPage() {
           </h1>
           <p className="text-slate-500 text-sm mt-1">Kelola sampel dan hasil pengujian laboratorium Anda.</p>
         </div>
-        <div className="flex items-center gap-2 bg-emerald-50 px-4 py-2 rounded-2xl border border-emerald-100">
+        <div className="w-full lg:w-auto flex items-center justify-between gap-3 bg-emerald-50 px-4 py-3 rounded-2xl border border-emerald-100">
            <div className="text-right">
               <p className="text-[10px] font-black text-emerald-600 uppercase leading-none">Analis</p>
               <p className="text-xs font-bold text-emerald-900">{profile?.full_name}</p>
@@ -190,8 +221,8 @@ export default function AnalystJobsPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-200 mb-8 flex flex-wrap gap-4 items-center">
-        <div className="relative flex-1 min-w-64">
+      <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-200 mb-8 flex flex-col lg:flex-row gap-4 lg:items-center">
+        <div className="relative w-full lg:flex-1">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <Input
             placeholder="Cari tracking code atau customer..."
@@ -201,7 +232,7 @@ export default function AnalystJobsPage() {
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-48 h-11 rounded-2xl border-slate-200 bg-white font-bold text-xs">
+          <SelectTrigger className="w-full lg:w-56 h-11 rounded-2xl border-slate-200 bg-white font-bold text-xs">
             <SelectValue placeholder="Filter Status" />
           </SelectTrigger>
           <SelectContent className="rounded-2xl">
@@ -213,8 +244,142 @@ export default function AnalystJobsPage() {
         </Select>
       </div>
 
-      {/* Jobs Table Container */}
-      <div className="bg-white rounded-[2rem] shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <Card className="rounded-[1.75rem] border-slate-200 shadow-sm">
+          <CardContent className="p-4">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Job</p>
+            <p className="mt-2 text-2xl font-black text-slate-900">{jobs.length}</p>
+          </CardContent>
+        </Card>
+        <Card className="rounded-[1.75rem] border-slate-200 shadow-sm">
+          <CardContent className="p-4">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Siap Analisis</p>
+            <p className="mt-2 text-2xl font-black text-emerald-700">{jobs.filter((job) => job.status === "analysis_ready").length}</p>
+          </CardContent>
+        </Card>
+        <Card className="rounded-[1.75rem] border-slate-200 shadow-sm">
+          <CardContent className="p-4">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sedang Jalan</p>
+            <p className="mt-2 text-2xl font-black text-violet-700">{jobs.filter((job) => job.status === "analysis").length}</p>
+          </CardContent>
+        </Card>
+        <Card className="rounded-[1.75rem] border-slate-200 shadow-sm">
+          <CardContent className="p-4">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pasca Analisis</p>
+            <p className="mt-2 text-2xl font-black text-cyan-700">{jobs.filter((job) => ["analysis_done", "reporting", "completed"].includes(job.status)).length}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="md:hidden space-y-4">
+        {loading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-40 rounded-[2rem] bg-white border border-slate-200 animate-pulse" />
+          ))
+        ) : filteredJobs.length === 0 ? (
+          <Card className="rounded-[2rem] border-slate-200 shadow-sm">
+            <CardContent className="py-16 text-center">
+              <div className="flex flex-col items-center gap-4">
+                <div className="h-20 w-20 rounded-full bg-emerald-50 flex items-center justify-center">
+                  <FlaskConical className="h-10 w-10 text-emerald-200" />
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-slate-700">Tidak ada antrean</p>
+                  <p className="text-sm text-slate-400">Coba ubah filter atau tunggu sampel baru masuk.</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          filteredJobs.map((job: any) => (
+            <Card key={job.id} className="rounded-[2rem] border-slate-200 shadow-sm overflow-hidden">
+              <CardContent className="p-5 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-mono text-[11px] font-black text-emerald-700 break-all">{job.tracking_code}</p>
+                    <h3 className="mt-2 font-black text-slate-900 leading-tight">
+                      {job.quotation?.profile?.company_name || job.quotation?.profile?.full_name || "-"}
+                    </h3>
+                    <p className="mt-1 text-[11px] text-slate-500">{job.quotation?.profile?.full_name || "Klien Perorangan"}</p>
+                  </div>
+                  <Badge variant="outline" className={cn("text-[9px] font-black uppercase px-2.5 py-1 rounded-full border-2 shrink-0", statusColors[job.status])}>
+                    {statusLabels[job.status] || job.status}
+                  </Badge>
+                </div>
+
+                {getClaimState(job) && (
+                  <Badge
+                    variant="outline"
+                    className={cn("text-[9px] font-black uppercase px-2.5 py-1 rounded-full border w-fit", getClaimState(job)?.className)}
+                  >
+                    {getClaimState(job)?.label}
+                  </Badge>
+                )}
+
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="rounded-2xl bg-slate-50 border border-slate-100 px-4 py-3">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Lokasi Sampling</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-700">{job.sampling_assignment?.location || "-"}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 border border-slate-100 px-4 py-3">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Foto Sampling</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-700">
+                      {Array.isArray(job.sampling_assignment?.photos) ? `${job.sampling_assignment.photos.length} file` : "Belum ada foto"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {job.sampling_assignment?.photos && job.sampling_assignment.photos.length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleViewPhotos(job)}
+                      className="h-10 rounded-xl border-emerald-200 text-emerald-600 hover:bg-emerald-50 font-bold text-[10px] uppercase px-3"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      <span className="ml-2">Foto</span>
+                    </Button>
+                  )}
+                  {job.status === "sampling" ? (
+                    <Button
+                      size="sm"
+                      onClick={() => handleOpenHandover(job)}
+                      className="h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-wide px-3"
+                    >
+                      <PackageCheck className="h-4 w-4" />
+                      <span className="ml-2">Terima</span>
+                    </Button>
+                  ) : (
+                    <>
+                      <Link href={`/analyst/jobs/${job.id}`} className="flex-1">
+                        <Button className="w-full h-10 rounded-xl bg-slate-900 hover:bg-emerald-600 text-white font-black text-[10px] uppercase tracking-wide px-3">
+                          Buka
+                          <ArrowRight className="ml-2 h-3.5 w-3.5" />
+                        </Button>
+                      </Link>
+                      {job.sample_handover && (
+                        <PDFDownloadLink
+                          document={<SampleHandoverPDF data={job.sample_handover} />}
+                          fileName={`BAST-${job.tracking_code}.pdf`}
+                        >
+                          {() => (
+                            <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl border-emerald-200 text-emerald-600 hover:bg-emerald-50 shrink-0" title="Cetak BAST">
+                              <FileText className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </PDFDownloadLink>
+                      )}
+                    </>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
+
+      <div className="hidden md:block bg-white rounded-[2rem] shadow-xl shadow-emerald-900/5 border border-slate-200 overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="bg-slate-50/50">
@@ -229,11 +394,11 @@ export default function AnalystJobsPage() {
           <TableBody>
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}><TableCell colSpan={5} className="py-6 px-6"><div className="h-10 bg-slate-50 animate-pulse rounded-xl" /></TableCell></TableRow>
+                <TableRow key={i}><TableCell colSpan={6} className="py-6 px-6"><div className="h-10 bg-slate-50 animate-pulse rounded-xl" /></TableCell></TableRow>
               ))
-            ) : jobs.length === 0 ? (
+            ) : filteredJobs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-24">
+                <TableCell colSpan={6} className="text-center py-24">
                   <div className="flex flex-col items-center gap-4">
                     <div className="h-20 w-20 rounded-full bg-emerald-50 flex items-center justify-center">
                       <FlaskConical className="h-10 w-10 text-emerald-200" />
@@ -246,7 +411,7 @@ export default function AnalystJobsPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              jobs.map((job: any) => (
+              filteredJobs.map((job: any) => (
                 <TableRow key={job.id} className="hover:bg-emerald-50/5 transition-all group border-slate-100">
                   <TableCell className="px-6 font-mono text-xs font-black text-emerald-700">{job.tracking_code}</TableCell>
                   <TableCell className="px-4">
@@ -277,9 +442,19 @@ export default function AnalystJobsPage() {
                     )}
                   </TableCell>
                   <TableCell className="px-4">
-                    <Badge variant="outline" className={cn("text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full border-2", statusColors[job.status])}>
-                      {statusLabels[job.status] || job.status}
-                    </Badge>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="outline" className={cn("text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full border-2", statusColors[job.status])}>
+                        {statusLabels[job.status] || job.status}
+                      </Badge>
+                      {getClaimState(job) && (
+                        <Badge
+                          variant="outline"
+                          className={cn("text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full border", getClaimState(job)?.className)}
+                        >
+                          {getClaimState(job)?.label}
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="px-6 text-right">
                     <div className="flex justify-end gap-2">
@@ -287,10 +462,10 @@ export default function AnalystJobsPage() {
                         <Button 
                           size="sm" 
                           onClick={() => handleOpenHandover(job)}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-widest rounded-xl h-9 px-4 shadow-lg shadow-emerald-900/20"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-wide rounded-xl h-9 px-3 shadow-lg shadow-emerald-900/20"
                         >
                           <PackageCheck className="mr-2 h-4 w-4" />
-                          Terima Sampel
+                          Terima
                         </Button>
                       ) : (
                         <div className="flex gap-2">
@@ -307,8 +482,8 @@ export default function AnalystJobsPage() {
                             </PDFDownloadLink>
                           )}
                           <Link href={`/analyst/jobs/${job.id}`}>
-                            <Button variant="ghost" size="sm" className="text-emerald-600 hover:bg-emerald-50 font-bold text-[10px] uppercase rounded-xl h-9 px-4">
-                              Input Hasil
+                            <Button variant="ghost" size="sm" className="text-emerald-600 hover:bg-emerald-50 font-bold text-[10px] uppercase rounded-xl h-9 px-3">
+                              Buka
                               <ArrowRight className="ml-2 h-3 w-3" />
                             </Button>
                           </Link>

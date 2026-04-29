@@ -316,7 +316,7 @@ export default function InvoiceDetailPage() {
                   className="border-blue-200 text-blue-600 hover:bg-blue-50 rounded-2xl h-12 px-6 font-bold text-xs uppercase"
                 >
                   <Send className="h-4 w-4 mr-2" />
-                  Kirim ke Customer
+                  Kirim Invoice
                 </Button>
                 <Button
                   onClick={handleMarkAsPaid}

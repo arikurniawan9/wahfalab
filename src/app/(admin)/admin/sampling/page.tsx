@@ -66,6 +66,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { FIELD_SAMPLING_STATUS_LABELS } from "@/lib/constants/workflow-copy";
 
 // Stat Card Component (Vertical Layout for better visibility)
 function StatCard({ title, value, icon: Icon, color, onClick, active }: any) {
@@ -104,10 +105,10 @@ function StatCard({ title, value, icon: Icon, color, onClick, active }: any) {
 
 const statusOptions = [
   { value: "all", label: "SEMUA STATUS", color: "bg-slate-100 text-slate-700", icon: Briefcase },
-  { value: "pending", label: "MENUNGGU", color: "bg-slate-100 text-slate-700", icon: Clock },
-  { value: "in_progress", label: "PROSES", color: "bg-blue-100 text-blue-700", icon: AlertCircle },
-  { value: "completed", label: "SELESAI", color: "bg-emerald-100 text-emerald-700", icon: CheckCircle },
-  { value: "cancelled", label: "DIBATALKAN", color: "bg-red-100 text-red-700", icon: XCircle }
+  { value: "pending", label: FIELD_SAMPLING_STATUS_LABELS.pending.toUpperCase(), color: "bg-slate-100 text-slate-700", icon: Clock },
+  { value: "in_progress", label: FIELD_SAMPLING_STATUS_LABELS.in_progress.toUpperCase(), color: "bg-blue-100 text-blue-700", icon: AlertCircle },
+  { value: "completed", label: FIELD_SAMPLING_STATUS_LABELS.completed.toUpperCase(), color: "bg-emerald-100 text-emerald-700", icon: CheckCircle },
+  { value: "cancelled", label: FIELD_SAMPLING_STATUS_LABELS.cancelled.toUpperCase(), color: "bg-red-100 text-red-700", icon: XCircle }
 ];
 
 export default function AdminSamplingMonitoringPage() {
@@ -314,10 +315,10 @@ loadData();
       {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         <StatCard title="Total Penugasan" value={stats.total} icon={Briefcase} color="slate" onClick={() => setFilterStatus("all")} active={filterStatus === "all"} />
-        <StatCard title="Menunggu" value={stats.pending} icon={Clock} color="amber" onClick={() => setFilterStatus("pending")} active={filterStatus === "pending"} />
-        <StatCard title="Dalam Proses" value={stats.in_progress} icon={AlertCircle} color="blue" onClick={() => setFilterStatus("in_progress")} active={filterStatus === "in_progress"} />
-        <StatCard title="Berhasil Selesai" value={stats.completed} icon={CheckCircle} color="emerald" onClick={() => setFilterStatus("completed")} active={filterStatus === "completed"} />
-        <StatCard title="Dibatalkan" value={stats.cancelled} icon={XCircle} color="red" onClick={() => setFilterStatus("cancelled")} active={filterStatus === "cancelled"} />
+        <StatCard title={FIELD_SAMPLING_STATUS_LABELS.pending} value={stats.pending} icon={Clock} color="amber" onClick={() => setFilterStatus("pending")} active={filterStatus === "pending"} />
+        <StatCard title={FIELD_SAMPLING_STATUS_LABELS.in_progress} value={stats.in_progress} icon={AlertCircle} color="blue" onClick={() => setFilterStatus("in_progress")} active={filterStatus === "in_progress"} />
+        <StatCard title={FIELD_SAMPLING_STATUS_LABELS.completed} value={stats.completed} icon={CheckCircle} color="emerald" onClick={() => setFilterStatus("completed")} active={filterStatus === "completed"} />
+        <StatCard title={FIELD_SAMPLING_STATUS_LABELS.cancelled} value={stats.cancelled} icon={XCircle} color="red" onClick={() => setFilterStatus("cancelled")} active={filterStatus === "cancelled"} />
       </div>
 
       {/* Main Table Container */}

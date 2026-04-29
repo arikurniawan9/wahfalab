@@ -68,6 +68,7 @@ import { toast } from "sonner";
 import { ChemicalLoader, LoadingOverlay, LoadingButton } from "@/components/ui";
 import { pdf } from "@react-pdf/renderer";
 import { InvoicePDF } from "@/components/pdf/InvoicePDF";
+import { ADMIN_STATUS_LABELS } from "@/lib/constants/workflow-copy";
 type InvoicePdfData = React.ComponentProps<typeof InvoicePDF>["data"];
 
 const statusColors: Record<string, string> = {
@@ -82,12 +83,12 @@ const statusColors: Record<string, string> = {
 
 const statusLabels: Record<string, string> = {
   scheduled: 'Antrean',
-  sampling: 'Sampling',
-  analysis_ready: 'Diterima Lab',
-  analysis: 'Analisis Lab',
-  analysis_done: 'Selesai Analisis',
-  reporting: 'Pelaporan',
-  completed: 'Selesai'
+  sampling: ADMIN_STATUS_LABELS.sampling,
+  analysis_ready: ADMIN_STATUS_LABELS.analysis_ready,
+  analysis: ADMIN_STATUS_LABELS.analysis,
+  analysis_done: ADMIN_STATUS_LABELS.analysis_done,
+  reporting: ADMIN_STATUS_LABELS.reporting,
+  completed: ADMIN_STATUS_LABELS.completed
 };
 
 const steps = [

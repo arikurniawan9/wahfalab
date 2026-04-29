@@ -333,6 +333,9 @@ export default function InvoicesPage() {
               <p className="mt-1 text-xs text-slate-500">
                 Permintaan dari admin atau operator akan muncul di sini sebelum invoice draft dibuat.
               </p>
+              <p className="mt-2 text-[10px] font-semibold uppercase tracking-widest text-amber-700">
+                Jika sampling sudah selesai, draft invoice otomatis pindah ke bagian semua invoice.
+              </p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -390,7 +393,13 @@ export default function InvoicesPage() {
       {/* Invoices Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Semua Invoice</CardTitle>
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <CardTitle className="text-base">Semua Invoice</CardTitle>
+            <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-emerald-700">
+              <FileText className="h-3.5 w-3.5" />
+              Draft otomatis dari sampling selesai akan muncul di sini
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -418,6 +427,11 @@ export default function InvoicesPage() {
                 <>
                   <div className="md:hidden divide-y divide-slate-100">
                     {data.items?.map((item: any) => (
+                      (() => {
+                        const readyToIssue = ['analysis_ready', 'analysis', 'analysis_done', 'reporting', 'completed', 'pending_payment', 'paid'].includes(item.status);
+                        const isAutoDraft = item.status === 'draft' && readyToIssue;
+
+                        return (
                       <div key={item.id} className="py-4 space-y-3">
                         <div className="flex items-start justify-between gap-2">
                           <div>
@@ -435,7 +449,7 @@ export default function InvoicesPage() {
                             "text-[10px] font-bold uppercase",
                             statusColors[item.status] || statusColors.draft
                           )}>
-                            {statusLabels[item.status] || item.status}
+                            {isAutoDraft ? "Draft Otomatis" : (statusLabels[item.status] || item.status)}
                           </Badge>
                         </div>
 
@@ -480,6 +494,8 @@ export default function InvoicesPage() {
                           )}
                         </div>
                       </div>
+                        );
+                      })()
                     ))}
                   </div>
 
@@ -498,6 +514,11 @@ export default function InvoicesPage() {
                       </thead>
                       <tbody>
                         {data.items?.map((item: any) => (
+                          (() => {
+                            const readyToIssue = ['analysis_ready', 'analysis', 'analysis_done', 'reporting', 'completed', 'pending_payment', 'paid'].includes(item.status);
+                            const isAutoDraft = item.status === 'draft' && readyToIssue;
+
+                            return (
                           <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
                             <td className="py-3 px-4">
                               <div className="flex items-center gap-2">
@@ -537,7 +558,7 @@ export default function InvoicesPage() {
                                 "text-[10px] font-bold uppercase",
                                 statusColors[item.status] || statusColors.draft
                               )}>
-                                {statusLabels[item.status] || item.status}
+                                {isAutoDraft ? "Draft Otomatis" : (statusLabels[item.status] || item.status)}
                               </Badge>
                             </td>
                             <td className="py-3 px-4">
@@ -566,24 +587,16 @@ export default function InvoicesPage() {
                                     disabled={sendingInvoiceId === item.id}
                                     className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700"
                                     title="Terbitkan Invoice"
-                                  >
-                                    <Send className="h-3 w-3 mr-1" />
-                                    {sendingInvoiceId === item.id ? 'Mengirim...' : 'Terbitkan'}
-                                  </Button>
-                                )}
-                                {item.status !== 'paid' && item.status !== 'cancelled' && item.status !== 'draft' && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-8 w-8 p-0 text-blue-600 hover:bg-blue-50"
-                                    title="Kirim ke Customer"
-                                  >
-                                    <Send className="h-3 w-3" />
-                                  </Button>
+                                    >
+                                      <Send className="h-3 w-3 mr-1" />
+                                      {sendingInvoiceId === item.id ? 'Mengirim...' : 'Terbitkan'}
+                                    </Button>
                                 )}
                               </div>
                             </td>
                           </tr>
+                            );
+                          })()
                         ))}
                       </tbody>
                     </table>

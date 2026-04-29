@@ -25,7 +25,7 @@ export async function uploadSamplingPdf(assignmentId: string, file: File) {
 
     const { publicUrl } = await uploadManagedStorageFile({
       bucket: STORAGE_BUCKETS.travelOrders,
-      folder: `sampling-documents/${assignmentId}`,
+      folder: `sampling/sampling-documents/${assignmentId}`,
       file,
       allowedMimeTypes: ['application/pdf'],
       maxSizeBytes: 10 * 1024 * 1024,
@@ -102,9 +102,9 @@ export async function uploadSamplingPhotos(assignmentId: string, formData: FormD
 
     const uploaded = await Promise.all(
       files.map(async (file) => {
-        const { publicUrl } = await uploadManagedStorageFile({
+      const { publicUrl } = await uploadManagedStorageFile({
           bucket: STORAGE_BUCKETS.samplingPhotos,
-          folder: `assignments/${assignmentId}`,
+          folder: `sampling/assignments/${assignmentId}`,
           file,
           allowedMimeTypes: ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'],
           maxSizeBytes: 10 * 1024 * 1024,
@@ -266,12 +266,15 @@ export async function completeSamplingAssignment(
         }
       })
 
-      // 3. Auto-generate Invoice (Draft) only if invoice request was published
+      // 3. Auto-generate Invoice (Draft) when sampling is completed and no invoice exists yet
       const quotation = assignment.job_order.quotation
       let invoice = null
+      const existingInvoice = await tx.invoice.findUnique({
+        where: { job_order_id: jobOrder.id }
+      })
 
-      if (assignment.job_order.notes?.includes(INVOICE_REQUEST_MARKER)) {
-        const invoiceNumber = `INV-${Date.now()}`
+      if (quotation && !existingInvoice) {
+        const invoiceNumber = `INV-${assignment.job_order.tracking_code}-${Date.now().toString().slice(-4)}`
         invoice = await tx.invoice.create({
           data: {
             invoice_number: invoiceNumber,
@@ -283,6 +286,8 @@ export async function completeSamplingAssignment(
             created_by: profile?.id
           }
         })
+      } else if (existingInvoice) {
+        invoice = existingInvoice
       }
 
       return { assignment, jobOrder, invoice }
@@ -375,11 +380,23 @@ export async function updateSamplingStatus(assignmentId: string, status: any, no
   // Verifikasi bahwa assignment ini milik field officer yang login
   const assignment = await prisma.samplingAssignment.findUnique({
     where: { id: assignmentId },
-    select: { field_officer_id: true, job_order_id: true }
+    select: { field_officer_id: true, job_order_id: true, status: true }
   })
 
   if (!assignment || assignment.field_officer_id !== profile?.id) {
     return { error: 'Forbidden' }
+  }
+
+  const allowedTransitions: Record<string, string[]> = {
+    pending: ['in_progress'],
+    in_progress: ['pending', 'completed'],
+    completed: [],
+    cancelled: []
+  }
+
+  const nextStatuses = allowedTransitions[assignment.status] || []
+  if (!nextStatuses.includes(status)) {
+    return { error: `Transisi status tidak valid dari ${assignment.status} ke ${status}` }
   }
 
   const updateData: any = {
@@ -419,16 +436,15 @@ export async function updateSamplingStatus(assignmentId: string, status: any, no
       }
     })
 
-    // 2. Auto-generate invoice draft only if invoice request was published
-    // CEK TERLEBIH DAHULU apakah invoice sudah ada untuk job ini
+    // 2. Auto-generate invoice draft when sampling is completed and no invoice exists yet
+    // Supaya finance langsung menerima draft invoice tanpa harus bergantung ke request marker.
     const existingInvoice = await prisma.invoice.findUnique({
       where: { job_order_id: jobOrder.id }
     })
 
     const quotation = jobOrder.quotation
-    const isInvoiceRequested = !!jobOrder.notes?.includes(INVOICE_REQUEST_MARKER)
 
-    if (quotation && !existingInvoice && isInvoiceRequested) {
+    if (quotation && !existingInvoice) {
       const invoiceNumber = `INV-${jobOrder.tracking_code}-${Date.now().toString().slice(-4)}`
       invoice = await prisma.invoice.create({
         data: {
@@ -442,7 +458,7 @@ export async function updateSamplingStatus(assignmentId: string, status: any, no
         }
       })
 
-      // 3. Kirim notifikasi otomatis (hanya jika invoice baru dibuat)
+      // 3. Kirim notifikasi otomatis ke analis/admin dan finance
       await notifySamplingCompleted(jobOrder.id, jobOrder.tracking_code)
       await notifyInvoiceGenerated(
         invoice.id,

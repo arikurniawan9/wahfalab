@@ -63,6 +63,7 @@ import { getJobOrders, getJobStats, getFieldOfficers, getCustomers, deleteJobOrd
 import { getFieldAssistants } from "@/lib/actions/field-assistant";
 import { createSamplingAssignment } from "@/lib/actions/sampling";
 import { toast } from "sonner";
+import { ADMIN_STATUS_LABELS, ADMIN_WORKFLOW_LABELS } from "@/lib/constants/workflow-copy";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -187,11 +188,11 @@ function PremiumStatCard({ title, value, subValue, icon: Icon, color, onClick, a
  */
 function ProfessionalStepper({ status }: any) {
   const stages = [
-    { id: 'scheduled', label: "Penjadwalan", icon: FileText },
-    { id: 'sampling', label: "Sampling", icon: MapPin },
-    { id: 'analysis', label: "Analisis", icon: FlaskConical },
-    { id: 'reporting', label: "Pelaporan", icon: FileText },
-    { id: 'completed', label: "Selesai", icon: CheckCircle },
+    { id: 'scheduled', label: ADMIN_WORKFLOW_LABELS.scheduled, icon: FileText },
+    { id: 'sampling', label: ADMIN_WORKFLOW_LABELS.sampling, icon: MapPin },
+    { id: 'analysis', label: ADMIN_WORKFLOW_LABELS.analysis, icon: FlaskConical },
+    { id: 'reporting', label: ADMIN_WORKFLOW_LABELS.reporting, icon: FileText },
+    { id: 'completed', label: ADMIN_WORKFLOW_LABELS.completed, icon: CheckCircle },
   ];
 
   const currentIdx = stages.findIndex(s => s.id === status);
@@ -257,13 +258,13 @@ function ProfessionalStepper({ status }: any) {
 
 const statusOptions = [
   { value: "all", label: "Semua", color: "bg-slate-900 text-white", icon: Layers },
-  { value: "scheduled", label: "Penjadwalan", color: "bg-blue-50 text-blue-700 border-blue-100", icon: Clock },
-  { value: "sampling", label: "Sampling", color: "bg-amber-50 text-amber-700 border-amber-100", icon: MapPin },
-  { value: "analysis_ready", label: "Siap Analisis", color: "bg-emerald-50 text-emerald-700 border-emerald-100", icon: ClipboardCheck },
-  { value: "analysis", label: "Analisis Lab", color: "bg-indigo-50 text-indigo-700 border-indigo-100", icon: FlaskConical },
-  { value: "analysis_done", label: "Selesai Analisis", color: "bg-violet-50 text-violet-700 border-violet-100", icon: TestTube },
-  { value: "reporting", label: "Pelaporan", color: "bg-purple-50 text-purple-700 border-purple-100", icon: FileText },
-  { value: "completed", label: "Selesai", color: "bg-emerald-600 text-white border-emerald-600", icon: CheckCircle },
+  { value: "scheduled", label: ADMIN_STATUS_LABELS.scheduled, color: "bg-blue-50 text-blue-700 border-blue-100", icon: Clock },
+  { value: "sampling", label: ADMIN_STATUS_LABELS.sampling, color: "bg-amber-50 text-amber-700 border-amber-100", icon: MapPin },
+  { value: "analysis_ready", label: ADMIN_STATUS_LABELS.analysis_ready, color: "bg-emerald-50 text-emerald-700 border-emerald-100", icon: ClipboardCheck },
+  { value: "analysis", label: ADMIN_STATUS_LABELS.analysis, color: "bg-indigo-50 text-indigo-700 border-indigo-100", icon: FlaskConical },
+  { value: "analysis_done", label: ADMIN_STATUS_LABELS.analysis_done, color: "bg-violet-50 text-violet-700 border-violet-100", icon: TestTube },
+  { value: "reporting", label: ADMIN_STATUS_LABELS.reporting, color: "bg-purple-50 text-purple-700 border-purple-100", icon: FileText },
+  { value: "completed", label: ADMIN_STATUS_LABELS.completed, color: "bg-emerald-600 text-white border-emerald-600", icon: CheckCircle },
 ];
 
 const createInitialFilters = () => ({ dateFrom: "", dateTo: "", fieldOfficerId: "", customerId: "" });
@@ -954,7 +955,7 @@ export default function AdminJobProgressPage() {
           onClick={() => setFilterStatus('analysis')} 
         />
         <PremiumStatCard 
-          title="Pelaporan" 
+          title={ADMIN_STATUS_LABELS.reporting} 
           value={stats.reporting || 0} 
           subValue="Verifikasi Hasil" 
           icon={FileText} 

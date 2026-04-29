@@ -14,14 +14,16 @@ import { toast } from "sonner";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ADMIN_STATUS_LABELS, FIELD_SAMPLING_STATUS_LABELS } from "@/lib/constants/workflow-copy";
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
-  sampling: { label: "Sampling", color: "text-amber-600", bg: "bg-amber-50" },
-  analysis_ready: { label: "Antre Lab", color: "text-blue-600", bg: "bg-blue-50" },
-  analysis: { label: "Proses Lab", color: "text-indigo-600", bg: "bg-indigo-50" },
-  analysis_done: { label: "Lab Selesai", color: "text-purple-600", bg: "bg-purple-50" },
-  reporting: { label: "Laporan", color: "text-cyan-600", bg: "bg-cyan-50" },
-  completed: { label: "Selesai", color: "text-emerald-600", bg: "bg-emerald-50" },
+  sampling: { label: ADMIN_STATUS_LABELS.sampling, color: "text-amber-600", bg: "bg-amber-50" },
+  analysis_ready: { label: ADMIN_STATUS_LABELS.analysis_ready, color: "text-blue-600", bg: "bg-blue-50" },
+  analysis: { label: ADMIN_STATUS_LABELS.analysis, color: "text-indigo-600", bg: "bg-indigo-50" },
+  analysis_done: { label: ADMIN_STATUS_LABELS.analysis_done, color: "text-purple-600", bg: "bg-purple-50" },
+  reporting: { label: ADMIN_STATUS_LABELS.reporting, color: "text-cyan-600", bg: "bg-cyan-50" },
+  completed: { label: ADMIN_STATUS_LABELS.completed, color: "text-emerald-600", bg: "bg-emerald-50" },
+  cancelled: { label: FIELD_SAMPLING_STATUS_LABELS.rejected, color: "text-rose-600", bg: "bg-rose-50" },
 };
 
 export default function FieldHistoryPage() {
@@ -62,7 +64,7 @@ export default function FieldHistoryPage() {
       <div className="flex justify-between items-center px-1">
         <div className="flex items-center gap-2">
           <History className="h-4 w-4 text-emerald-600" />
-          <h1 className="text-sm font-black text-slate-800 uppercase tracking-tight">Riwayat</h1>
+          <h1 className="text-sm font-black text-slate-800 uppercase tracking-tight">Riwayat Sampling</h1>
         </div>
         <button onClick={() => loadHistory(true)} className="text-[10px] font-bold text-emerald-600 hover:underline flex items-center gap-1">
           <RefreshCw className={cn("h-3 w-3", refreshing && "animate-spin")} /> {refreshing ? "..." : "Refresh"}
@@ -77,7 +79,7 @@ export default function FieldHistoryPage() {
         </div>
         <div className="flex-1 bg-white p-2 rounded-xl border border-slate-100 flex items-center gap-2">
           <div className="h-6 w-6 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600"><Activity className="h-3.5 w-3.5" /></div>
-          <div><p className="text-xs font-black leading-none">{assignments.filter(a => a.job_order?.status !== 'completed').length}</p><p className="text-[7px] font-bold text-slate-400 uppercase">Proses Lab</p></div>
+          <div><p className="text-xs font-black leading-none">{assignments.filter(a => a.job_order?.status === 'analysis_ready').length}</p><p className="text-[7px] font-bold text-slate-400 uppercase">{ADMIN_STATUS_LABELS.analysis_ready}</p></div>
         </div>
       </div>
 

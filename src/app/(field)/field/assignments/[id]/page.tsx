@@ -47,12 +47,13 @@ import { TravelOrderPDF } from "@/components/pdf/TravelOrderPDF";
 import { TravelOrderAttachment } from "@/components/pdf/TravelOrderAttachment";
 import { ChemicalLoader, LoadingOverlay, PageSkeleton } from "@/components/ui";
 import { PremiumPageWrapper, PremiumCard } from "@/components/layout/PremiumPageWrapper";
+import { FIELD_ASSIGNMENT_LABELS, FIELD_SAMPLING_STATUS_LABELS, FIELD_TRAVEL_ORDER_LABELS } from "@/lib/constants/workflow-copy";
 
 const statusConfig: Record<string, { label: string; color: string; bg: string; icon: any; theme: string }> = {
-  pending: { label: 'Tugas Baru', color: 'text-amber-600', bg: 'bg-amber-50', icon: Clock, theme: 'border-amber-100' },
-  in_progress: { label: 'Sampling Aktif', color: 'text-blue-600', bg: 'bg-blue-50', icon: Play, theme: 'border-blue-100' },
-  completed: { label: 'Selesai', color: 'text-emerald-600', bg: 'bg-emerald-50', icon: CheckCircle2, theme: 'border-emerald-100' },
-  cancelled: { label: 'Dibatalkan', color: 'text-rose-600', bg: 'bg-rose-50', icon: X, theme: 'border-rose-100' }
+  pending: { label: FIELD_SAMPLING_STATUS_LABELS.newTask, color: 'text-amber-600', bg: 'bg-amber-50', icon: Clock, theme: 'border-amber-100' },
+  in_progress: { label: FIELD_SAMPLING_STATUS_LABELS.activeSampling, color: 'text-blue-600', bg: 'bg-blue-50', icon: Play, theme: 'border-blue-100' },
+  completed: { label: FIELD_SAMPLING_STATUS_LABELS.completed, color: 'text-emerald-600', bg: 'bg-emerald-50', icon: CheckCircle2, theme: 'border-emerald-100' },
+  cancelled: { label: FIELD_SAMPLING_STATUS_LABELS.cancelled, color: 'text-rose-600', bg: 'bg-rose-50', icon: X, theme: 'border-rose-100' }
 };
 
 export default function AssignmentDetailPage() {
@@ -70,9 +71,62 @@ export default function AssignmentDetailPage() {
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [isStartModalOpen, setIsStartModalOpen] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [isSubmitResultsModalOpen, setIsSubmitResultsModalOpen] = useState(false);
+  const [isSubmittingResults, setIsSubmittingResults] = useState(false);
+  const [photoAutosaveStatus, setPhotoAutosaveStatus] = useState<"saved" | "saving" | "error">("saved");
   const pdfInputRef = React.useRef<HTMLInputElement>(null);
+  const photoSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedPhotoSnapshotRef = React.useRef<string>("");
+  const suppressPhotoAutosaveRef = React.useRef(false);
+  const photoAutosaveNoticeRef = React.useRef<"saved" | "error">("saved");
   // TODO: Use supabase client alternative for storage - implement via API routes
   // const supabase = createClient();
+
+  const normalizePhotos = (
+    sourcePhotos: any[],
+    localPhotos: { url: string; name: string }[],
+    removedUrls: string[],
+    names: Record<string, string>
+  ) => {
+    return [...sourcePhotos, ...localPhotos]
+      .filter((p: any) => {
+        const url = typeof p === 'string' ? p : p.url;
+        return !removedUrls.includes(url);
+      })
+      .map((p: any) => {
+        const url = typeof p === 'string' ? p : p.url;
+        const name = Object.prototype.hasOwnProperty.call(names, url)
+          ? names[url]
+          : (typeof p === 'object' ? p.name : "");
+        return { url, name };
+      });
+  };
+
+  const buildPhotoSnapshot = (sourcePhotos: any[], localPhotos: { url: string; name: string }[], removedUrls: string[], names: Record<string, string>) => {
+    return JSON.stringify(normalizePhotos(sourcePhotos, localPhotos, removedUrls, names));
+  };
+
+  const persistPhotoNames = useCallback(async (sourcePhotos: any[], localPhotos: { url: string; name: string }[], removedUrls: string[], names: Record<string, string>) => {
+    const allPhotos = normalizePhotos(sourcePhotos, localPhotos, removedUrls, names);
+    const result = await saveSamplingPhotosWithNames(params.id as string, allPhotos);
+
+    if (result.error) {
+      setPhotoAutosaveStatus("error");
+      if (photoAutosaveNoticeRef.current !== "error") {
+        toast.error("Nama foto gagal disimpan otomatis");
+        photoAutosaveNoticeRef.current = "error";
+      }
+      return false;
+    }
+
+    lastSavedPhotoSnapshotRef.current = JSON.stringify(allPhotos);
+    setPhotoAutosaveStatus("saved");
+    if (photoAutosaveNoticeRef.current === "error") {
+      toast.success("Nama foto tersimpan otomatis");
+    }
+    photoAutosaveNoticeRef.current = "saved";
+    return true;
+  }, [params.id]);
 
   const loadData = useCallback(async () => {
     try {
@@ -83,6 +137,9 @@ export default function AssignmentDetailPage() {
       setAssignment(assignmentData);
       setTravelOrder(travelOrderData);
       if (assignmentData?.notes) setNotes(assignmentData.notes);
+      lastSavedPhotoSnapshotRef.current = buildPhotoSnapshot(assignmentData?.photos || [], [], [], {});
+      setPhotoAutosaveStatus("saved");
+      photoAutosaveNoticeRef.current = "saved";
     } catch (error) {
       toast.error("Gagal sinkronisasi data");
     } finally {
@@ -113,6 +170,34 @@ export default function AssignmentDetailPage() {
 
     loadStorageConfig();
   }, []);
+
+  useEffect(() => {
+    if (!assignment || suppressPhotoAutosaveRef.current) return;
+    if (removedPhotoUrls.length > 0) return;
+
+    const nextSnapshot = buildPhotoSnapshot(assignment.photos || [], photos, removedPhotoUrls, photoNames);
+    if (nextSnapshot === lastSavedPhotoSnapshotRef.current) return;
+
+    setPhotoAutosaveStatus("saving");
+    if (photoSaveTimerRef.current) {
+      clearTimeout(photoSaveTimerRef.current);
+    }
+
+    photoSaveTimerRef.current = setTimeout(async () => {
+      try {
+        await persistPhotoNames(assignment.photos || [], photos, [], photoNames);
+      } catch {
+        setPhotoAutosaveStatus("error");
+        // Autosave tetap senyap; tombol "Simpan Penghapusan" masih tersedia sebagai fallback.
+      }
+    }, 700);
+
+    return () => {
+      if (photoSaveTimerRef.current) {
+        clearTimeout(photoSaveTimerRef.current);
+      }
+    };
+  }, [assignment, photos, removedPhotoUrls, photoNames, params.id, persistPhotoNames]);
 
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -178,6 +263,27 @@ export default function AssignmentDetailPage() {
     }
   };
 
+  const handleConfirmSubmitResults = async () => {
+    setIsSubmittingResults(true);
+    try {
+      const result = await updateSamplingStatus(params.id as string, "completed", notes);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+
+      toast.success("Hasil sampling terkirim", {
+        description: "Analis akan menerima notifikasi dan finance akan mendapat draft invoice."
+      });
+      setIsSubmitResultsModalOpen(false);
+      loadData();
+    } catch (error) {
+      toast.error("Gagal mengirim hasil sampling");
+    } finally {
+      setIsSubmittingResults(false);
+    }
+  };
+
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -202,37 +308,38 @@ export default function AssignmentDetailPage() {
 
   const handleRemovePhoto = (url: string) => {
     setRemovedPhotoUrls(prev => [...prev, url]);
-    toast.info("Foto ditandai untuk dihapus. Klik 'Simpan Semua' untuk mempermanenkan.");
+    toast.info("Foto ditandai untuk dihapus. Nama foto tetap auto-save, penghapusan perlu 'Simpan Penghapusan'.");
   };
 
   const handleSaveAllData = async () => {
     try {
+      suppressPhotoAutosaveRef.current = true;
+
+      if (photoSaveTimerRef.current) {
+        clearTimeout(photoSaveTimerRef.current);
+      }
+
       if (removedPhotoUrls.length > 0) {
         await Promise.all(removedPhotoUrls.map((url) => deleteSamplingPhoto(url)));
       }
 
       // Sinkronkan foto yang sudah ada dan yang baru, filter yang ditandai hapus
-      const allPhotos = [...(assignment.photos || []), ...photos]
-        .filter((p: any) => {
-          const url = typeof p === 'string' ? p : p.url;
-          return !removedPhotoUrls.includes(url);
-        })
-        .map((p: any) => {
-          const url = typeof p === 'string' ? p : p.url;
-          const name = photoNames[url] || (typeof p === 'object' ? p.name : "");
-          return { url, name };
-        });
+      const allPhotos = normalizePhotos(assignment.photos || [], photos, removedPhotoUrls, photoNames);
 
       const result = await saveSamplingPhotosWithNames(params.id as string, allPhotos);
       if (result.error) throw new Error(result.error);
       
       toast.success("Dokumentasi & Foto Berhasil Diperbarui");
+      lastSavedPhotoSnapshotRef.current = JSON.stringify(allPhotos);
+      setPhotoAutosaveStatus("saved");
       setPhotos([]);
       setPhotoNames({});
       setRemovedPhotoUrls([]);
-      loadData();
+      await loadData();
     } catch (e) { 
       toast.error("Gagal menyimpan data"); 
+    } finally {
+      suppressPhotoAutosaveRef.current = false;
     }
   };
 
@@ -240,7 +347,7 @@ export default function AssignmentDetailPage() {
   if (!assignment) return <div className="p-20 text-center font-black text-slate-400 uppercase tracking-widest">Tugas tidak ditemukan</div>;
 
   const cfg = statusConfig[assignment.status] || statusConfig.pending;
-  const isLocked = assignment.status === 'pending';
+  const isLocked = ['pending', 'cancelled'].includes(assignment.status);
   const perihalPengujian = assignment.job_order?.quotation?.title || "Perihal pengujian belum diisi";
   const layananSampling = Array.from(
     new Set(
@@ -309,25 +416,37 @@ export default function AssignmentDetailPage() {
           <div className="lg:col-span-8 space-y-5 md:space-y-8">
             {/* Status Alert */}
             <AnimatePresence>
-              {isLocked && (
-                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-3xl md:rounded-[2.5rem] p-5 md:p-8 text-white shadow-2xl relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 h-40 w-40 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" />
-                  <div className="relative z-10 flex items-start gap-4 md:gap-6">
-                    <div className="h-12 w-12 md:h-16 md:w-16 rounded-2xl md:rounded-3xl bg-white/20 flex items-center justify-center border-2 border-white/20 shadow-inner shrink-0 transform rotate-3"><Info className="h-6 w-6 md:h-8 md:w-8" /></div>
-                    <div>
-                      <h3 className="text-base md:text-xl font-black uppercase tracking-tight leading-none mb-2">Segera Konfirmasi Tugas</h3>
-                      <p className="text-blue-50/80 text-[11px] md:text-xs font-medium leading-relaxed max-w-md">Silakan klik tombol Mulai Perjalanan di bagian bawah layar untuk membuka akses pengisian foto dan catatan sampling rill.</p>
-                      <Button
+               {assignment.status === 'pending' && (
+                  <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-3xl md:rounded-[2.5rem] p-5 md:p-8 text-white shadow-2xl relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 h-40 w-40 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" />
+                    <div className="relative z-10 flex items-start gap-4 md:gap-6">
+                      <div className="h-12 w-12 md:h-16 md:w-16 rounded-2xl md:rounded-3xl bg-white/20 flex items-center justify-center border-2 border-white/20 shadow-inner shrink-0 transform rotate-3"><Info className="h-6 w-6 md:h-8 md:w-8" /></div>
+                      <div>
+                        <h3 className="text-base md:text-xl font-black uppercase tracking-tight leading-none mb-2">Segera Konfirmasi Tugas</h3>
+                        <p className="text-blue-50/80 text-[11px] md:text-xs font-medium leading-relaxed max-w-md">Silakan klik tombol Mulai Perjalanan di bagian bawah layar untuk membuka akses pengisian foto dan catatan sampling rill.</p>
+                        <Button
                         onClick={() => setIsStartModalOpen(true)}
                         className="md:hidden mt-4 h-10 px-4 rounded-xl bg-white text-blue-700 hover:bg-blue-50 font-black text-[10px] uppercase tracking-wider"
                       >
                         Konfirmasi Tugas
-                      </Button>
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  </motion.div>
+                )}
+                {assignment.status === 'cancelled' && (
+                  <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="bg-gradient-to-r from-rose-600 to-rose-700 rounded-3xl md:rounded-[2.5rem] p-5 md:p-8 text-white shadow-2xl relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 h-40 w-40 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" />
+                    <div className="relative z-10 flex items-start gap-4 md:gap-6">
+                      <div className="h-12 w-12 md:h-16 md:w-16 rounded-2xl md:rounded-3xl bg-white/20 flex items-center justify-center border-2 border-white/20 shadow-inner shrink-0 transform rotate-3"><X className="h-6 w-6 md:h-8 md:w-8" /></div>
+                      <div>
+                        <h3 className="text-base md:text-xl font-black uppercase tracking-tight leading-none mb-2">Tugas Dibatalkan</h3>
+                        <p className="text-rose-50/85 text-[11px] md:text-xs font-medium leading-relaxed max-w-md">Tugas ini sudah ditolak atau dibatalkan. Semua aksi operasional dikunci dan hanya tersimpan sebagai riwayat.</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
             {/* Location & Client Information */}
             <PremiumCard className="border-none shadow-2xl shadow-emerald-900/5 rounded-3xl md:rounded-[2.5rem] overflow-hidden bg-white">
@@ -402,6 +521,9 @@ export default function AssignmentDetailPage() {
                                 Penyimpanan: {storageLabel}
                               </Badge>
                               <span className="text-[8px] md:text-[9px] font-bold text-slate-400 uppercase tracking-wider">{storageHint}</span>
+                              <span className="text-[8px] md:text-[9px] font-black text-emerald-600 uppercase tracking-wider">
+                                Folder otomatis: /sampling/assignments/{assignment.id}
+                              </span>
                             </div>
                           )}
                           {isExternalFormMode && (
@@ -425,21 +547,103 @@ export default function AssignmentDetailPage() {
                           )}
                         </div>
                      </div>
-                     <div className="flex w-full md:w-auto items-center gap-2 flex-wrap">
-                        {photos.length > 0 && <Button onClick={handleSaveAllData} className="h-10 px-4 md:px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase rounded-xl flex-1 md:flex-none">Simpan Semua</Button>}
-                         <label htmlFor="photo-upload" className={cn(
-                           "h-10 px-4 md:px-6 border-2 font-black text-[10px] uppercase rounded-xl flex items-center justify-center transition-all flex-1 md:flex-none",
-                           isExternalFormMode ? "bg-orange-50 border-orange-100 text-orange-700 hover:bg-orange-100" : "bg-white border-slate-100 text-slate-600 hover:bg-slate-50"
-                         )}><Upload className="h-4 w-4 mr-2" /> {isExternalFormMode ? "Form Eksternal" : "Upload"}</label>
-                        <input type="file" id="photo-upload" accept="image/*" multiple onChange={handlePhotoUpload} className="hidden" />
-                     </div>
-                  </CardHeader>
-                  <CardContent className="p-5 md:p-8 space-y-5 md:space-y-8">
-                     {(!assignment.photos?.length && !photos.length) ? (
-                        <div className="py-20 text-center space-y-4">
-                           <div className="h-20 w-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto border-2 border-dashed border-slate-200"><ImageIcon className="h-10 w-10 text-slate-200" /></div>
-                           <p className="text-xs font-black text-slate-300 uppercase tracking-widest">Belum ada foto dokumentasi</p>
+                      <div className="flex w-full md:w-auto items-center gap-2 flex-wrap">
+                         {(photos.length > 0 || removedPhotoUrls.length > 0) && (
+                           <Button onClick={handleSaveAllData} className="h-10 px-4 md:px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase rounded-xl flex-1 md:flex-none">
+                             <Trash2 className="h-4 w-4 md:mr-2" />
+                             <span className="hidden md:inline">Simpan Penghapusan</span>
+                              <span className="md:hidden">Simpan</span>
+                           </Button>
+                         )}
+                          <label htmlFor="photo-upload" className={cn(
+                            "h-10 px-4 md:px-6 border-2 font-black text-[10px] uppercase rounded-xl flex items-center justify-center transition-all flex-1 md:flex-none",
+                            isExternalFormMode ? "bg-orange-50 border-orange-100 text-orange-700 hover:bg-orange-100" : "bg-white border-slate-100 text-slate-600 hover:bg-slate-50"
+                          )}><Upload className="h-4 w-4 mr-2" /> {isExternalFormMode ? "Form Eksternal" : "Upload"}</label>
+                         <input type="file" id="photo-upload" accept="image/*" multiple onChange={handlePhotoUpload} className="hidden" />
+                      </div>
+                   </CardHeader>
+                   <CardContent className="p-5 md:p-8 space-y-5 md:space-y-8">
+                     <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-widest",
+                              photoAutosaveStatus === "saving"
+                                ? "bg-blue-100 text-blue-700"
+                                : photoAutosaveStatus === "error"
+                                  ? "bg-rose-100 text-rose-700"
+                                  : "bg-emerald-100 text-emerald-700"
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "h-2 w-2 rounded-full",
+                                photoAutosaveStatus === "saving"
+                                  ? "bg-blue-600 animate-pulse"
+                                  : photoAutosaveStatus === "error"
+                                    ? "bg-rose-600"
+                                    : "bg-emerald-600"
+                              )}
+                            />
+                            {photoAutosaveStatus === "saving"
+                              ? "Menyimpan nama foto..."
+                              : photoAutosaveStatus === "error"
+                                ? "Gagal menyimpan otomatis"
+                                : "Nama foto tersimpan otomatis"}
+                          </span>
+                          {removedPhotoUrls.length > 0 && (
+                            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-amber-700">
+                               Penghapusan menunggu Simpan Penghapusan
+                            </span>
+                          )}
+                          {photoAutosaveStatus === "error" && removedPhotoUrls.length === 0 && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={async () => {
+                                setPhotoAutosaveStatus("saving");
+                                await persistPhotoNames(assignment.photos || [], photos, [], photoNames);
+                              }}
+                              className="hidden sm:inline-flex h-7 rounded-full border-rose-200 bg-white px-3 text-[9px] font-black uppercase tracking-widest text-rose-700 hover:bg-rose-50"
+                            >
+                              Coba Simpan Lagi
+                            </Button>
+                          )}
                         </div>
+                        
+                        {/* Tombol Selesaikan Cadangan untuk memudahkan UX */}
+                        {assignment.status === 'in_progress' && (
+                          <div className="mt-4 p-4 rounded-2xl bg-white border-2 border-emerald-100 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                                <CheckCircle2 className="h-5 w-5" />
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">{FIELD_ASSIGNMENT_LABELS.samplingDoneQuestion}</p>
+                                <p className="text-[11px] text-slate-500 font-medium">Kirim semua foto dan catatan ke analis sekarang.</p>
+                              </div>
+                            </div>
+                            <Button 
+                              onClick={() => setIsSubmitResultsModalOpen(true)}
+                              className="w-full sm:w-auto h-10 px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase rounded-xl shadow-lg shadow-emerald-900/10"
+                            >
+                              Selesaikan & Kirim ke Analis
+                            </Button>
+                          </div>
+                        )}
+
+                        <p className="text-[11px] text-emerald-700/80 mt-1 hidden sm:block">
+                          Ubah nama foto langsung di kolom input. Jika ada foto yang dihapus, tetap klik <span className="font-black">Simpan Penghapusan</span> untuk menerapkan perubahan.
+                        </p>
+                        <p className="text-[11px] text-emerald-700/80 mt-1 sm:hidden">
+                          Rename foto auto-save. Hapus foto pakai <span className="font-black">Simpan Penghapusan</span>.
+                        </p>
+                     </div>
+                      {(!assignment.photos?.length && !photos.length) ? (
+                         <div className="py-20 text-center space-y-4">
+                            <div className="h-20 w-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto border-2 border-dashed border-slate-200"><ImageIcon className="h-10 w-10 text-slate-200" /></div>
+                            <p className="text-xs font-black text-slate-300 uppercase tracking-widest">Belum ada foto dokumentasi</p>
+                         </div>
                      ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
                            {/* Render existing & new photos beautifully */}
@@ -450,7 +654,10 @@ export default function AssignmentDetailPage() {
                             })
                             .map((p: any, idx: number) => {
                               const url = typeof p === 'string' ? p : p.url;
-                              const currentName = typeof p === 'object' ? p.name : (photoNames[url] || "");
+                              const currentName = typeof p === 'object' ? p.name : (photoNames[url] ?? "");
+                              const displayName = Object.prototype.hasOwnProperty.call(photoNames, url)
+                                ? photoNames[url]
+                                : currentName;
                               
                               return (
                                 <div key={idx} className="space-y-2 relative group/item">
@@ -473,13 +680,29 @@ export default function AssignmentDetailPage() {
 
                                   <Input 
                                     placeholder="Beri nama foto..."
-                                    value={photoNames[url] || currentName}
-                                    onChange={(e) => setPhotoNames({...photoNames, [url]: e.target.value})}
+                                    value={displayName}
+                                    onChange={(e) => setPhotoNames((prev) => ({ ...prev, [url]: e.target.value }))}
                                     className="h-9 text-[10px] font-bold uppercase tracking-tight rounded-xl bg-slate-50 border-none focus-visible:ring-emerald-500"
                                   />
+                                  <p
+                                    className={cn(
+                                      "text-[9px] font-black uppercase tracking-widest pl-1",
+                                      photoAutosaveStatus === "saving"
+                                        ? "text-blue-600"
+                                        : photoAutosaveStatus === "error"
+                                          ? "text-rose-600"
+                                          : "text-emerald-600"
+                                    )}
+                                  >
+                                    {photoAutosaveStatus === "saving"
+                                      ? "Menyimpan..."
+                                      : photoAutosaveStatus === "error"
+                                        ? "Belum tersimpan"
+                                        : "Tersimpan"}
+                                  </p>
                                 </div>
                               );
-                           })}
+                            })}
                         </div>
                      )}
                      
@@ -496,13 +719,16 @@ export default function AssignmentDetailPage() {
                </PremiumCard>
 
             {/* PDF Results / Signed Travel Order Section */}
-               <PremiumCard className="border-none shadow-2xl shadow-emerald-900/5 rounded-3xl md:rounded-[2.5rem] overflow-hidden bg-white mt-5 md:mt-8">
-                  <CardHeader className="bg-slate-50/50 p-5 md:p-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                     <div className="flex items-center gap-3 md:gap-4">
-                        <div className="p-2.5 md:p-3 rounded-xl md:rounded-2xl bg-blue-100 text-blue-600"><FileText className="h-5 w-5 md:h-6 md:w-6" /></div>
-                        <div>
-                          <CardTitle className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-900 leading-none">Berkas Hasil Sampling</CardTitle>
-                          <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase mt-1.5 tracking-widest">Upload Surat Tugas / Laporan Lapangan (PDF)</p>
+                <PremiumCard className="border-none shadow-2xl shadow-emerald-900/5 rounded-3xl md:rounded-[2.5rem] overflow-hidden bg-white mt-5 md:mt-8">
+                   <CardHeader className="bg-slate-50/50 p-5 md:p-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 md:gap-4">
+                         <div className="p-2.5 md:p-3 rounded-xl md:rounded-2xl bg-blue-100 text-blue-600"><FileText className="h-5 w-5 md:h-6 md:w-6" /></div>
+                         <div>
+                          <CardTitle className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-900 leading-none">{FIELD_ASSIGNMENT_LABELS.pdfSection}</CardTitle>
+                          <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase mt-1.5 tracking-widest">{FIELD_ASSIGNMENT_LABELS.pdfSubtitle}</p>
+                          <p className="text-[8px] md:text-[9px] font-black text-emerald-600 uppercase tracking-wider mt-1">
+                            Folder otomatis: /sampling/sampling-documents/{assignment.id}
+                          </p>
                         </div>
                      </div>
                   </CardHeader>
@@ -514,8 +740,8 @@ export default function AssignmentDetailPage() {
                             <CheckCircle2 className="h-6 w-6" />
                           </div>
                           <div>
-                            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Dokumen Tersedia</p>
-                            <h4 className="text-sm font-black text-slate-800 uppercase truncate max-w-[200px]">Hasil_Sampling_{assignment.job_order.tracking_code}.pdf</h4>
+                            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">{FIELD_ASSIGNMENT_LABELS.fileAvailable}</p>
+                            <h4 className="text-sm font-black text-slate-800 uppercase truncate max-w-[200px]">{FIELD_ASSIGNMENT_LABELS.docAvailablePrefix}{assignment.job_order.tracking_code}.pdf</h4>
                           </div>
                         </div>
                         <div className="flex gap-2 w-full md:w-auto">
@@ -524,30 +750,30 @@ export default function AssignmentDetailPage() {
                             onClick={() => window.open(assignment.signed_travel_order_url, '_blank')}
                             className="rounded-xl border-slate-200 font-black text-[10px] uppercase h-10 px-4 bg-white flex-1 md:flex-none"
                           >
-                            <Download className="h-3 w-3 mr-2" /> Lihat PDF
+                            <Download className="h-3 w-3 mr-2" /> {FIELD_ASSIGNMENT_LABELS.viewPdf}
                           </Button>
                           <Button 
                             variant="ghost"
                             onClick={handleDeletePdf}
                             className="rounded-xl text-rose-600 hover:bg-rose-50 font-black text-[10px] uppercase h-10 px-4 flex-1 md:flex-none"
                           >
-                            <Trash2 className="h-3 w-3 mr-2" /> Hapus
+                            <Trash2 className="h-3 w-3 mr-2" /> {FIELD_ASSIGNMENT_LABELS.deletePdf}
                           </Button>
                         </div>
                       </div>
                     ) : (
                       <div 
-                        onClick={() => !isLocked && pdfInputRef.current?.click()}
-                        className={cn(
-                          "py-10 md:py-12 border-2 border-dashed rounded-2xl md:rounded-[2rem] flex flex-col items-center justify-center gap-4 transition-all",
-                          isLocked ? "border-slate-100 opacity-50 cursor-not-allowed" : "border-slate-200 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 group"
-                        )}
-                      >
+                         onClick={() => !isLocked && pdfInputRef.current?.click()}
+                         className={cn(
+                           "py-10 md:py-12 border-2 border-dashed rounded-2xl md:rounded-[2rem] flex flex-col items-center justify-center gap-4 transition-all",
+                           isLocked ? "border-slate-100 opacity-50 cursor-not-allowed" : "border-slate-200 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 group"
+                         )}
+                       >
                         <div className="h-16 w-16 rounded-full bg-slate-50 flex items-center justify-center border-2 border-white shadow-inner group-hover:bg-blue-100 transition-colors">
                           {uploadingPdf ? <RefreshCw className="h-8 w-8 text-blue-600 animate-spin" /> : <Upload className="h-8 w-8 text-slate-300 group-hover:text-blue-500" />}
                         </div>
                         <div className="text-center">
-                          <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Klik untuk upload hasil sampling</p>
+                           <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{FIELD_ASSIGNMENT_LABELS.uploadHint}</p>
                           {storageConfig && (
                               <p className={cn("text-[9px] font-bold uppercase mt-1 tracking-widest", storageConfig?.provider === "google_drive" ? "text-violet-500" : storageConfig?.provider === "public" ? "text-blue-500" : storageConfig?.provider === "google_form" ? "text-orange-500" : "text-emerald-500")}>
                                 Mode aktif: {storageLabel}
@@ -559,9 +785,9 @@ export default function AssignmentDetailPage() {
                                onClick={() => window.open(storageConfig.externalUrl, "_blank")}
                                className="mt-3 h-9 px-4 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-black text-[9px] uppercase tracking-widest"
                              >
-                               Buka Form Eksternal
-                             </Button>
-                           )}
+                                {FIELD_ASSIGNMENT_LABELS.externalForm}
+                              </Button>
+                            )}
                           <p className="text-[9px] font-bold text-slate-300 uppercase mt-1">Format: PDF (Maks. 5MB)</p>
                         </div>
                         <input 
@@ -570,11 +796,36 @@ export default function AssignmentDetailPage() {
                           onChange={handlePdfUpload} 
                           accept="application/pdf" 
                           className="hidden" 
-                        />
+                         />
+                         {assignment.status === "in_progress" && !isLocked && (
+                          <div className="w-full max-w-xl rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4 md:p-5 shadow-sm mt-2">
+                            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                              <div className="space-y-1">
+                                 <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">{FIELD_ASSIGNMENT_LABELS.readyToSend}</p>
+                                 <p className="text-sm font-bold text-slate-800">
+                                   Kirim hasil sampling ke analis dan buat draft invoice untuk finance.
+                                 </p>
+                                <p className="text-[10px] font-medium text-slate-500">
+                                  Status akan berubah menjadi <span className="font-black">{FIELD_ASSIGNMENT_LABELS.readyStatusNote}</span>.
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setIsSubmitResultsModalOpen(true);
+                                }}
+                                className="h-11 md:h-12 px-5 rounded-xl md:rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-900/20"
+                              >
+                                 {FIELD_ASSIGNMENT_LABELS.sendResults}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </CardContent>
-               </PremiumCard>
+                </PremiumCard>
             </div>
           </div>
 
@@ -592,10 +843,25 @@ export default function AssignmentDetailPage() {
                        <div className="flex justify-between items-center"><span className="text-[10px] font-black text-blue-400 uppercase">Nomor Dokumen</span><span className="font-mono text-xs font-bold text-blue-200">{travelOrder.document_number}</span></div>
                        <div className="flex justify-between items-center"><span className="text-[10px] font-black text-blue-400 uppercase">Uang Harian</span><span className="font-black text-emerald-400 text-sm">Rp {Number(travelOrder.daily_allowance).toLocaleString('id-ID')}</span></div>
                     </div>
-                    <Button onClick={() => window.open(`/field/travel-orders/${travelOrder.id}/preview`, '_blank')} className="w-full h-14 bg-white hover:bg-blue-50 text-blue-900 font-black uppercase tracking-widest rounded-2xl shadow-xl mt-6">LIHAT BERKAS <ChevronRight className="ml-2 h-4 w-4" /></Button>
+                    <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Button
+                        onClick={() => window.open(`/field/travel-orders/${travelOrder.id}/preview`, '_blank')}
+                        className="w-full h-14 !bg-blue-600 hover:!bg-blue-500 !text-white !border !border-blue-400 font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-blue-950/20"
+                      >
+                        {FIELD_TRAVEL_ORDER_LABELS.view} <ChevronRight className="ml-2 h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => window.open(`/field/travel-orders/${travelOrder.id}/preview?download=1`, "_blank")}
+                        className="w-full h-14 !border-blue-200 !bg-white hover:!bg-blue-50 !text-blue-950 font-black uppercase tracking-widest rounded-2xl shadow-lg shadow-blue-950/10"
+                      >
+                        {FIELD_TRAVEL_ORDER_LABELS.download} <Download className="ml-2 h-4 w-4" />
+                      </Button>
+                    </div>
                  </CardHeader>
-              </Card>
-            )}
+               </Card>
+             )}
 
             {/* Team Members Card */}
             <Card className="border-none shadow-2xl shadow-emerald-900/5 rounded-3xl md:rounded-[2.5rem] overflow-hidden bg-white">
@@ -617,43 +883,66 @@ export default function AssignmentDetailPage() {
                   </div>
                </CardContent>
             </Card>
+
+            {/* Tombol Aksi Utama - Sidebar */}
+            {!['completed', 'cancelled'].includes(assignment.status) && (
+              <Card className={cn(
+                "border-none shadow-2xl rounded-3xl overflow-hidden text-white",
+                assignment.status === 'pending' ? "bg-gradient-to-br from-blue-600 to-indigo-700 shadow-blue-900/10" : "bg-gradient-to-br from-emerald-600 to-teal-700 shadow-emerald-900/10"
+              )}>
+                <CardContent className="p-6 md:p-8 space-y-6">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-2xl bg-white/20 flex items-center justify-center border-2 border-white/20 shadow-xl">
+                      {assignment.status === 'pending' ? <Play className="h-6 w-6" /> : <CheckCircle2 className="h-6 w-6" />}
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-black uppercase tracking-tight">
+                        {assignment.status === 'pending' ? FIELD_ASSIGNMENT_LABELS.confirmTask : FIELD_ASSIGNMENT_LABELS.samplingDoneQuestion}
+                      </h3>
+                      <p className="text-white/70 font-bold text-[10px] uppercase">
+                        {assignment.status === 'pending' ? FIELD_ASSIGNMENT_LABELS.startOperational : FIELD_ASSIGNMENT_LABELS.sendToAnalystNow}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-white/80 leading-relaxed font-medium">
+                    {assignment.status === 'pending' 
+                      ? "Klik tombol di bawah untuk mengonfirmasi bahwa Anda telah memulai perjalanan atau proses sampling di lokasi."
+                      : "Pastikan semua foto dokumentasi, PDF hasil lapangan, dan catatan operasional sudah diisi dengan benar sebelum dikirim."
+                    }
+                  </p>
+                  
+                  {assignment.status === 'pending' ? (
+                    <Button 
+                      onClick={() => setIsStartModalOpen(true)}
+                      className="w-full h-14 bg-white hover:bg-blue-50 text-blue-700 font-black uppercase tracking-widest rounded-xl md:rounded-2xl shadow-xl transition-all active:scale-95"
+                    >
+                      Mulai Sekarang <Play className="ml-2 h-4 w-4" />
+                    </Button>
+                  ) : (
+                    <div className="space-y-3">
+                      <Button 
+                        onClick={() => setIsSubmitResultsModalOpen(true)}
+                        className="w-full h-14 bg-white hover:bg-emerald-50 text-emerald-700 font-black uppercase tracking-widest rounded-2xl shadow-xl transition-all active:scale-95"
+                      >
+                        Selesaikan & Kirim <ChevronRight className="ml-2 h-4 w-4" />
+                      </Button>
+                      <Button 
+                         variant="ghost"
+                         onClick={() => handleStatusUpdate('pending')}
+                         className="w-full h-10 rounded-xl font-black uppercase tracking-widest text-[10px] text-white/60 hover:text-white hover:bg-white/10"
+                       >
+                          Tunda / Reset ke Pending
+                       </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Floating Action Bar (Responsive Mobile) */}
-      {!['completed', 'cancelled'].includes(assignment.status) && (
-        <div className="fixed bottom-[5.5rem] md:bottom-0 left-0 right-0 p-4 md:p-8 z-[60] pointer-events-none">
-           <div className="max-w-xl mx-auto pointer-events-auto">
-              <div className="bg-white/85 backdrop-blur-2xl border-2 border-slate-100 rounded-3xl md:rounded-[2.5rem] p-3 md:p-6 shadow-[0_20px_50px_rgba(0,0,0,0.15)] flex flex-col sm:flex-row gap-2.5 md:gap-3">
-                 {assignment.status === 'pending' ? (
-                    <Button 
-                      onClick={() => setIsStartModalOpen(true)}
-                      className="w-full h-14 md:h-16 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest rounded-xl md:rounded-2xl shadow-xl shadow-blue-900/20 flex items-center justify-center gap-3 transition-all active:scale-95 text-[11px] md:text-sm"
-                    >
-                       Mulai Perjalanan & Sampling <Play className="h-5 w-5 md:h-6 md:w-6" />
-                    </Button>
-                 ) : (
-                    <>
-                       <Button 
-                         variant="ghost"
-                         onClick={() => handleStatusUpdate('pending')}
-                         className="flex-1 h-14 md:h-16 rounded-xl md:rounded-2xl font-black uppercase tracking-widest text-[11px] md:text-xs text-slate-400 border-2 border-slate-50"
-                       >
-                          Tunda Tugas
-                       </Button>
-                       <Button 
-                         onClick={() => handleStatusUpdate('completed')}
-                         className="flex-[2] h-14 md:h-16 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest rounded-xl md:rounded-2xl shadow-xl shadow-emerald-900/20 flex items-center justify-center gap-3 text-[11px] md:text-sm"
-                       >
-                          Sampling Selesai <CheckCircle2 className="h-5 w-5 md:h-6 md:w-6" />
-                       </Button>
-                    </>
-                 )}
-              </div>
-           </div>
-        </div>
-      )}
+      {/* Floating Action Bar Dihapus */}
 
       <Dialog open={isStartModalOpen} onOpenChange={(open) => !isStarting && setIsStartModalOpen(open)}>
         <DialogContent className="sm:max-w-md rounded-3xl md:rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl">
@@ -692,6 +981,51 @@ export default function AssignmentDetailPage() {
               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-black text-[10px] uppercase h-12 md:h-14 rounded-xl md:rounded-2xl shadow-xl shadow-blue-900/20"
             >
               {isStarting ? "Memproses..." : "Ya, Mulai Sekarang"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isSubmitResultsModalOpen} onOpenChange={(open) => !isSubmittingResults && setIsSubmitResultsModalOpen(open)}>
+        <DialogContent className="sm:max-w-md rounded-3xl md:rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl">
+          <div className="bg-emerald-600 p-6 md:p-8 text-white">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center border-2 border-white/20">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+              <div>
+                <DialogTitle className="text-xl font-black uppercase tracking-tight">Kirim ke Analis?</DialogTitle>
+                <DialogDescription className="text-emerald-100 text-[10px] font-bold uppercase tracking-widest">
+                  Notifikasi akan dikirim ke tim analis laboratorium untuk segera diproses
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
+          <div className="p-5 md:p-8 space-y-4">
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+              <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest mb-2">Detail Tugas</p>
+              <p className="text-xs font-black text-slate-800">{assignment?.job_order?.tracking_code}</p>
+              <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">{perihalPengujian}</p>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Setelah dikirim, status tugas akan berubah menjadi <span className="font-black text-slate-800">Analysis</span>. Pastikan semua foto dokumentasi dan catatan lapangan sudah lengkap.
+            </p>
+          </div>
+          <DialogFooter className="p-5 md:p-8 bg-slate-50 border-t flex gap-3 md:gap-4">
+            <Button
+              variant="ghost"
+              disabled={isSubmittingResults}
+              onClick={() => setIsSubmitResultsModalOpen(false)}
+              className="flex-1 font-black text-[10px] uppercase h-12 md:h-14 rounded-xl md:rounded-2xl text-slate-400"
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={handleConfirmSubmitResults}
+              disabled={isSubmittingResults}
+              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase h-12 md:h-14 rounded-xl md:rounded-2xl shadow-xl shadow-emerald-900/20"
+            >
+              {isSubmittingResults ? "Mengirim..." : "Ya, Selesaikan & Kirim"}
             </Button>
           </DialogFooter>
         </DialogContent>

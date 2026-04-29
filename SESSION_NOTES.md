@@ -356,3 +356,101 @@ Lanjutkan proyek wahfalab dari SESSION_NOTES.md dan fokus ke area admin dan fina
 - Commit hash: `f4c98a6`
 - Branch: `main`
 - Remote push: `origin/main` berhasil
+
+## Update Sesi Hari Ini (2026-04-26)
+
+- Database sudah dipindahkan ke project Supabase baru dan seed sudah dijalankan.
+  - schema migrated di database baru
+  - akun seed inti sudah tersedia
+  - seed data operasional juga sudah masuk
+- Konfigurasi koneksi lama sudah dibersihkan dan diarahkan ke `DATABASE_URL` baru.
+- Helper script database sudah disiapkan di `package.json`:
+  - `db:migrate`
+  - `db:seed`
+  - `db:seed:operational`
+  - `db:setup`
+  - `db:setup:reset`
+  - `db:reset:schema`
+  - `db:setup:verify`
+- Halaman admin `Upload Storage` sudah dibuat untuk mengatur lokasi penyimpanan upload:
+  - `project/public`
+  - `google_drive`
+  - `google_form`
+  - setting disimpan ke `company_profiles`
+- Upload petugas lapangan dan analis sudah diarahkan ke storage router.
+- Status kesiapan Google Drive ditampilkan di halaman admin upload storage.
+- Navigasi field sudah dirapikan:
+  - menu `Surat Tugas` ditambahkan di bottom nav mobile
+  - menu `Surat Tugas` juga ditambahkan di sidebar desktop field
+- Halaman field dan surat tugas sudah diperhalus:
+  - preview surat tugas memakai judul quotation sebagai `perihal`
+  - layout PDF dirapatkan agar mendekati 1 halaman A4
+  - wording surat dibuat lebih formal
+- Halaman `operator/jobs` dan `operator/quotations` sudah disamakan visualnya dan label statusnya dirapikan.
+- Commit terbaru sudah dibuat dan push ke GitHub:
+  - commit: `bd4c0d2`
+  - pesan: `perubahan halaman petugas lapangan`
+
+## Catatan Untuk Lanjutan
+
+1. Jika besok lanjut, prioritas aman berikutnya:
+   - cek PDF surat tugas untuk quotation dengan item banyak
+   - audit halaman field dan reporting jika masih ada label/spacing yang perlu dirapikan
+2. Ada file temporary Excel di `public/format cetak/~$00 - FORMAT PENAWARAN (SPL).xlsx` dan folder `public/uploads/` yang tidak dimasukkan ke commit.
+
+## Update Sesi Hari Ini (2026-04-27)
+
+- Halaman detail petugas lapangan `/field/assignments/[id]` sekarang mendukung autosave untuk penamaan foto:
+  - rename foto disimpan otomatis setelah jeda input
+  - penghapusan foto tetap memakai `Simpan Penghapusan`
+  - ada status visual per kartu foto dan banner ringkas di area dokumentasi
+- Autosave nama foto punya retry ringan saat gagal, tanpa spam toast saat user sedang mengetik.
+- Pesan hapus foto sudah diperjelas agar operator paham bahwa yang tersimpan otomatis hanya nama, bukan penghapusan file.
+
+## Update Sesi Hari Ini (2026-04-29)
+
+- Halaman detail analis `/analyst/jobs/[id]` sudah dirapikan untuk alur kerja utama:
+  - label tombol disesuaikan mengikuti SOP aktual
+  - toast sukses/gagal dibuat lebih jelas
+  - tombol `Kirim ke Reporting` sekarang terkunci sampai laporan PDF dan lembar kerja lengkap
+  - ditambahkan hint jika data belum lengkap
+- Halaman admin audit logs diperbaiki agar sesuai kontrak komponen modal:
+  - `DetailModal` sekarang memakai `open` dan `onOpenChange`
+  - error TypeScript di halaman audit logs sudah selesai
+- Flow reporting setelah analis kirim juga sudah disinkronkan:
+  - `/reporting/jobs` sekarang memakai wording antrean kerja yang lebih jelas
+  - status `analysis_done` dirapikan menjadi konteks `siap diproses`
+  - CTA daftar job reporting dibedakan antara `Proses LHU`, `Lanjutkan LHU`, dan `Lihat Hasil`
+  - `/reporting/jobs/[id]` dirapikan untuk toast, label, tombol preview, dan tombol terbitkan LHU
+  - setelah publish LHU, redirect kembali ke `/reporting/jobs`
+- Verifikasi akhir:
+  - `npx tsc --noEmit` lulus tanpa error
+
+## Fokus Aman Untuk Lanjutan
+
+1. Rapikan halaman induk `/reporting` agar perannya jelas sebagai arsip/daftar LHU final, terpisah dari antrean kerja `/reporting/jobs`.
+2. Audit ulang copywriting role analis dan reporting agar istilah status tetap konsisten di dashboard, detail, dan notifikasi.
+3. Jika perlu, lanjutkan dengan commit perubahan hari ini setelah review singkat `git diff`.
+
+## Progress Tambahan (2026-04-29)
+
+- Halaman induk `/reporting` sudah diposisikan ulang sebagai `Arsip LHU Final`:
+  - data arsip final dipisahkan dari draft manual
+  - ditambahkan shortcut jelas ke `/reporting/jobs`
+  - draft manual yang belum final tetap terlihat di section terpisah agar tidak hilang dari radar
+- Server action `getLabReports()` sekarang mendukung filter `status`, sehingga pemisahan arsip final vs draft dilakukan dari query, bukan hanya filter tampilan.
+- Copywriting analis dirapikan agar konsisten dengan flow terbaru:
+  - dashboard analis memakai status `SIAP REPORTING` dan `DI REPORTING`
+  - halaman riwayat analis memakai label:
+    - `Siap Reporting`
+    - `Sedang Di Reporting`
+    - `LHU Terbit`
+  - tombol pagination lama yang sempat berisi karakter rusak sudah dibersihkan menjadi `Sebelumnya` dan `Berikutnya`
+- Verifikasi akhir:
+  - `npx tsc --noEmit` lulus tanpa error
+
+## Fokus Lanjutan Setelah Ini
+
+1. Review visual dan runtime halaman `/reporting`, `/reporting/jobs`, dan `/analyst/history` dengan data nyata.
+2. Lanjut audit copywriting role reporting pada halaman lain yang masih memakai istilah campuran, terutama direct request dan detail LHU manual.
+3. Jika hasil review sudah aman, lanjutkan commit perubahan area analis/reporting hari ini.

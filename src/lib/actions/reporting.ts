@@ -98,11 +98,14 @@ export async function updateRegulation(id: string, data: any) {
 
 // --- LAB REPORT (LHU) ACTIONS ---
 
-export async function getLabReports(options: { page?: number, limit?: number, search?: string } = {}) {
-  const { page = 1, limit = 10, search = '' } = options
+export async function getLabReports(options: { page?: number, limit?: number, search?: string, status?: string } = {}) {
+  const { page = 1, limit = 10, search = '', status } = options
   const skip = (page - 1) * limit
 
   const where: any = {}
+  if (status) {
+    where.status = status
+  }
   if (search) {
     where.OR = [
       { report_number: { contains: search, mode: 'insensitive' } },

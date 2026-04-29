@@ -49,3 +49,50 @@ export async function getAuditLogs(params: {
     },
   };
 }
+
+export async function getAuditLogStats() {
+  const now = new Date();
+  const todayStart = new Date(now.setHours(0, 0, 0, 0));
+
+  const [totalToday, totalAll, activeUser, commonAction] = await Promise.all([
+    prisma.auditLog.count({
+      where: {
+        created_at: {
+          gte: todayStart,
+        },
+      },
+    }),
+    prisma.auditLog.count(),
+    prisma.auditLog.groupBy({
+      by: ["user_email"],
+      _count: {
+        user_email: true,
+      },
+      orderBy: {
+        _count: {
+          user_email: "desc",
+        },
+      },
+      take: 1,
+    }),
+    prisma.auditLog.groupBy({
+      by: ["action"],
+      _count: {
+        action: true,
+      },
+      orderBy: {
+        _count: {
+          action: "desc",
+        },
+      },
+      take: 1,
+    }),
+  ]);
+
+  return {
+    totalToday,
+    totalAll,
+    activeUser: activeUser[0]?.user_email || "N/A",
+    commonAction: commonAction[0]?.action || "N/A",
+  };
+}

@@ -53,6 +53,7 @@ import { createTravelOrder } from "@/lib/actions/travel-order";
 import { toast } from "sonner";
 import { OPERATOR_LOADING_COPY, PROCESSING_TEXT } from "@/lib/constants/loading";
 import { OPERATOR_EMPTY_TEXT, OPERATOR_TOAST_TEXT } from "@/lib/constants/operator-copy";
+import { ADMIN_STATUS_LABELS, ADMIN_WORKFLOW_LABELS } from "@/lib/constants/workflow-copy";
 import { cn } from "@/lib/utils";
 import { getDisplayJobNotes } from "@/lib/job-notes";
 import { Label } from "@/components/ui/label";
@@ -132,22 +133,22 @@ type AssignmentFormData = {
 type StatusColor = "emerald" | "blue" | "amber" | "purple" | "indigo";
 
 const statusConfig: Record<JobStatus, StatusConfig> = {
-  scheduled: { label: 'Terjadwal', color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100', icon: Clock, progress: 20 },
-  sampling: { label: 'Sampling', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100', icon: Truck, progress: 40 },
-  analysis_ready: { label: 'Diterima Lab', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100', icon: ClipboardCheck, progress: 55 },
-  analysis: { label: 'Analisis Lab', color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100', icon: Beaker, progress: 70 },
-  reporting: { label: 'Pelaporan', color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-100', icon: FileText, progress: 85 },
-  completed: { label: 'Selesai', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100', icon: CheckCircle2, progress: 100 }
+  scheduled: { label: ADMIN_STATUS_LABELS.scheduled, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100', icon: Clock, progress: 20 },
+  sampling: { label: ADMIN_STATUS_LABELS.sampling, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100', icon: Truck, progress: 40 },
+  analysis_ready: { label: ADMIN_STATUS_LABELS.analysis_ready, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100', icon: ClipboardCheck, progress: 55 },
+  analysis: { label: ADMIN_STATUS_LABELS.analysis, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100', icon: Beaker, progress: 70 },
+  reporting: { label: ADMIN_STATUS_LABELS.reporting, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-100', icon: FileText, progress: 85 },
+  completed: { label: ADMIN_STATUS_LABELS.completed, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100', icon: CheckCircle2, progress: 100 }
 };
 
 const statusOptions = [
   { value: "all", label: "Semua", color: "bg-slate-900 text-white", icon: LayoutDashboard },
-  { value: "scheduled", label: "Penjadwalan", color: "bg-blue-50 text-blue-700 border-blue-100", icon: Clock },
-  { value: "sampling", label: "Sampling", color: "bg-amber-50 text-amber-700 border-amber-100", icon: MapPin },
-  { value: "analysis_ready", label: "Siap Analisis", color: "bg-emerald-50 text-emerald-700 border-emerald-100", icon: ClipboardCheck },
-  { value: "analysis", label: "Analisis Lab", color: "bg-indigo-50 text-indigo-700 border-indigo-100", icon: FlaskConical },
-  { value: "reporting", label: "Pelaporan", color: "bg-purple-50 text-purple-700 border-purple-100", icon: FileText },
-  { value: "completed", label: "Selesai", color: "bg-emerald-600 text-white border-emerald-600", icon: CheckCircle2 },
+  { value: "scheduled", label: ADMIN_STATUS_LABELS.scheduled, color: "bg-blue-50 text-blue-700 border-blue-100", icon: Clock },
+  { value: "sampling", label: ADMIN_STATUS_LABELS.sampling, color: "bg-amber-50 text-amber-700 border-amber-100", icon: MapPin },
+  { value: "analysis_ready", label: ADMIN_STATUS_LABELS.analysis_ready, color: "bg-emerald-50 text-emerald-700 border-emerald-100", icon: ClipboardCheck },
+  { value: "analysis", label: ADMIN_STATUS_LABELS.analysis, color: "bg-indigo-50 text-indigo-700 border-indigo-100", icon: FlaskConical },
+  { value: "reporting", label: ADMIN_STATUS_LABELS.reporting, color: "bg-purple-50 text-purple-700 border-purple-100", icon: FileText },
+  { value: "completed", label: ADMIN_STATUS_LABELS.completed, color: "bg-emerald-600 text-white border-emerald-600", icon: CheckCircle2 },
 ];
 
 const createInitialFilters = () => ({ dateFrom: "", dateTo: "", fieldOfficerId: "", customerId: "" });
@@ -162,11 +163,11 @@ function resolveStatusConfig(status?: string | null): StatusConfig {
 // COMPONENT: Professional Workflow Stepper
 function ProfessionalStepper({ status }: { status: string }) {
   const stages = [
-    { id: 'scheduled', label: "Penjadwalan", icon: FileText },
-    { id: 'sampling', label: "Sampling", icon: MapPin },
-    { id: 'analysis', label: "Analisis", icon: FlaskConical },
-    { id: 'reporting', label: "Pelaporan", icon: FileText },
-    { id: 'completed', label: "Selesai", icon: CheckCircle2 },
+    { id: 'scheduled', label: ADMIN_WORKFLOW_LABELS.scheduled, icon: FileText },
+    { id: 'sampling', label: ADMIN_WORKFLOW_LABELS.sampling, icon: MapPin },
+    { id: 'analysis', label: ADMIN_WORKFLOW_LABELS.analysis, icon: FlaskConical },
+    { id: 'reporting', label: ADMIN_WORKFLOW_LABELS.reporting, icon: FileText },
+    { id: 'completed', label: ADMIN_WORKFLOW_LABELS.completed, icon: CheckCircle2 },
   ];
 
   const currentIdx = stages.findIndex(s => s.id === status);
@@ -385,7 +386,7 @@ export default function OperatorJobProgressPage() {
         <PremiumStatCard title="Menunggu Penugasan" value={stats.scheduled || 0} subValue="Order Baru" icon={Clock} color="blue" active={filterStatus === "scheduled"} onClick={() => handleStatFilterClick("scheduled")} />
         <PremiumStatCard title="Sampling" value={stats.sampling || 0} subValue="Lapangan" icon={Truck} color="amber" active={filterStatus === "sampling"} onClick={() => handleStatFilterClick("sampling")} />
         <PremiumStatCard title="Analisis" value={stats.analysis || 0} subValue="Lab" icon={TestTube} color="purple" active={filterStatus === "analysis"} onClick={() => handleStatFilterClick("analysis")} />
-        <PremiumStatCard title="Pelaporan" value={stats.reporting || 0} subValue="Report" icon={FileText} color="indigo" active={filterStatus === "reporting"} onClick={() => handleStatFilterClick("reporting")} />
+        <PremiumStatCard title={ADMIN_STATUS_LABELS.reporting} value={stats.reporting || 0} subValue="Report" icon={FileText} color="indigo" active={filterStatus === "reporting"} onClick={() => handleStatFilterClick("reporting")} />
         <PremiumStatCard title="Selesai" value={stats.completed || 0} subValue="Done" icon={CheckCircle2} color="emerald" active={filterStatus === "completed"} onClick={() => handleStatFilterClick("completed")} />
       </div>
 

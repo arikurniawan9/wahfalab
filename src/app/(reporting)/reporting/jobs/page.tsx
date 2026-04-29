@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FileText, ArrowRight } from "lucide-react";
 import Link from "next/link";
+import { REPORTING_STATUS_LABELS } from "@/lib/constants/workflow-copy";
 
 export default function ReportingJobsPage() {
   const [loading, setLoading] = useState(true);
@@ -35,9 +36,7 @@ export default function ReportingJobsPage() {
   };
 
   const statusLabels: any = {
-    analysis_done: "Menunggu LHU",
-    reporting: "Proses LHU",
-    completed: "LHU Terbit"
+    ...REPORTING_STATUS_LABELS
   };
 
   return (
@@ -45,12 +44,12 @@ export default function ReportingJobsPage() {
       <div className="mb-10">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-emerald-900 tracking-tight">Laporan Hasil Uji</h1>
-            <p className="text-slate-500 text-sm mt-1">Kelola penerbitan LHU</p>
+            <h1 className="text-3xl font-bold text-emerald-900 tracking-tight">Antrean Reporting</h1>
+            <p className="text-slate-500 text-sm mt-1">Proses job dari analis hingga penerbitan LHU</p>
           </div>
           <Link href="/reporting/direct-requests">
             <Button className="bg-violet-600 hover:bg-violet-700 text-white font-black text-[10px] uppercase tracking-widest rounded-xl h-10 px-5">
-              Direct LHU Queue
+              Antrean LHU Langsung
             </Button>
           </Link>
         </div>
@@ -58,7 +57,7 @@ export default function ReportingJobsPage() {
 
       <Card className="shadow-xl shadow-emerald-900/5">
         <CardHeader>
-          <CardTitle className="text-emerald-900">Daftar Job Order</CardTitle>
+            <CardTitle className="text-emerald-900">Daftar Job Siap Reporting</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -97,7 +96,7 @@ export default function ReportingJobsPage() {
                     <TableCell className="text-right">
                       <Link href={`/reporting/jobs/${job.id}`}>
                         <Button size="sm" className="cursor-pointer">
-                          {job.status === "completed" ? "Lihat LHU" : "Buat LHU"}
+                           {job.status === "completed" ? "Lihat Hasil" : job.status === "reporting" ? "Lanjutkan LHU" : "Proses LHU"}
                           <ArrowRight className="ml-2 h-4 w-4" />
                         </Button>
                       </Link>

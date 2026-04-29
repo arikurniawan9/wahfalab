@@ -8,7 +8,7 @@ import { cache } from "react";
 import { createNotifications } from "@/lib/actions/notifications";
 import { serializeData } from "@/lib/utils/serialize";
 import { STORAGE_BUCKETS } from "@/lib/supabase/storage";
-import { uploadManagedStorageFile } from "@/lib/storage/upload-router";
+import { getManagedUploadConfig, uploadManagedStorageFile } from "@/lib/storage/upload-router";
 
 /**
  * Server Actions untuk Analyst (Analis Laboratorium)
@@ -108,6 +108,75 @@ export async function assignAnalystToJob(
 }
 
 /**
+ * Konfirmasi analis mengambil job dari antrean
+ */
+export async function claimAnalysisJob(jobOrderId: string) {
+  try {
+    const { profile } = await getCurrentUser();
+
+    if (profile.role !== "analyst") {
+      throw new Error("Only analyst can claim analysis jobs");
+    }
+
+    const jobOrder = await prisma.jobOrder.findUnique({
+      where: { id: jobOrderId },
+      include: {
+        sample_handover: {
+          select: {
+            receiver_id: true,
+          },
+        },
+      },
+    });
+
+    if (!jobOrder) {
+      throw new Error("Job order not found");
+    }
+
+    if (jobOrder.status !== "analysis_ready" && jobOrder.status !== "analysis") {
+      throw new Error("Job order belum siap diambil analis");
+    }
+
+    if (jobOrder.analyst_id && jobOrder.analyst_id !== profile.id) {
+      throw new Error("Job order sudah diambil analis lain");
+    }
+
+    const receiverId = jobOrder.sample_handover?.receiver_id || null;
+    if (receiverId && receiverId !== profile.id) {
+      throw new Error("Anda bukan penerima BAST untuk job ini");
+    }
+
+    const updated = await prisma.jobOrder.update({
+      where: { id: jobOrderId },
+      data: {
+        analyst_id: profile.id,
+      },
+    });
+
+    await logAudit({
+      action: "analysis_job_claimed",
+      entity_type: "job_order",
+      entity_id: jobOrderId,
+      user_id: profile.id!,
+      user_email: profile.email!,
+      user_role: profile.role,
+      new_data: { analyst_id: profile.id, status: updated.status },
+    });
+
+    revalidatePath("/analyst");
+    revalidatePath(`/analyst/jobs/${jobOrderId}`);
+
+    return { success: true, jobOrder: updated };
+  } catch (error) {
+    console.error("Error claiming analysis job:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to claim job",
+    };
+  }
+}
+
+/**
  * Mulai analisis untuk job order
  * Analis memulai pekerjaan analisis
  */
@@ -132,6 +201,10 @@ export async function startAnalysis(jobOrderId: string) {
 
     if (jobOrder.status !== "analysis_ready" && jobOrder.status !== "analysis") {
       throw new Error("Job order not ready for analysis");
+    }
+
+    if (jobOrder.analyst_id !== profile.id) {
+      throw new Error("You are not assigned to this job order");
     }
 
     const updated = await prisma.jobOrder.update({
@@ -185,6 +258,10 @@ export async function saveAnalysisResults(
 
     if (!jobOrder) {
       throw new Error("Job order not found");
+    }
+
+    if (jobOrder.analyst_id !== profile.id) {
+      throw new Error("You are not assigned to this job order");
     }
 
     // Upsert lab analysis
@@ -259,13 +336,18 @@ export async function uploadAnalysisPDF(
 
     if (!jobOrder) throw new Error("Job Order not found");
 
+    if (profile.role === "analyst" && jobOrder.analyst_id !== profile.id) {
+      throw new Error("You are not assigned to this job order");
+    }
+
     const invoicePart = jobOrder.invoice?.invoice_number?.replace(/\//g, "-") || jobOrder.tracking_code;
     const renamedFile = new File([await file.arrayBuffer()], `LAPORAN-${invoicePart}.${file.name.split(".").pop()}`, {
       type: file.type,
     });
+    const storageConfig = await getManagedUploadConfig();
     const uploadResult = await uploadManagedStorageFile({
       bucket: STORAGE_BUCKETS.labResults,
-      folder: `analysis-pdf/${jobOrderId}`,
+      folder: storageConfig.provider === "public" ? `analisis/analysis-pdf/${jobOrderId}` : `analysis-pdf/${jobOrderId}`,
       file: renamedFile,
       allowedMimeTypes: ['application/pdf'],
       maxSizeBytes: 15 * 1024 * 1024,
@@ -337,13 +419,18 @@ export async function uploadRawData(
 
     if (!jobOrder) throw new Error("Job Order not found");
 
+    if (profile.role === "analyst" && jobOrder.analyst_id !== profile.id) {
+      throw new Error("You are not assigned to this job order");
+    }
+
     const invoicePart = jobOrder.invoice?.invoice_number?.replace(/\//g, "-") || jobOrder.tracking_code;
     const renamedFile = new File([await file.arrayBuffer()], `RAW-${invoicePart}.${file.name.split(".").pop()}`, {
       type: file.type,
     });
+    const storageConfig = await getManagedUploadConfig();
     const uploadResult = await uploadManagedStorageFile({
       bucket: STORAGE_BUCKETS.labResults,
-      folder: `raw-data/${jobOrderId}`,
+      folder: storageConfig.provider === "public" ? `analisis/raw-data/${jobOrderId}` : `raw-data/${jobOrderId}`,
       file: renamedFile,
       allowedMimeTypes: [
         'application/pdf',
@@ -503,13 +590,25 @@ export async function getMyAnalysisJobs(
 
     const skip = (page - 1) * limit;
 
-    const where: any = {
-      analyst_id: profile.id,
-    };
-
-    if (status) {
-      where.status = status;
-    }
+    const where: any = status === "analysis_ready"
+      ? {
+          status: "analysis_ready",
+          OR: [
+            { analyst_id: profile.id },
+            { analyst_id: null },
+          ],
+        }
+      : status
+        ? {
+            analyst_id: profile.id,
+            status,
+          }
+        : {
+            OR: [
+              { analyst_id: profile.id },
+              { analyst_id: null, status: "analysis_ready" },
+            ],
+          };
 
     const [jobOrders, total] = await Promise.all([
       prisma.jobOrder.findMany({
@@ -549,7 +648,7 @@ export async function getMyAnalysisJobs(
           sample_handover: {
             include: {
               sender: { select: { full_name: true } },
-              receiver: { select: { full_name: true } },
+              receiver: { select: { id: true, full_name: true } },
             }
           },
           lab_analysis: {
@@ -600,8 +699,11 @@ export async function getAnalystDashboard() {
     const [pending, inProgress, done, total] = await Promise.all([
       prisma.jobOrder.count({
         where: {
-          analyst_id: profile.id,
           status: "analysis_ready",
+          OR: [
+            { analyst_id: profile.id },
+            { analyst_id: null },
+          ],
         },
       }),
       prisma.jobOrder.count({
@@ -618,13 +720,21 @@ export async function getAnalystDashboard() {
       }),
       prisma.jobOrder.count({
         where: {
-          analyst_id: profile.id,
+          OR: [
+            { analyst_id: profile.id },
+            { analyst_id: null, status: "analysis_ready" },
+          ],
         },
       }),
     ]);
 
     const recentJobs = await prisma.jobOrder.findMany({
-      where: { analyst_id: profile.id },
+      where: {
+        OR: [
+          { analyst_id: profile.id },
+          { analyst_id: null, status: "analysis_ready" },
+        ],
+      },
       take: 5,
       orderBy: { created_at: "desc" },
       include: {
@@ -697,7 +807,7 @@ export const getAnalysisJobById = cache(async (jobOrderId: string) => {
           sample_handover: {
             include: {
               sender: { select: { full_name: true } },
-              receiver: { select: { full_name: true } },
+              receiver: { select: { id: true, full_name: true } },
             }
           },
           lab_analysis: {
@@ -725,12 +835,13 @@ export const getAnalysisJobById = cache(async (jobOrderId: string) => {
       throw new Error("Unauthorized");
     }
 
-    // Analysts can only access jobs assigned to them OR jobs ready for analysis (sampling/analysis_ready)
+    // Analysts can only access jobs assigned to them
     if (profile!.role === "analyst") {
       const isAssigned = jobOrder.analyst_id === profile!.id;
-      const isReadyForAnalysis = ["sampling", "analysis_ready"].includes(jobOrder.status);
+      const isReadyQueueItem = !jobOrder.analyst_id && jobOrder.status === "analysis_ready";
+      const isLegacyReceiver = !jobOrder.analyst_id && jobOrder.sample_handover?.receiver?.id === profile!.id;
 
-      if (!isAssigned && !isReadyForAnalysis) {
+      if (!isAssigned && !isReadyQueueItem && !isLegacyReceiver) {
         throw new Error("You are not assigned to this job order");
       }
     }

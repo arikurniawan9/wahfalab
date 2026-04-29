@@ -37,11 +37,12 @@ import {
 import { pdf } from "@react-pdf/renderer";
 import { LHUPDF } from "@/components/pdf/LHUPDF";
 import { cn } from "@/lib/utils";
+import { REPORTING_DETAIL_LABELS } from "@/lib/constants/workflow-copy";
 
 const statusConfig: Record<string, { label: string; color: string; bg: string; icon: any; progress: number }> = {
-  analysis_done: { label: 'Siap Laporan', color: 'text-amber-600', bg: 'bg-amber-50', icon: Beaker, progress: 85 },
-  reporting: { label: 'Penyusunan LHU', color: 'text-indigo-600', bg: 'bg-indigo-50', icon: FileText, progress: 95 },
-  completed: { label: 'LHU Terbit (Selesai)', color: 'text-emerald-600', bg: 'bg-emerald-50', icon: CheckCircle, progress: 100 }
+  analysis_done: { label: REPORTING_DETAIL_LABELS.status.analysisDone, color: 'text-amber-600', bg: 'bg-amber-50', icon: Beaker, progress: 85 },
+  reporting: { label: REPORTING_DETAIL_LABELS.status.reporting, color: 'text-indigo-600', bg: 'bg-indigo-50', icon: FileText, progress: 95 },
+  completed: { label: REPORTING_DETAIL_LABELS.status.completed, color: 'text-emerald-600', bg: 'bg-emerald-50', icon: CheckCircle, progress: 100 }
 };
 
 interface TestResult {
@@ -186,8 +187,8 @@ export default function ReportingJobDetailPage({ params }: { params: Promise<{ i
         analysis_notes: reportingNotes
       });
       if (result.success) {
-        toast.success("✅ Hasil pengujian berhasil disimpan");
-        loadData();
+        toast.success("Draft reporting berhasil disimpan.");
+        await loadData();
       } else {
         toast.error(result.error || "Gagal menyimpan hasil");
       }
@@ -207,7 +208,7 @@ export default function ReportingJobDetailPage({ params }: { params: Promise<{ i
         setLhuNumber(result.lhuNumber);
         setGeneratedLHU(result.lhuData);
         setPreviewDialogOpen(true);
-        toast.success("✅ LHU Berhasil Disusun!");
+        toast.success("Preview LHU berhasil disiapkan.");
       } else {
         toast.error(result.error || "Gagal generate LHU");
       }
@@ -225,19 +226,22 @@ export default function ReportingJobDetailPage({ params }: { params: Promise<{ i
       const doc = <LHUPDF data={generatedLHU} />;
       const blob = await pdf(doc).toBlob();
       const formData = new FormData();
-      formData.append("file", new File([blob], `LHU-${generatedLHU.lhu_number}.pdf`, { type: 'application/pdf' }));
+      formData.append("file", new File([blob], `LHU-${generatedLHU.lhu_number}.pdf`, { type: "application/pdf" }));
       
       const uploadResult = await uploadLHUPDF(id, formData);
-
-      if (uploadResult.success) {
-        const publishResult = await publishLabReportWithLHU(id, uploadResult.url!, generatedLHU.lhu_number);
-        if (publishResult.success) {
-          toast.success(`✅ LHU ${generatedLHU.lhu_number} Terbit & Selesai!`);
-          router.push("/reporting");
-        }
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error || "Gagal mengunggah file LHU");
       }
+
+      const publishResult = await publishLabReportWithLHU(id, uploadResult.url!, generatedLHU.lhu_number);
+      if (!publishResult.success) {
+        throw new Error(publishResult.error || "Gagal menerbitkan LHU");
+      }
+
+      toast.success(`LHU ${generatedLHU.lhu_number} berhasil diterbitkan.`);
+      router.push("/reporting/jobs");
     } catch (error: any) {
-      toast.error("Gagal menerbitkan dokumen LHU");
+      toast.error(error?.message || "Gagal menerbitkan dokumen LHU");
     } finally {
       setSubmitting(false);
       setPreviewDialogOpen(false);
@@ -245,7 +249,7 @@ export default function ReportingJobDetailPage({ params }: { params: Promise<{ i
   };
 
   if (loading) return <div className="flex h-[80vh] items-center justify-center"><ChemicalLoader /></div>;
-  if (!job) return <div className="p-10 text-center">Laporan tidak ditemukan.</div>;
+  if (!job) return <div className="p-10 text-center">Job reporting tidak ditemukan.</div>;
 
   const currentStatus = statusConfig[job.status] || statusConfig.reporting;
 
@@ -259,7 +263,7 @@ export default function ReportingJobDetailPage({ params }: { params: Promise<{ i
           <Button 
             variant="ghost" 
             size="icon"
-            onClick={() => router.push('/reporting')} 
+            onClick={() => router.push('/reporting/jobs')} 
             className="h-12 w-12 rounded-2xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
           >
             <ArrowLeft className="h-6 w-6" />
@@ -352,8 +356,8 @@ export default function ReportingJobDetailPage({ params }: { params: Promise<{ i
                     <ClipboardList className="h-6 w-6" />
                   </div>
                   <div>
-                    <CardTitle className="text-xl font-black uppercase tracking-tight text-emerald-950">Hasil Parameter Uji</CardTitle>
-                    <CardDescription className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">Input data hasil laboratorium untuk sertifikat LHU</CardDescription>
+                    <CardTitle className="text-xl font-black uppercase tracking-tight text-emerald-950">{REPORTING_DETAIL_LABELS.sections.results}</CardTitle>
+                    <CardDescription className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">Validasi hasil analis dan susun data final untuk sertifikat LHU</CardDescription>
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -451,14 +455,14 @@ export default function ReportingJobDetailPage({ params }: { params: Promise<{ i
                          disabled={submitting}
                          className="h-12 bg-white hover:bg-indigo-50 text-indigo-600 border-2 border-indigo-100 font-black uppercase text-[10px] tracking-widest rounded-xl px-8 shadow-sm flex items-center gap-3"
                        >
-                         <Save className="h-4 w-4" /> Simpan Draft
+                          <Save className="h-4 w-4" /> {REPORTING_DETAIL_LABELS.actions.saveDraft}
                        </Button>
                        <Button 
                          onClick={handleGenerateLHU}
                          disabled={submitting}
                          className="h-14 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-[10px] tracking-[2px] rounded-xl px-8 shadow-xl shadow-indigo-900/20 flex items-center gap-3"
                        >
-                         Preview LHU <Eye className="h-4 w-4" />
+                          {REPORTING_DETAIL_LABELS.actions.preview} <Eye className="h-4 w-4" />
                        </Button>
                     </div>
                  </div>
@@ -472,7 +476,7 @@ export default function ReportingJobDetailPage({ params }: { params: Promise<{ i
         <DialogContent className="sm:max-w-3xl rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl">
           <div className="bg-indigo-950 p-10 text-white text-center relative">
             <div className="relative z-10 space-y-2">
-               <DialogTitle className="text-2xl font-black uppercase tracking-tight">Draf Laporan Hasil Uji</DialogTitle>
+                <DialogTitle className="text-2xl font-black uppercase tracking-tight">{REPORTING_DETAIL_LABELS.actions.generateTitle}</DialogTitle>
                <p className="text-indigo-400 text-[10px] font-bold uppercase tracking-widest">Digital Certificate Verification Ready</p>
             </div>
           </div>
@@ -488,15 +492,15 @@ export default function ReportingJobDetailPage({ params }: { params: Promise<{ i
                   }}
                   className="h-16 rounded-2xl border-2 border-slate-100 font-black text-xs uppercase tracking-widest text-slate-600"
                 >
-                   <Printer className="h-4 w-4 mr-2" /> Full Document
+                    <Printer className="h-4 w-4 mr-2" /> {REPORTING_DETAIL_LABELS.actions.viewDocument}
                 </Button>
                 <Button 
                   onClick={handlePublishWithLHU}
                   disabled={submitting}
                   className="h-16 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl shadow-emerald-900/20 flex items-center justify-center gap-3"
                 >
-                   TERBITKAN SEKARANG <Send className="h-4 w-4" />
-                </Button>
+                    {REPORTING_DETAIL_LABELS.actions.publish} <Send className="h-4 w-4" />
+                 </Button>
              </div>
           </div>
         </DialogContent>

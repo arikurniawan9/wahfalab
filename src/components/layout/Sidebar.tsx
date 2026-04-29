@@ -30,6 +30,7 @@ import {
   Image as ImageIcon,
   Newspaper,
   Mail,
+  AlertCircle,
   ListTree,
   Activity,
   Database,
@@ -181,6 +182,47 @@ export const fieldOfficerMenuItems = [
   }
 ];
 
+export const analystMenuItems = [
+  {
+    id: "overview",
+    group: "Ringkasan",
+    icon: LayoutDashboard,
+    items: [
+      { icon: LayoutDashboard, label: "Beranda", href: "/analyst", exact: true, color: "text-sky-400", bgColor: "bg-sky-500/10" },
+    ]
+  },
+  {
+    id: "analysis",
+    group: "Operasional Analis",
+    icon: FlaskConical,
+    items: [
+      { icon: FlaskConical, label: "Antrean Analisis", href: "/analyst/jobs", color: "text-violet-400", bgColor: "bg-violet-500/10" },
+      { icon: History, label: "Riwayat Analisis", href: "/analyst/history", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
+    ]
+  },
+];
+
+export const reportingMenuItems = [
+  {
+    id: "overview",
+    group: "Ringkasan",
+    icon: LayoutDashboard,
+    items: [
+      { icon: LayoutDashboard, label: "Arsip LHU", href: "/reporting", exact: true, color: "text-sky-400", bgColor: "bg-sky-500/10" },
+    ]
+  },
+  {
+    id: "reporting",
+    group: "Operasional Reporting",
+    icon: FileText,
+    items: [
+      { icon: FileText, label: "Antrean Reporting", href: "/reporting/jobs", color: "text-violet-400", bgColor: "bg-violet-500/10" },
+      { icon: AlertCircle, label: "Direct LHU", href: "/reporting/direct-requests", color: "text-amber-400", bgColor: "bg-amber-500/10" },
+      { icon: BookOpen, label: "Baku Mutu", href: "/reporting/regulations", color: "text-blue-400", bgColor: "bg-blue-500/10" },
+    ]
+  },
+];
+
 export const financeMenuItems = () => [
   {
     id: "finance",
@@ -252,6 +294,10 @@ export function Sidebar({ className }: { className?: string }) {
       ? operatorMenuItems
       : role === 'field_officer'
         ? fieldOfficerMenuItems
+      : role === 'analyst'
+        ? analystMenuItems
+      : role === 'reporting'
+        ? reportingMenuItems
       : role === 'finance'
         ? financeMenuItems()
         : [];

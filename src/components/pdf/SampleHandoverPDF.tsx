@@ -1,5 +1,12 @@
-import React from 'react';
-import { Document, Page, Text, View, StyleSheet, Image, Font } from '@react-pdf/renderer';
+import React from "react";
+import {
+  Document,
+  Page,
+  Text,
+  View,
+  StyleSheet,
+  Image,
+} from "@react-pdf/renderer";
 
 interface CompanyProfile {
   company_name: string;
@@ -10,272 +17,436 @@ interface CompanyProfile {
   tagline?: string | null;
 }
 
+const getBaseUrl = () => {
+  if (typeof window !== "undefined") return window.location.origin;
+  return process.env.NEXTAUTH_URL || "http://localhost:3000";
+};
+
+const resolveAssetUrl = (url?: string | null) => {
+  if (!url) return null;
+  return url.startsWith("/") ? `${getBaseUrl()}${url}` : url;
+};
+
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 40,
-    paddingBottom: 60,
-    paddingLeft: 50,
-    paddingRight: 50,
-    fontSize: 10,
-    fontFamily: 'Helvetica',
-    lineHeight: 1.4,
-    color: '#1a1a1a'
+    paddingTop: 24,
+    paddingBottom: 34,
+    paddingLeft: 46,
+    paddingRight: 46,
+    fontSize: 9,
+    fontFamily: "Helvetica",
+    lineHeight: 1.35,
+    color: "#0f172a",
   },
   header: {
     marginBottom: 10,
-    borderBottomWidth: 2,
-    borderBottomColor: '#000',
-    borderBottomStyle: 'solid',
     paddingBottom: 5,
-    position: 'relative'
-  },
-  headerDoubleLine: {
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#000',
-    borderBottomStyle: 'solid',
-    marginTop: 1,
-    width: '100%'
+    borderBottom: "2pt solid #020617",
   },
   headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 5
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 2,
   },
   logoContainer: {
-    width: 65,
-    marginRight: 15
+    width: 70,
+    marginRight: 15,
   },
   logoImage: {
-    width: 60,
-    height: 60,
-    objectFit: 'contain'
+    width: 65,
+    height: 65,
+    objectFit: "contain",
+  },
+  logoFallback: {
+    width: 65,
+    height: 65,
+    borderRadius: 8,
+    border: "1.5pt solid #047857",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ecfdf5",
+  },
+  logoFallbackText: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#047857",
   },
   companyInfoContainer: {
     flex: 1,
-    textAlign: 'left'
+    textAlign: "center",
+    paddingRight: 70,
   },
   companyName: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    marginBottom: 2
+    fontSize: 15,
+    fontWeight: "bold",
+    textTransform: "uppercase",
+    marginBottom: 2,
+    color: "#064e3b",
   },
   companyTagline: {
-    fontSize: 9,
-    fontStyle: 'italic',
-    marginBottom: 2
+    fontSize: 8,
+    fontWeight: "bold",
+    color: "#059669",
+    marginBottom: 2,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
   },
   companyAddress: {
-    fontSize: 8,
-    color: '#333'
+    fontSize: 7.5,
+    color: "#475569",
+    lineHeight: 1.2,
+  },
+  titleContainer: {
+    marginTop: 14,
+    marginBottom: 10,
+    alignItems: "center",
   },
   title: {
-    textAlign: 'center',
     fontSize: 12,
-    fontWeight: 'bold',
-    marginTop: 15,
-    marginBottom: 2,
-    textDecoration: 'underline'
+    fontWeight: "bold",
+    textDecoration: "underline",
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
+    color: "#020617",
   },
   docNumber: {
-    textAlign: 'center',
-    fontSize: 10,
-    marginBottom: 20
+    fontSize: 9,
+    marginTop: 3,
+    color: "#334155",
+  },
+  metaStrip: {
+    flexDirection: "row",
+    marginBottom: 12,
+    borderRadius: 10,
+    border: "1pt solid #d1fae5",
+    backgroundColor: "#ecfdf5",
+    overflow: "hidden",
+  },
+  metaCell: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRight: "1pt solid #d1fae5",
+  },
+  metaCellLast: {
+    borderRight: "0pt solid #d1fae5",
+  },
+  metaLabel: {
+    fontSize: 6.5,
+    fontWeight: "bold",
+    textTransform: "uppercase",
+    color: "#059669",
+    marginBottom: 2,
+    letterSpacing: 0.6,
+  },
+  metaValue: {
+    fontSize: 8,
+    fontWeight: "bold",
+    color: "#064e3b",
+  },
+  paragraph: {
+    fontSize: 9.2,
+    color: "#1e293b",
+    textAlign: "justify",
+    marginBottom: 10,
   },
   section: {
-    marginBottom: 12
+    marginBottom: 10,
+    borderRadius: 10,
+    border: "1pt solid #e2e8f0",
+    overflow: "hidden",
+  },
+  sectionHeader: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: "#064e3b",
   },
   sectionTitle: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    marginBottom: 5,
-    textDecoration: 'underline',
-    textTransform: 'uppercase'
+    fontSize: 8,
+    fontWeight: "bold",
+    color: "#ffffff",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  sectionBody: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: "#ffffff",
   },
   row: {
-    flexDirection: 'row',
-    marginBottom: 3
+    flexDirection: "row",
+    minHeight: 18,
+    borderBottom: "0.5pt solid #f1f5f9",
+    paddingVertical: 3,
+  },
+  rowLast: {
+    borderBottom: "0pt solid #ffffff",
   },
   label: {
-    width: 130,
-    fontSize: 10
+    width: 135,
+    fontSize: 8.2,
+    color: "#64748b",
+    fontWeight: "bold",
   },
   separator: {
-    width: 15,
-    textAlign: 'center'
+    width: 12,
+    fontSize: 8.2,
+    color: "#94a3b8",
   },
   value: {
     flex: 1,
-    fontSize: 10,
-    fontWeight: 'bold'
+    fontSize: 8.6,
+    color: "#0f172a",
+    fontWeight: "bold",
+  },
+  declarationBox: {
+    marginTop: 2,
+    marginBottom: 12,
+    padding: 10,
+    borderRadius: 10,
+    border: "1pt solid #fde68a",
+    backgroundColor: "#fffbeb",
+  },
+  declarationText: {
+    fontSize: 8.5,
+    color: "#78350f",
+    textAlign: "justify",
   },
   signatureSection: {
-    marginTop: 40,
-    flexDirection: 'row',
-    justifyContent: 'space-between'
+    marginTop: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 20,
   },
   signatureBox: {
-    width: 200,
-    textAlign: 'center'
+    width: 220,
+    minHeight: 116,
+    textAlign: "center",
+    borderRadius: 12,
+    border: "1pt solid #e2e8f0",
+    paddingTop: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "#ffffff",
+  },
+  signatureLocation: {
+    fontSize: 8,
+    color: "#334155",
+    marginBottom: 5,
   },
   signatureRole: {
-    fontSize: 10,
-    marginBottom: 50
+    fontSize: 8,
+    fontWeight: "bold",
+    color: "#064e3b",
+    textTransform: "uppercase",
+  },
+  signatureSubRole: {
+    fontSize: 7,
+    color: "#64748b",
+    marginTop: 2,
+  },
+  signatureSpace: {
+    height: 38,
   },
   signatureName: {
-    fontWeight: 'bold',
-    fontSize: 10,
-    textDecoration: 'underline'
+    fontWeight: "bold",
+    fontSize: 8.5,
+    color: "#020617",
+    textDecoration: "underline",
+  },
+  signatureHint: {
+    fontSize: 6.8,
+    color: "#94a3b8",
+    marginTop: 2,
   },
   footer: {
-    position: 'absolute',
-    bottom: 30,
-    left: 50,
-    right: 50,
-    fontSize: 8,
-    color: '#666',
-    textAlign: 'center',
-    fontStyle: 'italic',
-    borderTopWidth: 0.5,
-    borderTopColor: '#ccc',
-    paddingTop: 5
-  }
+    position: "absolute",
+    bottom: 18,
+    left: 46,
+    right: 46,
+    paddingTop: 6,
+    borderTop: "0.75pt solid #cbd5e1",
+    textAlign: "center",
+  },
+  footerText: {
+    fontSize: 6.8,
+    color: "#64748b",
+  },
+  footerStrong: {
+    fontSize: 7,
+    color: "#064e3b",
+    fontWeight: "bold",
+  },
 });
 
-export const SampleHandoverPDF = ({ 
-  data, 
+export const SampleHandoverPDF = ({
+  data,
   company = {
-    company_name: 'WahfaLab',
-    address: 'Jl. Laboratorium No. 123, Jakarta',
-    phone: '(021) 1234-5678',
-    email: 'info@wahfalab.com',
-    logo_url: null,
-    tagline: 'Laboratorium Analisis & Kalibrasi'
-  }
-}: { 
-  data: any, 
-  company?: CompanyProfile 
+    company_name: "WahfaLab",
+    address: "Jl. Laboratorium No. 123, Jakarta",
+    phone: "(021) 1234-5678",
+    email: "info@wahfalab.com",
+    logo_url: "/logo-wahfalab.png",
+    tagline: "Laboratorium Analisis & Kalibrasi",
+  },
+}: {
+  data: any;
+  company?: CompanyProfile;
 }) => {
-  const dateStr = new Date(data.created_at || data.received_at).toLocaleDateString('id-ID', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+  const createdAt = data.created_at || data.received_at || new Date().toISOString();
+  const dateStr = new Date(createdAt).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
   });
+  const timeStr = new Date(createdAt).toLocaleTimeString("id-ID", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const logoUrl = resolveAssetUrl(company.logo_url || "/logo-wahfalab.png");
+  const quotation = data.job_order?.quotation || data.quotation || {};
+  const profile = quotation.profile || data.profile || {};
+  const customerName =
+    profile.company_name ||
+    profile.full_name ||
+    data.customer_name ||
+    "-";
+  const quotationNumber = quotation.quotation_number || data.quotation_number || "-";
+  const trackingCode = data.job_order?.tracking_code || data.tracking_code || "-";
 
   return (
-    <Document title={`BAST Sampel - ${data.handover_number}`}>
+    <Document title={`BAST Sampel - ${data.handover_number || trackingCode}`}>
       <Page size="A4" style={styles.page}>
-        {/* Header (Kop Surat) */}
         <View style={styles.header}>
           <View style={styles.headerRow}>
             <View style={styles.logoContainer}>
-              {company.logo_url ? (
-                <Image
-                  source={{ 
-                    uri: company.logo_url.startsWith('/') 
-                      ? `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}${company.logo_url}`
-                      : company.logo_url 
-                  }}
-                  style={styles.logoImage}
-                />
+              {logoUrl ? (
+                <Image source={{ uri: logoUrl }} style={styles.logoImage} />
               ) : (
-                <View style={{ width: 60, height: 60, backgroundColor: '#f5f5f5', borderRadius: 4, alignItems: 'center', justifyContent: 'center', border: '1px solid #ddd' }}>
-                  <Text style={{ fontSize: 20 }}>🧪</Text>
+                <View style={styles.logoFallback}>
+                  <Text style={styles.logoFallbackText}>W</Text>
                 </View>
               )}
             </View>
             <View style={styles.companyInfoContainer}>
               <Text style={styles.companyName}>{company.company_name}</Text>
-              {company.tagline && <Text style={styles.companyTagline}>{company.tagline}</Text>}
-              <Text style={styles.companyAddress}>{company.address}</Text>
+              <Text style={styles.companyTagline}>
+                {company.tagline || "Laboratorium Analisis Lingkungan"}
+              </Text>
+              <Text style={styles.companyAddress}>{company.address || "-"}</Text>
               <Text style={styles.companyAddress}>
-                {company.phone && `Telp: ${company.phone}`}
-                {company.email && ` | Email: ${company.email}`}
+                {company.phone ? `Telp: ${company.phone}` : ""}
+                {company.email ? ` | Email: ${company.email}` : ""}
               </Text>
             </View>
           </View>
-          <View style={styles.headerDoubleLine} />
         </View>
 
-        {/* Judul Dokumen */}
-        <View style={{ marginTop: 10 }}>
-          <Text style={styles.title}>BERITA ACARA SERAH TERIMA SAMPEL</Text>
-          <Text style={styles.docNumber}>Nomor: {data.handover_number}</Text>
+        <View style={styles.titleContainer}>
+          <Text style={styles.title}>Berita Acara Serah Terima Sampel</Text>
+          <Text style={styles.docNumber}>Nomor: {data.handover_number || "-"}</Text>
         </View>
 
-        <Text style={{ marginBottom: 15, marginTop: 10 }}>
-          Pada hari ini, tanggal {dateStr} WIB, telah dilakukan serah terima sampel laboratorium untuk pengujian dengan rincian sebagai berikut:
+        <View style={styles.metaStrip}>
+          <View style={styles.metaCell}>
+            <Text style={styles.metaLabel}>Tanggal Terima</Text>
+            <Text style={styles.metaValue}>{dateStr}</Text>
+          </View>
+          <View style={styles.metaCell}>
+            <Text style={styles.metaLabel}>Waktu</Text>
+            <Text style={styles.metaValue}>{timeStr} WIB</Text>
+          </View>
+          <View style={[styles.metaCell, styles.metaCellLast]}>
+            <Text style={styles.metaLabel}>Status Dokumen</Text>
+            <Text style={styles.metaValue}>Tervalidasi Sistem</Text>
+          </View>
+        </View>
+
+        <Text style={styles.paragraph}>
+          Pada tanggal tersebut di atas telah dilakukan serah terima sampel dari petugas
+          lapangan kepada analis laboratorium untuk diproses sesuai ruang lingkup pengujian
+          yang tercatat pada sistem manajemen laboratorium.
         </Text>
 
-        {/* Rincian Pekerjaan */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>I. INFORMASI PEKERJAAN</Text>
-          <View style={{ marginLeft: 10 }}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>I. Informasi Pekerjaan</Text>
+          </View>
+          <View style={styles.sectionBody}>
             <View style={styles.row}>
               <Text style={styles.label}>Kode Tracking</Text>
               <Text style={styles.separator}>:</Text>
-              <Text style={styles.value}>{data.job_order?.tracking_code}</Text>
+              <Text style={styles.value}>{trackingCode}</Text>
             </View>
             <View style={styles.row}>
-              <Text style={styles.label}>Nama Klien / Perusahaan</Text>
+              <Text style={styles.label}>Nomor Penawaran</Text>
               <Text style={styles.separator}>:</Text>
-              <Text style={styles.value}>
-                {data.job_order?.quotation?.profile?.company_name || data.job_order?.quotation?.profile?.full_name || '-'}
-              </Text>
+              <Text style={styles.value}>{quotationNumber}</Text>
             </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>ID Penawaran</Text>
+            <View style={[styles.row, styles.rowLast]}>
+              <Text style={styles.label}>Klien / Perusahaan</Text>
               <Text style={styles.separator}>:</Text>
-              <Text style={styles.value}>{data.job_order?.quotation?.quotation_number}</Text>
+              <Text style={styles.value}>{customerName}</Text>
             </View>
           </View>
         </View>
 
-        {/* Rincian Sampel */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>II. KONDISI SAMPEL</Text>
-          <View style={{ marginLeft: 10 }}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>II. Rincian Kondisi Sampel</Text>
+          </View>
+          <View style={styles.sectionBody}>
             <View style={styles.row}>
-              <Text style={styles.label}>Jumlah Wadah/Titik</Text>
+              <Text style={styles.label}>Jumlah Wadah / Titik</Text>
               <Text style={styles.separator}>:</Text>
-              <Text style={styles.value}>{data.sample_qty} Unit/Botol</Text>
+              <Text style={styles.value}>{data.sample_qty || "-"} Unit/Botol</Text>
             </View>
             <View style={styles.row}>
               <Text style={styles.label}>Kondisi Fisik / Segel</Text>
               <Text style={styles.separator}>:</Text>
-              <Text style={styles.value}>{data.sample_condition}</Text>
+              <Text style={styles.value}>{data.sample_condition || "-"}</Text>
             </View>
-            <View style={styles.row}>
+            <View style={[styles.row, styles.rowLast]}>
               <Text style={styles.label}>Catatan Tambahan</Text>
               <Text style={styles.separator}>:</Text>
-              <Text style={styles.value}>{data.sample_notes || data.notes || '-'}</Text>
+              <Text style={styles.value}>{data.sample_notes || data.notes || "-"}</Text>
             </View>
           </View>
         </View>
 
-        <Text style={{ marginTop: 10 }}>
-          Demikian Berita Acara Serah Terima ini dibuat untuk dipergunakan sebagaimana mestinya sebagai dasar dimulainya pengujian di laboratorium.
-        </Text>
+        <View style={styles.declarationBox}>
+          <Text style={styles.declarationText}>
+            Dengan ditandatanganinya dokumen ini, sampel dinyatakan telah diterima oleh
+            laboratorium untuk dilakukan proses analisis. Dokumen ini menjadi dasar
+            dimulainya pekerjaan pengujian dan tercatat secara elektronik di sistem WahfaLab.
+          </Text>
+        </View>
 
-        {/* Tanda Tangan */}
         <View style={styles.signatureSection}>
           <View style={styles.signatureBox}>
-            <Text style={styles.signatureRole}>Yang Menyerahkan, {'\n'}(Petugas Lapangan)</Text>
-            <View style={{ height: 50 }} />
-            <Text style={styles.signatureName}>{data.sender?.full_name || '-'}</Text>
+            <Text style={styles.signatureLocation}>Cianjur, {dateStr}</Text>
+            <Text style={styles.signatureRole}>Yang Menyerahkan</Text>
+            <Text style={styles.signatureSubRole}>Petugas Lapangan</Text>
+            <View style={styles.signatureSpace} />
+            <Text style={styles.signatureName}>{data.sender?.full_name || "-"}</Text>
+            <Text style={styles.signatureHint}>Nama jelas dan tanda tangan</Text>
           </View>
+
           <View style={styles.signatureBox}>
-            <Text style={styles.signatureRole}>Yang Menerima, {'\n'}(Analis Laboratorium)</Text>
-            <View style={{ height: 50 }} />
-            <Text style={styles.signatureName}>{data.receiver?.full_name || '-'}</Text>
+            <Text style={styles.signatureLocation}>Cianjur, {dateStr}</Text>
+            <Text style={styles.signatureRole}>Yang Menerima</Text>
+            <Text style={styles.signatureSubRole}>Analis Laboratorium</Text>
+            <View style={styles.signatureSpace} />
+            <Text style={styles.signatureName}>{data.receiver?.full_name || "-"}</Text>
+            <Text style={styles.signatureHint}>Nama jelas dan tanda tangan</Text>
           </View>
         </View>
 
         <View style={styles.footer}>
-          <Text>WahfaLab LIMS Digital Document | Cianjur, Jawa Barat</Text>
-          <Text>Dokumen ini sah dan diterbitkan secara elektronik melalui sistem manajemen laboratorium.</Text>
+          <Text style={styles.footerStrong}>{company.company_name} - Dokumen Digital Laboratorium</Text>
+          <Text style={styles.footerText}>
+            Dokumen ini diterbitkan melalui sistem manajemen laboratorium dan dapat diverifikasi
+            berdasarkan nomor BAST serta kode tracking pekerjaan.
+          </Text>
         </View>
       </Page>
     </Document>

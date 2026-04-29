@@ -25,7 +25,8 @@ import {
   ChevronRight,
   AlertCircle,
   Truck,
-  FileText
+  FileText,
+  Download
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -46,6 +47,7 @@ import { getProfile } from "@/lib/actions/auth";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { FIELD_SAMPLING_STATUS_LABELS, FIELD_TRAVEL_ORDER_LABELS } from "@/lib/constants/workflow-copy";
 import {
   Dialog,
   DialogContent,
@@ -57,10 +59,10 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 
 const statusConfig: Record<string, { label: string; color: string; bg: string; icon: any; progress: number }> = {
-  pending: { label: 'Tugas Baru', color: 'text-amber-600', bg: 'bg-amber-50', icon: Clock, progress: 20 },
-  in_progress: { label: 'Progress Sampling', color: 'text-blue-600', bg: 'bg-blue-50', icon: MapPin, progress: 60 },
-  completed: { label: 'Sampling Selesai', color: 'text-emerald-600', bg: 'bg-emerald-50', icon: CheckCircle2, progress: 100 },
-  cancelled: { label: 'Ditolak', color: 'text-rose-600', bg: 'bg-rose-50', icon: AlertCircle, progress: 0 }
+  pending: { label: FIELD_SAMPLING_STATUS_LABELS.newTask, color: 'text-amber-600', bg: 'bg-amber-50', icon: Clock, progress: 20 },
+  in_progress: { label: FIELD_SAMPLING_STATUS_LABELS.activeSampling, color: 'text-blue-600', bg: 'bg-blue-50', icon: MapPin, progress: 60 },
+  completed: { label: FIELD_SAMPLING_STATUS_LABELS.samplingDone, color: 'text-emerald-600', bg: 'bg-emerald-50', icon: CheckCircle2, progress: 100 },
+  cancelled: { label: FIELD_SAMPLING_STATUS_LABELS.rejected, color: 'text-rose-600', bg: 'bg-rose-50', icon: AlertCircle, progress: 0 }
 };
 
 function getGreetingByHour() {
@@ -146,10 +148,12 @@ export default function FieldDashboard() {
   };
   const urgentCount = stats.pending + stats.in_progress;
 
-  const prioritizedAssignment = assignments.find((a: any) => a.status === "pending")
-    || assignments.find((a: any) => a.status === "in_progress")
+  const prioritizedAssignment = assignments.find((a: any) => a.status === "in_progress")
+    || assignments.find((a: any) => a.status === "pending")
     || null;
-  const activeTravelOrder = travelOrders[0] || null;
+  const activeTravelOrder = travelOrders.find((travelOrder: any) =>
+    ["pending", "in_progress"].includes(travelOrder.assignment?.status)
+  ) || null;
 
   const openAcceptModal = (assignment: any) => {
     setAcceptingAssignment(assignment);
@@ -228,7 +232,7 @@ export default function FieldDashboard() {
             onClick={() => router.push(`/field/assignments/${prioritizedAssignment.id}`)}
             className="mt-3 w-full h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-widest"
           >
-            {prioritizedAssignment.status === "pending" ? "Mulai Tugas Berikutnya" : "Lanjutkan Sampling"}
+            {prioritizedAssignment.status === "pending" ? FIELD_SAMPLING_STATUS_LABELS.startNext : FIELD_SAMPLING_STATUS_LABELS.continueSampling}
           </Button>
         </div>
       )}
@@ -239,9 +243,9 @@ export default function FieldDashboard() {
             <div className="h-11 w-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-900/20 shrink-0">
               <FileText className="h-5 w-5" />
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">Surat Tugas Aktif</p>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-1">
+                <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">{FIELD_TRAVEL_ORDER_LABELS.active}</p>
                 <span
                   className={cn(
                     "inline-flex items-center rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-widest border",
@@ -250,7 +254,7 @@ export default function FieldDashboard() {
                       : "bg-amber-50 text-amber-700 border-amber-100"
                   )}
                 >
-                  {activeTravelOrder.pdf_url ? "Siap Buka" : "Belum PDF"}
+                  {activeTravelOrder.pdf_url ? FIELD_TRAVEL_ORDER_LABELS.ready : FIELD_TRAVEL_ORDER_LABELS.missing}
                 </span>
               </div>
               <p className="text-sm font-black text-slate-900 leading-tight truncate">
@@ -262,16 +266,26 @@ export default function FieldDashboard() {
               <p className="text-[11px] text-slate-500 mt-1 line-clamp-1">
                 {activeTravelOrder.destination || activeTravelOrder.assignment?.location || "Surat tugas tersedia"}
               </p>
-              <Button
-                onClick={() => router.push(`/field/travel-orders/${activeTravelOrder.id}/preview`)}
-                className="mt-3 h-10 w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-[10px] uppercase tracking-widest"
-              >
-                Lihat Surat Tugas
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+               <div className="mt-3 grid grid-cols-2 gap-2">
+                  <Button
+                    onClick={() => router.push(`/field/travel-orders/${activeTravelOrder.id}/preview`)}
+                    className="h-10 w-full rounded-xl !bg-blue-600 hover:!bg-blue-700 !text-white !border !border-blue-500 font-black text-[10px] uppercase tracking-widest"
+                  >
+                    {FIELD_TRAVEL_ORDER_LABELS.view}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => window.open(`/field/travel-orders/${activeTravelOrder.id}/preview?download=1`, "_blank")}
+                    className="h-10 w-full rounded-xl !border-blue-200 !bg-white !text-blue-700 hover:!bg-blue-50 font-black text-[10px] uppercase tracking-widest"
+                  >
+                    {FIELD_TRAVEL_ORDER_LABELS.download} <Download className="ml-2 h-3.5 w-3.5" />
+                  </Button>
+                </div>
+             </div>
+           </div>
+         </div>
+       )}
 
       {/* Modern Stats Grid */}
       <div className="hidden md:grid md:grid-cols-4 gap-4 mb-8">
@@ -302,9 +316,9 @@ export default function FieldDashboard() {
               <SelectContent className="rounded-2xl border border-slate-100">
                 <SelectItem value="all" className="font-bold text-xs">Semua ({stats.total})</SelectItem>
                 <SelectItem value="urgent" className="font-bold text-xs">Urgent ({urgentCount})</SelectItem>
-                <SelectItem value="pending" className="font-bold text-xs">Pending ({stats.pending})</SelectItem>
-                <SelectItem value="in_progress" className="font-bold text-xs">Aktif ({stats.in_progress})</SelectItem>
-                <SelectItem value="completed" className="font-bold text-xs">Selesai ({stats.completed})</SelectItem>
+                <SelectItem value="pending" className="font-bold text-xs">{FIELD_SAMPLING_STATUS_LABELS.pending} ({stats.pending})</SelectItem>
+                <SelectItem value="in_progress" className="font-bold text-xs">{FIELD_SAMPLING_STATUS_LABELS.activeSampling} ({stats.in_progress})</SelectItem>
+                <SelectItem value="completed" className="font-bold text-xs">{FIELD_SAMPLING_STATUS_LABELS.completed} ({stats.completed})</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -327,7 +341,7 @@ export default function FieldDashboard() {
                 onClick={() => router.push(`/field/assignments/${prioritizedAssignment.id}`)}
                 className="h-9 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[9px] uppercase"
               >
-                {prioritizedAssignment.status === "pending" ? "Mulai" : "Lanjut"}
+                {prioritizedAssignment.status === "pending" ? FIELD_SAMPLING_STATUS_LABELS.startShort : FIELD_SAMPLING_STATUS_LABELS.continueShort}
               </Button>
             </div>
           </div>
@@ -402,7 +416,7 @@ export default function FieldDashboard() {
                             </span>
                             <Badge className={cn("text-[8px] md:text-[9px] font-black uppercase px-2 md:px-3 py-1 rounded-full border-none shadow-sm whitespace-nowrap", config.bg, config.color)}>
                               <StatusIcon className="h-3 w-3 mr-1.5" />
-                              {isPending ? 'Tugas Baru' : config.label}
+                              {isPending ? FIELD_SAMPLING_STATUS_LABELS.newTask : config.label}
                             </Badge>
                           </div>
                           <h4 className="font-black text-slate-800 text-sm md:text-lg leading-tight group-hover:text-emerald-700 transition-colors line-clamp-2">
@@ -496,11 +510,11 @@ export default function FieldDashboard() {
                                 {new Date(assignment.scheduled_date).toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long' })}
                               </p>
                            </div>
-                           <div className="flex items-center gap-1.5 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
-                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                              <p className="text-[9px] font-black text-emerald-600 uppercase italic">Live Operational Update</p>
-                           </div>
-                        </div>
+                            <div className="flex items-center gap-1.5 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
+                               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                               <p className="text-[9px] font-black text-emerald-600 uppercase italic">Pembaruan Operasional Langsung</p>
+                            </div>
+                         </div>
                       </div>
                     )}
                   </div>

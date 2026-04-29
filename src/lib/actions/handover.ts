@@ -54,7 +54,7 @@ export async function createSampleHandover(data: {
       return { error: 'Data petugas lapangan tidak ditemukan untuk serah terima ini' }
     }
 
-    const handoverNumber = await generateHandoverNumber("BAST");
+    const handoverNumber = await generateHandoverNumber();
 
     const handover = await prisma.sampleHandover.create({
       data: {

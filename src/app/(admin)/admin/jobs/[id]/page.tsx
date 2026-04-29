@@ -34,27 +34,28 @@ import { getFieldOfficers, getJobOrderById, sendTravelOrderToField } from "@/lib
 import { getFieldAssistants } from "@/lib/actions/field-assistant";
 import { cn } from "@/lib/utils";
 import { getDisplayJobNotes } from "@/lib/job-notes";
+import { ADMIN_STATUS_LABELS, ADMIN_WORKFLOW_LABELS } from "@/lib/constants/workflow-copy";
 
 const statusLabel: Record<string, string> = {
-  scheduled: "Terjadwal",
-  sampling: "Sampling",
-  analysis_ready: "Siap Analisis",
-  analysis: "Analisis",
-  analysis_done: "Selesai Analisis",
-  reporting: "Pelaporan",
-  completed: "Selesai",
-  pending_payment: "Menunggu Pembayaran",
-  paid: "Lunas",
+  scheduled: ADMIN_STATUS_LABELS.scheduled,
+  sampling: ADMIN_STATUS_LABELS.sampling,
+  analysis_ready: ADMIN_STATUS_LABELS.analysis_ready,
+  analysis: ADMIN_STATUS_LABELS.analysis,
+  analysis_done: ADMIN_STATUS_LABELS.analysis_done,
+  reporting: ADMIN_STATUS_LABELS.reporting,
+  completed: ADMIN_STATUS_LABELS.completed,
+  pending_payment: ADMIN_STATUS_LABELS.pending_payment,
+  paid: ADMIN_STATUS_LABELS.paid,
 };
 
 const workflowSteps = [
-  { key: "scheduled", label: "Penjadwalan" },
-  { key: "sampling", label: "Sampling" },
-  { key: "analysis_ready", label: "Siap Analisis" },
-  { key: "analysis", label: "Analisis" },
-  { key: "analysis_done", label: "Selesai Analisis" },
-  { key: "reporting", label: "Pelaporan" },
-  { key: "completed", label: "Selesai" }
+  { key: "scheduled", label: ADMIN_WORKFLOW_LABELS.scheduled },
+  { key: "sampling", label: ADMIN_WORKFLOW_LABELS.sampling },
+  { key: "analysis_ready", label: ADMIN_WORKFLOW_LABELS.analysis_ready },
+  { key: "analysis", label: ADMIN_WORKFLOW_LABELS.analysis },
+  { key: "analysis_done", label: ADMIN_WORKFLOW_LABELS.analysis_done },
+  { key: "reporting", label: ADMIN_WORKFLOW_LABELS.reporting },
+  { key: "completed", label: ADMIN_WORKFLOW_LABELS.completed }
 ];
 
 export default function AdminJobDetailPage() {
@@ -238,7 +239,7 @@ export default function AdminJobDetailPage() {
                   <Button
                     onClick={handleSendTravelOrder}
                     disabled={sendingTravelOrder}
-                    className="h-11 rounded-xl px-5 bg-white text-slate-900 hover:bg-slate-100 font-black disabled:opacity-60"
+                    className="h-11 rounded-xl px-5 !bg-indigo-600 hover:!bg-indigo-700 !text-white !border !border-indigo-500 font-black disabled:opacity-60 shadow-sm"
                   >
                     <Send className="h-4 w-4 mr-2" />
                     {sendingTravelOrder ? "Mengirim..." : "Kirim Surat Tugas"}

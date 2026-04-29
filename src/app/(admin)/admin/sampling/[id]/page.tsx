@@ -29,6 +29,7 @@ import Link from "next/link";
 import { getAssignmentById } from "@/lib/actions/sampling";
 import { deleteJobOrderWithPhotos } from "@/lib/actions/jobs";
 import { cn } from "@/lib/utils";
+import { FIELD_SAMPLING_STATUS_LABELS } from "@/lib/constants/workflow-copy";
 // TODO: Replace supabase storage uploads with API endpoints/file upload utility
 // import { createClient } from '@/lib/supabase/client';
 import {
@@ -186,10 +187,10 @@ export default function AdminSamplingDetailPage() {
   };
 
   const statusLabels: Record<string, string> = {
-    pending: "Menunggu",
-    in_progress: "Dalam Proses",
-    completed: "Selesai",
-    cancelled: "Dibatalkan"
+    pending: FIELD_SAMPLING_STATUS_LABELS.pending,
+    in_progress: FIELD_SAMPLING_STATUS_LABELS.in_progress,
+    completed: FIELD_SAMPLING_STATUS_LABELS.completed,
+    cancelled: FIELD_SAMPLING_STATUS_LABELS.cancelled
   };
   const quotationTitle =
     assignment.job_order.quotation.title ||

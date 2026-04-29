@@ -1,5 +1,6 @@
 import { CheckCircle2, Clock, FileText, TestTube, Truck } from "lucide-react";
 import { StatFilterCard } from "./StatFilterCard";
+import { ADMIN_STATUS_LABELS } from "@/lib/constants/workflow-copy";
 
 type DashboardStats = {
   scheduled: number;
@@ -35,7 +36,7 @@ export function OperatorStatsFilters({
         active={filterStatus === "scheduled"}
       />
       <StatFilterCard
-        title="Sampling"
+        title={ADMIN_STATUS_LABELS.sampling}
         value={stats.sampling}
         icon={Truck}
         color="amber"
@@ -43,7 +44,7 @@ export function OperatorStatsFilters({
         active={filterStatus === "sampling"}
       />
       <StatFilterCard
-        title="Analisis"
+        title={ADMIN_STATUS_LABELS.analysis}
         value={stats.analysis}
         icon={TestTube}
         color="purple"
@@ -51,7 +52,7 @@ export function OperatorStatsFilters({
         active={filterStatus === "analysis"}
       />
       <StatFilterCard
-        title="Pelaporan"
+        title={ADMIN_STATUS_LABELS.reporting}
         value={stats.reporting}
         icon={FileText}
         color="indigo"
@@ -59,7 +60,7 @@ export function OperatorStatsFilters({
         active={filterStatus === "reporting"}
       />
       <StatFilterCard
-        title="Selesai"
+        title={ADMIN_STATUS_LABELS.completed}
         value={stats.completed}
         icon={CheckCircle2}
         color="emerald"

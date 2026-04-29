@@ -46,9 +46,19 @@ export default function FieldTravelOrdersPage() {
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return items;
+    const sorted = [...items].sort((a: any, b: any) => {
+      const aActive = ["pending", "in_progress"].includes(a.assignment?.status) ? 1 : 0;
+      const bActive = ["pending", "in_progress"].includes(b.assignment?.status) ? 1 : 0;
+      if (aActive !== bActive) return bActive - aActive;
 
-    return items.filter((item: any) => {
+      const aDate = a.departure_date ? new Date(a.departure_date).getTime() : 0;
+      const bDate = b.departure_date ? new Date(b.departure_date).getTime() : 0;
+      return bDate - aDate;
+    });
+
+    if (!q) return sorted;
+
+    return sorted.filter((item: any) => {
       const code = item.assignment?.job_order?.tracking_code?.toLowerCase() || "";
       const doc = item.document_number?.toLowerCase() || "";
       const destination = item.destination?.toLowerCase() || "";
@@ -80,7 +90,7 @@ export default function FieldTravelOrdersPage() {
         <div className="bg-white p-2 rounded-xl border border-slate-100">
           <p className="text-[8px] font-black text-slate-400 uppercase">Siap Diunduh</p>
           <p className="text-lg font-black text-emerald-700 leading-none mt-1">
-            {items.filter((item: any) => Boolean(item)).length}
+            {items.filter((item: any) => Boolean(item.pdf_url)).length}
           </p>
         </div>
       </div>
@@ -115,8 +125,13 @@ export default function FieldTravelOrdersPage() {
                         <span className="font-mono text-[9px] font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md">
                           {item.document_number}
                         </span>
-                        <Badge className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border-none">
-                          Surat Tugas
+                        <Badge className={cn(
+                          "text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md border-none",
+                          ["pending", "in_progress"].includes(item.assignment?.status)
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-slate-100 text-slate-500"
+                        )}>
+                          {["pending", "in_progress"].includes(item.assignment?.status) ? "Aktif" : "Arsip"}
                         </Badge>
                       </div>
                       <p className="text-[11px] font-black text-slate-800 truncate">

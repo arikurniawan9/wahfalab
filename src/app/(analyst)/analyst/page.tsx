@@ -207,10 +207,10 @@ export default function AnalystDashboardPage() {
             <Table>
               <TableHeader>
                 <TableRow className="border-none bg-slate-50/30 h-14">
-                  <TableHead className="font-black text-[10px] uppercase text-slate-400 pl-10">Job Identity</TableHead>
-                  <TableHead className="font-black text-[10px] uppercase text-slate-400 text-center">Workflow</TableHead>
-                  <TableHead className="font-black text-[10px] uppercase text-slate-400">Main Scope</TableHead>
-                  <TableHead className="font-black text-[10px] uppercase text-slate-400 text-right pr-10">Control</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase text-slate-400 pl-10">Identitas Job</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase text-slate-400 text-center">Alur Kerja</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase text-slate-400">Ruang Uji</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase text-slate-400 text-right pr-10">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody className="divide-y divide-slate-50">
@@ -233,8 +233,8 @@ export default function AnalystDashboardPage() {
                     sampling: "SAMPLING",
                     analysis_ready: "SIAP UJI",
                     analysis: "ANALISIS",
-                    analysis_done: "HASIL TERBIT",
-                    reporting: "PELAPORAN",
+                    analysis_done: "SIAP REPORTING",
+                    reporting: "DI REPORTING",
                     completed: "SELESAI"
                   };
 
@@ -277,7 +277,7 @@ export default function AnalystDashboardPage() {
                       <TableCell className="text-right pr-10">
                         <Link href={`/analyst/jobs/${job.id}`}>
                           <Button size="sm" className="h-11 px-6 rounded-xl bg-slate-900 hover:bg-emerald-600 text-white font-black text-[10px] uppercase tracking-widest shadow-xl transition-all active:scale-95 gap-3 group/btn">
-                            Proceed <ArrowRight className="h-4 w-4 group-hover/btn:translate-x-1 transition-transform" />
+                            Buka <ArrowRight className="h-4 w-4 group-hover/btn:translate-x-1 transition-transform" />
                           </Button>
                         </Link>
                       </TableCell>
@@ -292,8 +292,8 @@ export default function AnalystDashboardPage() {
                 <div className="absolute inset-0 bg-emerald-500/5 rounded-[2rem] animate-ping group-hover:animate-none" />
                 <Beaker className="h-10 w-10 text-slate-200" />
               </div>
-              <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.3em]">No Pending Analysis</h3>
-              <p className="text-[9px] font-bold text-slate-300 mt-3 uppercase tracking-widest max-w-[200px] mx-auto leading-relaxed">System is synchronized. New tasks will appear after field sampling.</p>
+              <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.3em]">Tidak Ada Antrean</h3>
+              <p className="text-[9px] font-bold text-slate-300 mt-3 uppercase tracking-widest max-w-[200px] mx-auto leading-relaxed">Sistem sudah sinkron. Tugas baru akan muncul setelah sampling lapangan selesai.</p>
             </div>
           )}
         </CardContent>

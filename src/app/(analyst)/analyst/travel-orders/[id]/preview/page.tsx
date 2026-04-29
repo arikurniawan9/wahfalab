@@ -1,60 +1,57 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
-import { useParams, useSearchParams } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
-import { ArrowLeft, Download, FileText, Loader2 } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
+import { pdf, PDFViewer } from "@react-pdf/renderer";
+import { ArrowLeft, Download, FileText, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { getTravelOrderById } from "@/lib/actions/travel-order";
 import { getCompanyProfile } from "@/lib/actions/company";
-import { pdf, PDFViewer } from "@react-pdf/renderer";
 import { TravelOrderPDF } from "@/components/pdf/TravelOrderPDF";
-import { Skeleton } from "@/components/ui/skeleton";
 
-export default function FieldTravelOrderPreviewPage() {
+export default function AnalystTravelOrderPreviewPage() {
   const params = useParams();
-  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
   const [data, setData] = useState<{ travelOrder: any; companyProfile: any }>({
     travelOrder: null,
-    companyProfile: null
+    companyProfile: null,
   });
-  const [generatingPdf, setGeneratingPdf] = useState(false);
-  const autoDownloadTriggeredRef = useRef(false);
 
   useEffect(() => {
     async function loadAllData() {
       setLoading(true);
       try {
-        // OPTIMASI 1: Ambil data secara PARALEL untuk kecepatan maksimal
         const [orderData, companyData] = await Promise.all([
           getTravelOrderById(params.id as string),
-          getCompanyProfile()
+          getCompanyProfile(),
         ]);
 
         if (!orderData) {
           toast.error("Data surat tugas tidak ditemukan");
         }
 
-        // OPTIMASI 2: Proses URL logo/ttd/stempel secara terpusat
-        const origin = typeof window !== 'undefined' ? window.location.origin : '';
+        const origin = typeof window !== "undefined" ? window.location.origin : "";
         const processUrl = (url: string | null) => {
           if (!url) return null;
-          return url.startsWith('http') ? url : `${origin}${url}`;
+          return url.startsWith("http") ? url : `${origin}${url}`;
         };
 
-        const company = companyData ? {
-          ...companyData,
-          logo_url: processUrl(companyData.logo_url) || '/logo-wahfalab.png',
-          signature_url: processUrl(companyData.signature_url),
-          stamp_url: processUrl(companyData.stamp_url),
-        } : null;
+        const company = companyData
+          ? {
+              ...companyData,
+              logo_url: processUrl(companyData.logo_url) || "/logo-wahfalab.png",
+              signature_url: processUrl(companyData.signature_url),
+              stamp_url: processUrl(companyData.stamp_url),
+            }
+          : null;
 
         setData({ travelOrder: orderData, companyProfile: company });
       } catch (error) {
-        console.error('Failed to load data:', error);
-        toast.error("Gagal memuat data");
+        console.error("Failed to load travel order preview:", error);
+        toast.error("Gagal memuat data surat tugas");
       } finally {
         setLoading(false);
       }
@@ -63,7 +60,6 @@ export default function FieldTravelOrderPreviewPage() {
     loadAllData();
   }, [params.id]);
 
-  // OPTIMASI 3: Memoize dokumen PDF agar tidak render ulang saat state lain berubah
   const pdfDocument = useMemo(() => {
     if (!data.travelOrder || !data.companyProfile) return null;
 
@@ -92,9 +88,9 @@ export default function FieldTravelOrderPreviewPage() {
           assignment: {
             field_officer: {
               full_name: fieldOfficer.full_name,
-              email: fieldOfficer.email
+              email: fieldOfficer.email,
             },
-            assistants: assistants,
+            assistants,
             job_order: {
               tracking_code: jobOrder.tracking_code,
               quotation: {
@@ -102,18 +98,18 @@ export default function FieldTravelOrderPreviewPage() {
                 total_amount: quotation.total_amount,
                 profile: {
                   full_name: profile.full_name,
-                  company_name: profile.company_name
+                  company_name: profile.company_name,
                 },
-                items: items
-              }
-            }
+                items,
+              },
+            },
           },
           created_at: travelOrder.created_at,
         }}
         company={companyProfile}
       />
     );
-  }, [data.travelOrder, data.companyProfile]);
+  }, [data.companyProfile, data.travelOrder]);
 
   const handleDownloadPdf = async () => {
     if (!pdfDocument || !data.travelOrder) return;
@@ -122,46 +118,37 @@ export default function FieldTravelOrderPreviewPage() {
     try {
       const blob = await pdf(pdfDocument).toBlob();
       const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = url;
       link.download = `Surat_Tugas-${data.travelOrder.document_number}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      toast.success("✅ Surat tugas berhasil diunduh");
+      toast.success("Surat tugas berhasil diunduh");
     } catch (error) {
-      console.error('PDF generation error:', error);
+      console.error("PDF generation error:", error);
       toast.error("Gagal membuat PDF");
     } finally {
       setGeneratingPdf(false);
     }
   };
 
-  useEffect(() => {
-    if (searchParams.get("download") !== "1") return;
-    if (!pdfDocument || !data.travelOrder) return;
-    if (autoDownloadTriggeredRef.current) return;
-
-    autoDownloadTriggeredRef.current = true;
-    handleDownloadPdf();
-  }, [data.travelOrder, pdfDocument, searchParams]);
-
   if (loading) {
     return (
-      <div className="p-4 md:p-10 max-w-7xl mx-auto flex flex-col items-center justify-center min-h-[60vh]">
-        <Loader2 className="h-12 w-12 text-emerald-500 animate-spin mb-4" />
-        <p className="text-slate-500 font-bold animate-pulse">Menyiapkan Dokumen Digital...</p>
+      <div className="p-4 md:p-10 max-w-7xl mx-auto flex min-h-[60vh] flex-col items-center justify-center">
+        <Loader2 className="mb-4 h-12 w-12 animate-spin text-sky-500" />
+        <p className="animate-pulse font-bold text-slate-500">Menyiapkan preview surat tugas...</p>
       </div>
     );
   }
 
   if (!data.travelOrder) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-slate-600">Surat tugas tidak ditemukan</h2>
-          <Link href="/field">
+          <Link href="/analyst/jobs">
             <Button className="mt-4">Kembali</Button>
           </Link>
         </div>
@@ -170,25 +157,28 @@ export default function FieldTravelOrderPreviewPage() {
   }
 
   return (
-    <div className="p-4 md:p-10 max-w-7xl mx-auto animate-in fade-in duration-500">
-      {/* Header Toolbar */}
-      <div className="flex items-center justify-between mb-8 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+    <div className="max-w-7xl mx-auto animate-in fade-in duration-500 p-4 md:p-10">
+      <div className="mb-8 flex items-center justify-between rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
         <div className="flex items-center gap-4">
-          <Link href="/field/travel-orders">
+          <Link href="/analyst/jobs">
             <Button variant="ghost" size="icon" className="rounded-full hover:bg-slate-100">
               <ArrowLeft className="h-5 w-5 text-slate-600" />
             </Button>
           </Link>
           <div>
-            <h1 className="text-sm font-black text-slate-900 uppercase tracking-tight leading-none">Preview Surat Tugas</h1>
-            <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">{data.travelOrder.document_number}</p>
+            <h1 className="text-sm font-black uppercase tracking-tight text-slate-900 leading-none">
+              Preview Surat Tugas
+            </h1>
+            <p className="mt-1 text-[10px] font-bold uppercase text-slate-400">
+              {data.travelOrder.document_number}
+            </p>
           </div>
         </div>
-        
+
         <Button
           onClick={handleDownloadPdf}
           disabled={generatingPdf || !pdfDocument}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 px-6 font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-900/20"
+          className="h-10 rounded-xl bg-sky-700 px-6 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-sky-900/20 hover:bg-sky-800"
         >
           {generatingPdf ? (
             <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
@@ -199,31 +189,30 @@ export default function FieldTravelOrderPreviewPage() {
         </Button>
       </div>
 
-      {/* Main Preview Area */}
       <div className="grid grid-cols-1 gap-8">
-        <div className="bg-slate-900 p-1 rounded-[2.5rem] shadow-2xl overflow-hidden ring-8 ring-slate-100">
-          <div className="bg-white rounded-[2.2rem] overflow-hidden aspect-[1/1.414] relative">
+        <div className="overflow-hidden rounded-[2.5rem] bg-slate-900 p-1 shadow-2xl ring-8 ring-slate-100">
+          <div className="relative aspect-[1/1.414] overflow-hidden rounded-[2.2rem] bg-white">
             {!pdfDocument ? (
               <div className="absolute inset-0 flex items-center justify-center">
-                <Loader2 className="h-8 w-8 text-emerald-500 animate-spin" />
+                <Loader2 className="h-8 w-8 animate-spin text-sky-500" />
               </div>
             ) : (
-              <PDFViewer className="w-full h-full border-none" showToolbar={false}>
+              <PDFViewer className="h-full w-full border-none" showToolbar={false}>
                 {pdfDocument}
               </PDFViewer>
             )}
           </div>
         </div>
-        
-        {/* Info Box */}
-        <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-2xl flex items-start gap-4">
-          <div className="p-2 bg-emerald-100 rounded-lg">
-            <FileText className="h-5 w-5 text-emerald-600" />
+
+        <div className="flex items-start gap-4 rounded-2xl border border-sky-100 bg-sky-50 p-6">
+          <div className="rounded-lg bg-sky-100 p-2">
+            <FileText className="h-5 w-5 text-sky-700" />
           </div>
           <div>
-            <h4 className="text-xs font-black text-emerald-900 uppercase tracking-widest">Informasi Cetak</h4>
-            <p className="text-xs text-emerald-700/80 mt-1 leading-relaxed">
-              Dokumen ini dioptimalkan untuk ukuran kertas <strong>A4</strong>. Gunakan pengaturan "Fit to Page" saat mencetak jika konten terlihat terlalu dekat dengan margin.
+            <h4 className="text-xs font-black uppercase tracking-widest text-sky-900">Sumber Dokumen</h4>
+            <p className="mt-1 text-xs leading-relaxed text-sky-800/80">
+              Preview ini dirender langsung dari data travel order terbaru agar isi surat tugas analis selalu sama
+              dengan yang dilihat petugas sampling.
             </p>
           </div>
         </div>

@@ -51,12 +51,13 @@ export async function generateHandoverNumber(prefix: string = "BAST") {
   const year = now.getFullYear();
   const month = (now.getMonth() + 1).toString().padStart(2, "0");
 
-  const searchPattern = `${prefix}/${year}/${month}/`;
+  const documentPrefix = prefix === "BAST" ? "WL-BAST" : prefix;
+  const searchSuffix = `/${documentPrefix}/${month}/${year}`;
 
   const lastHandover = await prisma.sampleHandover.findFirst({
     where: {
       handover_number: {
-        startsWith: searchPattern,
+        endsWith: searchSuffix,
       },
     },
     orderBy: {
@@ -71,14 +72,14 @@ export async function generateHandoverNumber(prefix: string = "BAST") {
 
   if (lastHandover) {
     const lastParts = lastHandover.handover_number.split("/");
-    const lastSeq = parseInt(lastParts[lastParts.length - 1]);
+    const lastSeq = parseInt(lastParts[0]);
     if (!isNaN(lastSeq)) {
       nextNumber = lastSeq + 1;
     }
   }
 
   const sequence = nextNumber.toString().padStart(4, "0");
-  return `${searchPattern}${sequence}`;
+  return `${sequence}${searchSuffix}`;
 }
 
 export async function generateTravelOrderNumber(prefix: string = "ST") {

@@ -23,6 +23,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getMySamplingAssignments } from "@/lib/actions/sampling";
 import { PageSkeleton } from "@/components/ui";
+import { FIELD_SAMPLING_STATUS_LABELS } from "@/lib/constants/workflow-copy";
 
 export default function AssignmentsPage() {
   const [assignments, setAssignments] = useState<any[]>([]);
@@ -108,10 +109,10 @@ export default function AssignmentsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Semua Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
+                <SelectItem value="pending">{FIELD_SAMPLING_STATUS_LABELS.pending}</SelectItem>
+                <SelectItem value="in_progress">{FIELD_SAMPLING_STATUS_LABELS.activeSampling}</SelectItem>
+                <SelectItem value="completed">{FIELD_SAMPLING_STATUS_LABELS.completed}</SelectItem>
+                <SelectItem value="cancelled">{FIELD_SAMPLING_STATUS_LABELS.cancelled}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -148,7 +149,7 @@ export default function AssignmentsPage() {
                             statusColors[assignment.status] || statusColors.pending
                           )}
                         >
-                          {assignment.status}
+                          {FIELD_SAMPLING_STATUS_LABELS[assignment.status as keyof typeof FIELD_SAMPLING_STATUS_LABELS] || assignment.status}
                         </Badge>
                       </div>
                       <h4 className="font-bold text-slate-800 text-sm truncate">

@@ -65,10 +65,10 @@ export function useNotifications() {
   // Mark as read
   const markAsRead = useCallback(async (id: string) => {
     try {
-      await fetch('/api/notifications/mark-read', {
+      await fetch('/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
+        body: JSON.stringify({ action: 'markAsRead', notificationId: id }),
       })
 
       setNotifications(prev =>
@@ -88,8 +88,10 @@ export function useNotifications() {
   // Mark all as read
   const markAllAsRead = useCallback(async () => {
     try {
-      await fetch('/api/notifications/mark-all-read', {
+      await fetch('/api/notifications', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'markAllAsRead' }),
       })
 
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
@@ -104,10 +106,8 @@ export function useNotifications() {
   // Delete notification
   const deleteNotification = useCallback(async (id: string) => {
     try {
-      await fetch('/api/notifications', {
+      await fetch(`/api/notifications?id=${encodeURIComponent(id)}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
       })
 
       const target = notifications.find(n => n.id === id)
