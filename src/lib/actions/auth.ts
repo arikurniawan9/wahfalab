@@ -107,12 +107,23 @@ async function getCurrentUserEmail(): Promise<string | null> {
 }
 
 export async function getProfile() {
-  const email = await getCurrentUserEmail()
-  if (!email) return null
+  try {
+    const email = await getCurrentUserEmail()
+    if (!email) return null
 
-  return await prisma.profile.findUnique({
-    where: { email }
-  })
+    return await prisma.profile.findUnique({
+      where: { email }
+    })
+  } catch (error: any) {
+    // If it's a database connection error, return null instead of crashing the whole page
+    if (error.message?.includes('Can\'t reach database server') || 
+        error.message?.includes('PrismaClientInitializationError')) {
+      console.error("Database connection error in getProfile:", error.message);
+      return null;
+    }
+    console.error("Error in getProfile:", error);
+    return null;
+  }
 }
 
 export async function updateProfile(formData: {

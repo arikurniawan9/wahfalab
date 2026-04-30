@@ -109,11 +109,11 @@ export async function getFromGlobalCache(key: string) {
   }
 }
 
-export async function setToGlobalCache(key: string, data: any) {
+export async function setToGlobalCache(key: string, data: any, ttl: number = CACHE_TTL) {
   try {
     if (redis.status !== "ready") return;
     
-    await redis.set(key, JSON.stringify(data), "EX", CACHE_TTL);
+    await redis.set(key, JSON.stringify(data), "EX", ttl);
   } catch (error) {
     // Silent fail
   }

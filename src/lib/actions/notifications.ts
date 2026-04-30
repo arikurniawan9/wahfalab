@@ -113,14 +113,29 @@ export async function getMyNotifications(page = 1, limit = 20, unreadOnly = fals
       })
     ])
 
-    // Normalize legacy "Surat Tugas" links to dedicated field travel-order preview page.
-    const suratTugasLegacy = rawNotifications.filter((n: any) =>
+    // Normalize links
+    let notifications = rawNotifications.map((n: any) => {
+      // 1. Fix legacy analysis completed links
+      if (n.type === 'analysis_completed' && (!n.link || n.link === '/reporting')) {
+        let metadata = n.metadata;
+        if (typeof metadata === 'string') {
+          try { metadata = JSON.parse(metadata); } catch (e) { metadata = {}; }
+        }
+        const jobOrderId = metadata?.job_order_id;
+        if (jobOrderId) {
+          return { ...n, link: `/reporting/jobs/${jobOrderId}` };
+        }
+      }
+      return n;
+    });
+
+    // 2. Normalize legacy "Surat Tugas" links to dedicated field travel-order preview page.
+    const suratTugasLegacy = notifications.filter((n: any) =>
       n.type === 'job_assigned' &&
       n.title?.toLowerCase().includes('surat tugas') &&
       n.link?.startsWith('/field/assignments/')
     )
 
-    let notifications = rawNotifications
     if (suratTugasLegacy.length > 0) {
       const assignmentIds = Array.from(
         new Set(
@@ -137,7 +152,7 @@ export async function getMyNotifications(page = 1, limit = 20, unreadOnly = fals
         })
 
         const byAssignment = new Map(travelOrders.map((t: any) => [t.assignment_id, t.id]))
-        notifications = rawNotifications.map((n: any) => {
+        notifications = notifications.map((n: any) => {
           const assignmentId = n?.metadata?.assignment_id
           const travelOrderId = assignmentId ? byAssignment.get(assignmentId) : null
           if (

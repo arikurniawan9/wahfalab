@@ -3,7 +3,9 @@
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
-import { STORAGE_BUCKETS, uploadToSupabaseStorage } from '@/lib/supabase/storage'
+import { STORAGE_BUCKETS } from '@/lib/supabase/storage'
+import { getCurrentProfile } from '@/lib/auth-helpers'
+import { uploadManagedStorageFile } from '@/lib/storage/upload-router'
 
 // --- REGULATION & BAKU MUTU ACTIONS ---
 
@@ -255,12 +257,31 @@ export async function getReportingJobById(id: string) {
             },
             items: {
               include: {
-                service: true
+                service: {
+                  include: {
+                    regulation_ref: true
+                  }
+                },
+                equipment: true
               }
             }
           }
         },
-        lab_analysis: true
+        analyst: {
+          select: {
+            full_name: true,
+            email: true
+          }
+        },
+        invoice: true,
+        lab_analysis: true,
+        lab_report: {
+          include: {
+            items: {
+              orderBy: { sequence: 'asc' }
+            }
+          }
+        }
       }
     })
     return { success: true, jobOrder: serializeData(item) }
@@ -272,64 +293,134 @@ export async function getReportingJobById(id: string) {
 
 export async function saveReportingResults(id: string, data: any) {
   try {
-    // Update notes in JobOrder
-    await prisma.jobOrder.update({
-      where: { id },
-      data: { notes: data.analysis_notes }
-    })
-
-    // Upsert LabAnalysis results
-    const existingAnalysis = await prisma.labAnalysis.findUnique({
-      where: { job_order_id: id }
-    })
-
-    if (existingAnalysis) {
-      await prisma.labAnalysis.update({
-        where: { job_order_id: id },
-        data: { test_results: data.test_results }
+    const [profile, jobOrder] = await Promise.all([
+      getCurrentProfile(),
+      prisma.jobOrder.findUnique({
+        where: { id },
+        select: { analyst_id: true }
       })
-    } else {
-      // If analyst hasn't created it yet, reporting team can create basic record
-      // although normally it should exist from analysis_done status
-      await prisma.labAnalysis.create({
+    ])
+
+    if (!jobOrder) {
+      return { success: false, error: 'Pekerjaan tidak ditemukan' }
+    }
+
+    await prisma.$transaction(async (tx: any) => {
+      await tx.jobOrder.update({
+        where: { id },
+        data: { notes: data.analysis_notes }
+      })
+
+      const existingAnalysis = await tx.labAnalysis.findUnique({
+        where: { job_order_id: id }
+      })
+
+      if (existingAnalysis) {
+        await tx.labAnalysis.update({
+          where: { job_order_id: id },
+          data: {
+            test_results: data.test_results,
+            updated_at: new Date()
+          }
+        })
+        return
+      }
+
+      const analystId = jobOrder.analyst_id || profile?.id
+      if (!analystId) {
+        throw new Error('Analis belum terhubung ke pekerjaan ini')
+      }
+
+      await tx.labAnalysis.create({
         data: {
           job_order_id: id,
-          analyst_id: "system", // Fallback
+          analyst_id: analystId,
           test_results: data.test_results
         }
       })
-    }
+    })
 
     revalidatePath(`/reporting/jobs/${id}`)
+    revalidatePath(`/analyst/jobs/${id}`)
     return { success: true }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Save Reporting Results Error:', error)
-    return { success: false, error: 'Gagal menyimpan hasil' }
+    return { success: false, error: error?.message || 'Gagal menyimpan hasil' }
   }
 }
 
 export async function generateLHU(id: string) {
   try {
-    const jobOrder = await prisma.jobOrder.findUnique({
-      where: { id },
-      include: {
-        quotation: { include: { profile: true } },
-        lab_analysis: true
-      }
-    })
+    const [jobOrder, companyProfile] = await Promise.all([
+      prisma.jobOrder.findUnique({
+        where: { id },
+        include: {
+          quotation: { include: { profile: true } },
+          lab_analysis: {
+            include: {
+              analyst: {
+                select: {
+                  full_name: true,
+                  email: true
+                }
+              }
+            }
+          },
+          sampling_assignment: {
+            include: {
+              field_officer: {
+                select: {
+                  full_name: true,
+                  email: true
+                }
+              }
+            }
+          }
+        }
+      }),
+      prisma.companyProfile.findFirst()
+    ])
 
     if (!jobOrder) throw new Error("Pekerjaan tidak ditemukan")
 
     const lhuNumber = `LHU-${Date.now()}` // Dynamic number generation logic
+    const now = new Date()
     
-    // Construct LHU Data for PDF generation
     const lhuData = {
       lhu_number: lhuNumber,
-      date: new Date(),
       tracking_code: jobOrder.tracking_code,
-      client: jobOrder.quotation.profile,
-      analysis: jobOrder.lab_analysis,
-      items: jobOrder.lab_analysis?.test_results || []
+      quotation_number: jobOrder.quotation.quotation_number,
+      issue_date: now.toISOString(),
+      customer: {
+        full_name: jobOrder.quotation.profile.full_name || jobOrder.quotation.profile.company_name || "-",
+        company_name: jobOrder.quotation.profile.company_name,
+        address: jobOrder.quotation.profile.address,
+        phone: jobOrder.quotation.profile.phone,
+        email: jobOrder.quotation.profile.email,
+      },
+      sampling: {
+        location: jobOrder.sampling_assignment?.location || jobOrder.quotation.sampling_location || "-",
+        date: (jobOrder.sampling_assignment?.actual_date || jobOrder.sampling_assignment?.scheduled_date || jobOrder.created_at).toISOString(),
+        field_officer: jobOrder.sampling_assignment?.field_officer?.full_name || jobOrder.sampling_assignment?.field_officer?.email || "-",
+      },
+      analysis: {
+        analyst_name: jobOrder.lab_analysis?.analyst?.full_name || jobOrder.lab_analysis?.analyst?.email || "-",
+        start_date: (jobOrder.lab_analysis?.analysis_started_at || jobOrder.analysis_started_at || jobOrder.created_at).toISOString(),
+        end_date: (jobOrder.lab_analysis?.analysis_completed_at || jobOrder.analysis_done_at || now).toISOString(),
+        test_results: (jobOrder.lab_analysis?.test_results as any[]) || [],
+        equipment_used: Array.isArray(jobOrder.lab_analysis?.equipment_used) ? jobOrder.lab_analysis.equipment_used : [],
+        sample_condition: jobOrder.lab_analysis?.sample_condition || "-",
+        notes: jobOrder.notes || jobOrder.lab_analysis?.analysis_notes || "",
+      },
+      company: {
+        company_name: companyProfile?.company_name || "WahfaLab",
+        address: companyProfile?.address || "",
+        phone: companyProfile?.phone || companyProfile?.whatsapp || "",
+        email: companyProfile?.email || "",
+        logo_url: companyProfile?.logo_url || "/logo-wahfalab.png",
+        tagline: companyProfile?.tagline || "Laboratorium Analisis Lingkungan",
+        npwp: companyProfile?.npwp || "",
+      }
     }
 
     return { success: true, lhuNumber, lhuData }
@@ -346,7 +437,7 @@ export async function uploadLHUPDF(id: string, formData: FormData) {
       throw new Error('File PDF tidak ditemukan')
     }
 
-    const { publicUrl } = await uploadToSupabaseStorage({
+    const { publicUrl } = await uploadManagedStorageFile({
       bucket: STORAGE_BUCKETS.labResults,
       folder: `lhu/${id}`,
       file,
@@ -400,6 +491,7 @@ export async function publishLabReportWithLHU(jobOrderId: string, certificateUrl
               standard_value: item.limit || item.standard_value,
               result_value: item.result,
               method: item.method,
+              is_qualified: item.qualification === 'pass' ? true : item.qualification === 'fail' ? false : null,
               sequence: idx
             }))
           }

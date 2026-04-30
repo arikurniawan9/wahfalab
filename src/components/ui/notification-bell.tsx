@@ -125,12 +125,29 @@ export function NotificationBell() {
                     getNotificationColor(notification.type)
                   )}
                   onClick={async () => {
-                    if (!notification.is_read) {
-                      await markAsRead(notification.id)
+                    let targetLink = notification.link;
+                    
+                    // AGGRESSIVE LINK REPAIR:
+                    // If it's a reporting notification but link is general or missing, fix it on the fly
+                    if (notification.type === 'analysis_completed' && (!targetLink || targetLink === '/reporting' || targetLink === '/reporting/jobs')) {
+                       let metadata = notification.metadata;
+                       if (typeof metadata === 'string') {
+                          try { metadata = JSON.parse(metadata); } catch (e) { metadata = {}; }
+                       }
+                       const jobOrderId = metadata?.job_order_id;
+                       if (jobOrderId) {
+                          targetLink = `/reporting/jobs/${jobOrderId}`;
+                       }
                     }
-                    if (notification.link) {
-                      router.push(notification.link)
-                      setOpen(false)
+
+                    if (targetLink) {
+                      setOpen(false);
+                      if (!notification.is_read) {
+                        markAsRead(notification.id);
+                      }
+                      router.push(targetLink);
+                    } else if (!notification.is_read) {
+                      await markAsRead(notification.id);
                     }
                   }}
                 >

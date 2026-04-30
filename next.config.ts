@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   // Enable React strict mode for better development experience
@@ -27,6 +28,13 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   compress: true,
 
+  // Server Actions configuration
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "10mb",
+    },
+  },
+
   // Turbopack configuration (Next.js 16+)
   turbopack: {
     resolveAlias: {
@@ -44,4 +52,18 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  // Suppresses source map uploading logs during bundling
+  silent: true,
+  org: "wahfalab",
+  project: "javascript-nextjs",
+  
+  // Upload a larger set of source maps for prettier stack traces (increases build time)
+  widenClientFileUpload: true,
+
+  // Routes HTTP requests through "Monitoring" to avoid ad-blockers
+  tunnelRoute: "/monitoring",
+
+  // Automatically tree-shake Sentry logger statements to reduce bundle size
+  disableLogger: true,
+});

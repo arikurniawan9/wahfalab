@@ -165,6 +165,7 @@ export async function claimAnalysisJob(jobOrderId: string) {
 
     revalidatePath("/analyst");
     revalidatePath(`/analyst/jobs/${jobOrderId}`);
+    revalidatePath(`/reporting/jobs/${jobOrderId}`);
 
     return { success: true, jobOrder: updated };
   } catch (error) {
@@ -227,6 +228,7 @@ export async function startAnalysis(jobOrderId: string) {
 
     revalidatePath("/analyst");
     revalidatePath(`/analyst/jobs/${jobOrderId}`);
+    revalidatePath(`/reporting/jobs/${jobOrderId}`);
 
     return { success: true, jobOrder: updated };
   } catch (error) {
@@ -340,14 +342,33 @@ export async function uploadAnalysisPDF(
       throw new Error("You are not assigned to this job order");
     }
 
-    const invoicePart = jobOrder.invoice?.invoice_number?.replace(/\//g, "-") || jobOrder.tracking_code;
-    const renamedFile = new File([await file.arrayBuffer()], `LAPORAN-${invoicePart}.${file.name.split(".").pop()}`, {
+    const invoicePart = jobOrder.invoice?.invoice_number?.replace(/\//g, "-") || "NO-INV";
+    const trackingCode = jobOrder.tracking_code;
+    const timestamp = Date.now();
+    const extension = file.name.split(".").pop();
+    
+    // Clean and standardized filename: [TYPE]-[TRACKING]-[INV]-[TIMESTAMP].[EXT]
+    const cleanFileName = `LAPORAN-HASIL-${trackingCode}-${invoicePart}-${timestamp}.${extension}`.toUpperCase();
+
+    const renamedFile = new File([await file.arrayBuffer()], cleanFileName, {
       type: file.type,
     });
+
     const storageConfig = await getManagedUploadConfig();
+    
+    // Logic for folder: if local storage ('public'), use 'analis/analysis-pdf'
+    // otherwise use standard paths
+    let uploadFolder = `analysis-pdf/${jobOrderId}`;
+    if (storageConfig.provider === "public") {
+      uploadFolder = `analis/analysis-pdf/${jobOrderId}`;
+    } else if (storageConfig.provider === "supabase") {
+      // Keep existing pattern for supabase if preferred, or unify
+      uploadFolder = `analisis/analysis-pdf/${jobOrderId}`;
+    }
+
     const uploadResult = await uploadManagedStorageFile({
       bucket: STORAGE_BUCKETS.labResults,
-      folder: storageConfig.provider === "public" ? `analisis/analysis-pdf/${jobOrderId}` : `analysis-pdf/${jobOrderId}`,
+      folder: uploadFolder,
       file: renamedFile,
       allowedMimeTypes: ['application/pdf'],
       maxSizeBytes: 15 * 1024 * 1024,
@@ -375,11 +396,12 @@ export async function uploadAnalysisPDF(
       user_id: profile.id!,
       user_email: profile.email!,
       user_role: profile.role,
-      new_data: { result_pdf_url: publicUrl, storage: provider },
+      new_data: { result_pdf_url: publicUrl, storage: provider, filename: cleanFileName },
     });
 
     revalidatePath("/analyst");
     revalidatePath(`/analyst/jobs/${jobOrderId}`);
+    revalidatePath(`/reporting/jobs/${jobOrderId}`);
 
     return { success: true, url: publicUrl };
   } catch (error) {
@@ -423,14 +445,31 @@ export async function uploadRawData(
       throw new Error("You are not assigned to this job order");
     }
 
-    const invoicePart = jobOrder.invoice?.invoice_number?.replace(/\//g, "-") || jobOrder.tracking_code;
-    const renamedFile = new File([await file.arrayBuffer()], `RAW-${invoicePart}.${file.name.split(".").pop()}`, {
+    const invoicePart = jobOrder.invoice?.invoice_number?.replace(/\//g, "-") || "NO-INV";
+    const trackingCode = jobOrder.tracking_code;
+    const timestamp = Date.now();
+    const extension = file.name.split(".").pop();
+    
+    // Clean and standardized filename: [TYPE]-[TRACKING]-[INV]-[TIMESTAMP].[EXT]
+    const cleanFileName = `DATA-MENTAH-${trackingCode}-${invoicePart}-${timestamp}.${extension}`.toUpperCase();
+
+    const renamedFile = new File([await file.arrayBuffer()], cleanFileName, {
       type: file.type,
     });
+
     const storageConfig = await getManagedUploadConfig();
+    
+    // Logic for folder: if local storage ('public'), use 'analis/raw-data'
+    let uploadFolder = `raw-data/${jobOrderId}`;
+    if (storageConfig.provider === "public") {
+      uploadFolder = `analis/raw-data/${jobOrderId}`;
+    } else if (storageConfig.provider === "supabase") {
+      uploadFolder = `analisis/raw-data/${jobOrderId}`;
+    }
+
     const uploadResult = await uploadManagedStorageFile({
       bucket: STORAGE_BUCKETS.labResults,
-      folder: storageConfig.provider === "public" ? `analisis/raw-data/${jobOrderId}` : `raw-data/${jobOrderId}`,
+      folder: uploadFolder,
       file: renamedFile,
       allowedMimeTypes: [
         'application/pdf',
@@ -470,6 +509,7 @@ export async function uploadRawData(
 
     revalidatePath("/analyst");
     revalidatePath(`/analyst/jobs/${jobOrderId}`);
+    revalidatePath(`/reporting/jobs/${jobOrderId}`);
 
     return { success: true, url: publicUrl };
   } catch (error) {
@@ -477,6 +517,79 @@ export async function uploadRawData(
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to upload file",
+    };
+  }
+}
+
+/**
+ * Hapus berkas analisis (PDF atau Data Mentah)
+ */
+export async function deleteAnalysisFile(
+  jobOrderId: string,
+  type: "pdf" | "raw"
+) {
+  try {
+    const { profile } = await getCurrentUser();
+
+    if (!["admin", "operator", "analyst"].includes(profile.role)) {
+      throw new Error("Unauthorized");
+    }
+
+    const jobOrder = await prisma.jobOrder.findUnique({
+      where: { id: jobOrderId },
+      include: { lab_analysis: true }
+    });
+
+    if (!jobOrder || !jobOrder.lab_analysis) {
+      throw new Error("Data analisis tidak ditemukan");
+    }
+
+    if (profile.role === "analyst" && jobOrder.analyst_id !== profile.id) {
+      throw new Error("Anda tidak ditugaskan untuk job ini");
+    }
+
+    const fileUrl = type === "pdf" 
+      ? jobOrder.lab_analysis.result_pdf_url 
+      : jobOrder.lab_analysis.raw_data_url;
+
+    if (!fileUrl) {
+      throw new Error("Berkas tidak ditemukan untuk dihapus");
+    }
+
+    // Import delete helper
+    const { deleteManagedStorageFile } = await import("@/lib/storage/upload-router");
+    
+    // Hapus dari storage
+    await deleteManagedStorageFile(STORAGE_BUCKETS.labResults, fileUrl);
+
+    // Update database
+    await prisma.labAnalysis.update({
+      where: { job_order_id: jobOrderId },
+      data: type === "pdf" 
+        ? { result_pdf_url: null } 
+        : { raw_data_url: null }
+    });
+
+    await logAudit({
+      action: `analysis_${type}_deleted`,
+      entity_type: "lab_analysis",
+      entity_id: jobOrder.lab_analysis.id,
+      user_id: profile.id!,
+      user_email: profile.email!,
+      user_role: profile.role,
+      metadata: { file_url: fileUrl }
+    });
+
+    revalidatePath("/analyst");
+    revalidatePath(`/analyst/jobs/${jobOrderId}`);
+    revalidatePath(`/reporting/jobs/${jobOrderId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error deleting analysis file:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Gagal menghapus berkas",
     };
   }
 }
@@ -546,7 +659,7 @@ export async function completeAnalysis(jobOrderId: string) {
         type: 'analysis_completed' as any,
         title: 'Analisis Selesai - Siap Reporting',
         message: `Job Order ${updated.tracking_code} siap dibuatkan laporan hasil uji (LHU).`,
-        link: `/reporting`, // Go to queue to claim
+        link: `/reporting/jobs/${jobOrderId}`, // Go directly to job detail
         metadata: {
           job_order_id: jobOrderId,
           tracking_code: updated.tracking_code,

@@ -48,7 +48,19 @@ export function useNotifications() {
       const data = await response.json()
       if (data.error) return
 
-      setNotifications(data.items || [])
+      if (unreadOnly) {
+        // Merge unread into existing list, avoiding duplicates
+        setNotifications(prev => {
+          const unreadIds = new Set((data.items || []).map((n: any) => n.id));
+          const filteredPrev = prev.filter(n => !unreadIds.has(n.id));
+          return [...(data.items || []), ...filteredPrev].sort((a, b) => 
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          ).slice(0, 50); // Keep last 50
+        });
+      } else {
+        setNotifications(data.items || [])
+      }
+
       setStats({
         unreadCount: data.unreadCount || 0,
         totalCount: data.total || 0,
@@ -128,11 +140,11 @@ export function useNotifications() {
     fetchNotifications()
   }, [fetchNotifications])
 
-  // Polling for new notifications (every 60 seconds, less aggressive)
+  // Polling for new notifications (every 15 seconds)
   useEffect(() => {
     const interval = setInterval(() => {
       fetchNotifications(true)
-    }, 60000)
+    }, 15000)
 
     return () => clearInterval(interval)
   }, [fetchNotifications])

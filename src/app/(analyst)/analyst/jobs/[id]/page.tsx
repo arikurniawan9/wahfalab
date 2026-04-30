@@ -13,7 +13,8 @@ import {
   saveAnalysisResults, 
   uploadAnalysisPDF, 
   uploadRawData, 
-  completeAnalysis 
+  completeAnalysis,
+  deleteAnalysisFile
 } from "@/lib/actions/analyst";
 import { createSampleHandover } from "@/lib/actions/handover";
 import { getProfile } from "@/lib/actions/auth";
@@ -107,8 +108,6 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
 
   // Form state
   const [analysisNotes, setAnalysisNotes] = useState("");
-  const [equipmentUsed, setEquipmentUsed] = useState("");
-  const [sampleCondition, setSampleCondition] = useState("");
 
   // Handover state
   const [handoverDialogOpen, setHandoverDialogOpen] = useState(false);
@@ -120,6 +119,8 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
   const [handover, setHandover] = useState<any>(null);
 
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [fileTypeToDelete, setFileTypeToDelete] = useState<"pdf" | "raw" | null>(null);
   const [photoDialogOpen, setPhotoDialogOpen] = useState(false);
   const [selectedPhotos, setSelectedPhotos] = useState<any[]>([]);
 
@@ -146,10 +147,6 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
       if (result.jobOrder.lab_analysis) {
         setAnalysis(result.jobOrder.lab_analysis);
         setAnalysisNotes(result.jobOrder.lab_analysis.analysis_notes || "");
-        setEquipmentUsed(Array.isArray(result.jobOrder.lab_analysis.equipment_used)
-          ? result.jobOrder.lab_analysis.equipment_used.join(", ")
-          : "");
-        setSampleCondition(result.jobOrder.lab_analysis.sample_condition || "");
       }
     } catch (error) {
       console.error("Load Error:", error);
@@ -233,7 +230,43 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
     } catch (error: any) {
       toast.error(error?.message || "Gagal mengunggah file");
     } finally {
+      // Clear input
+      e.target.value = "";
       setSubmitting(false);
+    }
+  };
+
+  const handleDeleteFile = (type: "pdf" | "raw") => {
+    if (!canWorkOnAnalysis) {
+      toast.error("Form sudah dikunci. Tidak dapat menghapus berkas.");
+      return;
+    }
+    setFileTypeToDelete(type);
+    setDeleteDialogOpen(true);
+  };
+
+  const executeDeleteFile = async () => {
+    if (!fileTypeToDelete) return;
+    
+    setSubmitting(true);
+    setDeleteDialogOpen(false);
+    try {
+      const res = await deleteAnalysisFile(id, fileTypeToDelete);
+      if (!res.success) throw new Error(res.error || "Gagal menghapus berkas");
+      
+      toast.success("Berkas berhasil dihapus.");
+      if (fileTypeToDelete === "pdf") {
+        setAnalysis((prev: any) => ({ ...prev, result_pdf_url: null }));
+      } else {
+        setAnalysis((prev: any) => ({ ...prev, raw_data_url: null }));
+      }
+      
+      await loadData();
+    } catch (error: any) {
+      toast.error(error?.message || "Gagal menghapus berkas");
+    } finally {
+      setSubmitting(false);
+      setFileTypeToDelete(null);
     }
   };
 
@@ -242,8 +275,6 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
     try {
       const result = await saveAnalysisResults(id, {
         analysis_notes: analysisNotes,
-        equipment_used: equipmentUsed.split(",").map(e => e.trim()).filter(e => e),
-        sample_condition: sampleCondition
       });
       if (!result.success) {
         throw new Error(result.error || "Gagal menyimpan draft");
@@ -257,14 +288,12 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
   };
 
   const handleComplete = async () => {
-    const hasWorksheetData = Boolean(
-      sampleCondition.trim() &&
-      equipmentUsed.split(",").map((item) => item.trim()).filter(Boolean).length
-    );
+    const hasWorksheetData = Boolean(analysisNotes.trim());
     const hasLabPdf = Boolean(analysis?.result_pdf_url || job?.lab_analysis?.result_pdf_url);
+    const hasRawData = Boolean(analysis?.raw_data_url || job?.lab_analysis?.raw_data_url);
 
-    if (!hasLabPdf || !hasWorksheetData) {
-      toast.error("Lengkapi laporan PDF dan lembar kerja sebelum mengirim ke Reporting.");
+    if (!hasLabPdf || !hasWorksheetData || !hasRawData) {
+      toast.error("Lengkapi laporan PDF, data mentah, dan catatan analisis sebelum mengirim ke Reporting.");
       return;
     }
 
@@ -272,8 +301,6 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
     try {
       const saveResult = await saveAnalysisResults(id, {
         analysis_notes: analysisNotes,
-        equipment_used: equipmentUsed.split(",").map(e => e.trim()).filter(e => e),
-        sample_condition: sampleCondition
       });
       if (!saveResult.success) {
         throw new Error(saveResult.error || "Gagal menyimpan data analisis");
@@ -319,18 +346,19 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
 
   const currentStatus = statusConfig[job.status] || statusConfig.analysis;
   const labAnalysis = analysis || job.lab_analysis;
-  const equipmentList = equipmentUsed.split(",").map((item) => item.trim()).filter(Boolean);
   const hasSampleHandover = Boolean(job.sample_handover?.id || job.sample_handover?.handover_number);
   const showReceiveSampleAction = !hasSampleHandover;
   const hasLabPdf = Boolean(labAnalysis?.result_pdf_url);
-  const hasWorksheetData = Boolean(sampleCondition.trim() && equipmentList.length);
-  const canSendToReporting = Boolean(hasSampleHandover && hasLabPdf && hasWorksheetData && job.status === "analysis");
+  const hasRawData = Boolean(labAnalysis?.raw_data_url);
+  const hasWorksheetData = Boolean(analysisNotes.trim());
+  const canSendToReporting = Boolean(hasSampleHandover && hasLabPdf && hasRawData && hasWorksheetData && job.status === "analysis");
   const perihalPengujian =
     job.quotation?.title?.trim() ||
     job.quotation?.items?.find((item: any) => item.parameter_snapshot)?.parameter_snapshot ||
     "Perihal pengujian belum diisi";
   const isTaskClaimed = job.analyst_id === profile?.id;
-  const canWorkOnAnalysis = Boolean(hasSampleHandover && isTaskClaimed);
+  // Form only editable if status is 'analysis' AND is claimed by this analyst
+  const canWorkOnAnalysis = Boolean(hasSampleHandover && isTaskClaimed && job.status === "analysis");
   const showClaimAction = Boolean(hasSampleHandover && !isTaskClaimed && job.status === "analysis_ready");
   const travelOrderId = job.sampling_assignment?.travel_order?.id || null;
   const travelOrderNumber = job.sampling_assignment?.travel_order?.document_number || null;
@@ -646,36 +674,14 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
                   </h3>
                </CardHeader>
               <CardContent className="p-6 pt-0 space-y-6">
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                       <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Kondisi Fisik Sampel</Label>
-                        <Textarea 
-                          value={sampleCondition} 
-                          onChange={(e) => setSampleCondition(e.target.value)}
-                          disabled={!canWorkOnAnalysis}
-                          className="rounded-2xl bg-slate-50 border-none min-h-[100px] text-xs font-medium focus-visible:ring-violet-500 p-4"
-                          placeholder="Warna, Bau, Endapan, Segel, dll..."
-                        />
-                    </div>
-                    <div className="space-y-2">
-                       <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Peralatan Utama</Label>
-                        <Textarea 
-                          value={equipmentUsed} 
-                          onChange={(e) => setEquipmentUsed(e.target.value)}
-                          disabled={!canWorkOnAnalysis}
-                          className="rounded-2xl bg-slate-50 border-none min-h-[100px] text-xs font-medium focus-visible:ring-violet-500 p-4"
-                          placeholder="Peralatan lab yang digunakan..."
-                        />
-                    </div>
-                 </div>
                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Catatan Teknis Pengujian</Label>
+                    <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Catatan Teknis Pengujian / Hasil Sementara</Label>
                      <Textarea 
                        value={analysisNotes} 
                        onChange={(e) => setAnalysisNotes(e.target.value)}
                        disabled={!canWorkOnAnalysis}
-                       className="rounded-2xl bg-slate-50 border-none min-h-[120px] text-xs font-medium focus-visible:ring-violet-500 p-6"
-                       placeholder="Input narasi hasil pengujian sementara di sini..."
+                       className="rounded-2xl bg-slate-50 border-none min-h-[200px] text-xs font-medium focus-visible:ring-violet-500 p-6"
+                       placeholder="Input narasi hasil pengujian sementara atau catatan lab di sini..."
                      />
                   </div>
                   {!canWorkOnAnalysis && (
@@ -688,7 +694,7 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
                   )}
                   <div className="flex justify-end pt-4">
                      <Button onClick={handleSave} disabled={submitting || !canWorkOnAnalysis} className="h-12 bg-white hover:bg-slate-50 text-slate-800 font-black uppercase text-[10px] tracking-wide rounded-xl border-2 border-slate-100 shadow-sm flex items-center gap-2 px-5 md:px-8">
-                        <Save className="h-4 w-4 shrink-0" /> Simpan Draft
+                        <Save className="h-4 w-4 shrink-0" /> Simpan Catatan
                      </Button>
                   </div>
                </CardContent>
@@ -768,22 +774,25 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
                               <Input 
                                 type="file" accept=".pdf"
                                 onChange={(e) => handleFileUpload(e, "pdf")}
-                                disabled={isExternalFormMode || !canWorkOnAnalysis}
+                                disabled={isExternalFormMode || !canWorkOnAnalysis || !!analysis?.result_pdf_url}
                                 className={cn(
                                   "border-none text-[10px] file:border-none file:rounded-lg file:mr-2 file:px-2 file:py-1 cursor-pointer h-10",
-                                  isExternalFormMode || !canWorkOnAnalysis ? "bg-orange-500/20 text-orange-100 file:bg-orange-500 file:text-white cursor-not-allowed opacity-80" : "bg-indigo-900/50 text-indigo-200 file:bg-indigo-600 file:text-white"
+                                  isExternalFormMode || !canWorkOnAnalysis || !!analysis?.result_pdf_url ? "bg-slate-800/50 text-slate-400 file:bg-slate-700 file:text-slate-500 cursor-not-allowed opacity-80" : "bg-indigo-900/50 text-indigo-200 file:bg-indigo-600 file:text-white"
                                 )}
                               />
                              {analysis?.result_pdf_url && (
                                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                                   <div className="h-6 w-6 rounded-lg bg-emerald-500 flex items-center justify-center text-white"><FileCheck className="h-3 w-3" /></div>
-                                   <Link href={analysis.result_pdf_url} target="_blank" className="text-white hover:text-indigo-300"><Eye className="h-4 w-4" /></Link>
+                                   <div className="h-6 w-6 rounded-lg bg-emerald-500 flex items-center justify-center text-white shadow-lg"><FileCheck className="h-3 w-3" /></div>
+                                   <Link href={analysis.result_pdf_url} target="_blank" className="text-white hover:text-indigo-300 transition-colors"><Eye className="h-4 w-4" /></Link>
+                                   <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      onClick={() => handleDeleteFile("pdf")}
+                                      className="h-8 w-8 text-rose-400 hover:text-rose-600 hover:bg-rose-500/10 rounded-lg"
+                                   >
+                                      <Trash2 className="h-4 w-4" />
+                                   </Button>
                                 </div>
-                             )}
-                             {storageConfig && (
-                                <p className={cn("absolute left-3 -bottom-5 text-[8px] font-black uppercase tracking-widest", storageConfig?.provider === "google_drive" ? "text-violet-200" : storageConfig?.provider === "public" ? "text-blue-200" : storageConfig?.provider === "google_form" ? "text-orange-200" : "text-emerald-200")}>
-                                  Penyimpanan aktif: {storageLabel}
-                                </p>
                              )}
                           </div>
                        </div>
@@ -797,22 +806,25 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
                               <Input 
                                 type="file" accept="image/*,.pdf"
                                 onChange={(e) => handleFileUpload(e, "raw")}
-                                disabled={isExternalFormMode || !canWorkOnAnalysis}
+                                disabled={isExternalFormMode || !canWorkOnAnalysis || !!analysis?.raw_data_url}
                                 className={cn(
                                   "border-none text-[10px] file:border-none file:rounded-lg file:mr-2 file:px-2 file:py-1 cursor-pointer h-10",
-                                  isExternalFormMode || !canWorkOnAnalysis ? "bg-orange-500/20 text-orange-100 file:bg-orange-500 file:text-white cursor-not-allowed opacity-80" : "bg-indigo-900/50 text-indigo-200 file:bg-indigo-600 file:text-white"
+                                  isExternalFormMode || !canWorkOnAnalysis || !!analysis?.raw_data_url ? "bg-slate-800/50 text-slate-400 file:bg-slate-700 file:text-slate-500 cursor-not-allowed opacity-80" : "bg-indigo-900/50 text-indigo-200 file:bg-indigo-600 file:text-white"
                                 )}
                               />
                              {analysis?.raw_data_url && (
                                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                                   <div className="h-6 w-6 rounded-lg bg-emerald-500 flex items-center justify-center text-white"><FileCheck className="h-3 w-3" /></div>
-                                   <Link href={analysis.raw_data_url} target="_blank" className="text-white hover:text-indigo-300"><Eye className="h-4 w-4" /></Link>
+                                   <div className="h-6 w-6 rounded-lg bg-emerald-500 flex items-center justify-center text-white shadow-lg"><FileCheck className="h-3 w-3" /></div>
+                                   <Link href={analysis.raw_data_url} target="_blank" className="text-white hover:text-indigo-300 transition-colors"><Eye className="h-4 w-4" /></Link>
+                                   <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      onClick={() => handleDeleteFile("raw")}
+                                      className="h-8 w-8 text-rose-400 hover:text-rose-600 hover:bg-rose-500/10 rounded-lg"
+                                   >
+                                      <Trash2 className="h-4 w-4" />
+                                   </Button>
                                 </div>
-                             )}
-                             {storageConfig && (
-                                <p className={cn("absolute left-3 -bottom-5 text-[8px] font-black uppercase tracking-widest", storageConfig?.provider === "google_drive" ? "text-violet-200" : storageConfig?.provider === "public" ? "text-blue-200" : storageConfig?.provider === "google_form" ? "text-orange-200" : "text-emerald-200")}>
-                                  Penyimpanan aktif: {storageLabel}
-                                </p>
                              )}
                           </div>
                        </div>
@@ -946,9 +958,11 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
                                    <p className="text-[9px] text-slate-600 font-bold uppercase leading-tight text-left">
                                      {!hasLabPdf
                                        ? "Unggah laporan PDF lab terlebih dahulu."
-                                       : !hasWorksheetData
-                                         ? "Isi kondisi sampel dan alat yang digunakan terlebih dahulu."
-                                         : "Job belum siap dikirim ke Reporting."}
+                                       : !hasRawData
+                                         ? "Unggah data mentah / foto hasil lab terlebih dahulu."
+                                         : !hasWorksheetData
+                                           ? "Isi catatan teknis pengujian terlebih dahulu."
+                                           : "Job belum siap dikirim ke Reporting."}
                                    </p>
                                 </div>
                               )}
@@ -1050,10 +1064,17 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
                    </div>
                    {hasLabPdf ? <Badge className="bg-emerald-500 text-white text-[8px] px-3">SIAP</Badge> : <Badge variant="outline" className="text-[8px] px-3">KOSONG</Badge>}
                 </div>
+                <div className={cn("p-4 rounded-2xl border flex items-center justify-between", hasRawData ? "bg-emerald-50 border-emerald-100" : "bg-slate-50 border-slate-100")}>
+                   <div className="flex items-center gap-3">
+                      <Camera className={cn("h-4 w-4", hasRawData ? "text-emerald-600" : "text-slate-300")} />
+                      <span className="text-[10px] font-bold uppercase text-slate-600 tracking-wider">Data Mentah / Foto</span>
+                   </div>
+                   {hasRawData ? <Badge className="bg-emerald-500 text-white text-[8px] px-3">SIAP</Badge> : <Badge variant="outline" className="text-[8px] px-3">KOSONG</Badge>}
+                </div>
                 <div className={cn("p-4 rounded-2xl border flex items-center justify-between", hasWorksheetData ? "bg-emerald-50 border-emerald-100" : "bg-slate-50 border-slate-100")}>
                    <div className="flex items-center gap-3">
                       <Beaker className={cn("h-4 w-4", hasWorksheetData ? "text-emerald-600" : "text-slate-300")} />
-                      <span className="text-[10px] font-bold uppercase text-slate-600 tracking-wider">Lembar Kerja</span>
+                      <span className="text-[10px] font-bold uppercase text-slate-600 tracking-wider">Catatan Analisis</span>
                    </div>
                    {hasWorksheetData ? <Badge className="bg-emerald-500 text-white text-[8px] px-3">LENGKAP</Badge> : <Badge variant="outline" className="text-[8px] px-3">INPUT</Badge>}
                 </div>
@@ -1061,7 +1082,7 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
              <p className="text-center text-slate-500 text-[10px] leading-relaxed font-bold uppercase tracking-tight italic">
                 Pastikan seluruh data riil telah sesuai. Setelah dikirim, data analisis akan diteruskan ke tim Reporting.
              </p>
-             <Button onClick={handleComplete} disabled={submitting || !canSendToReporting} className="w-full min-h-16 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-500 text-white font-black uppercase tracking-wide text-[10px] md:text-xs rounded-2xl shadow-xl shadow-emerald-900/20 flex items-center justify-center gap-3 px-4 py-3">
+             <Button onClick={handleComplete} disabled={submitting || !canSendToReporting || !canWorkOnAnalysis} className="w-full min-h-16 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-500 text-white font-black uppercase tracking-wide text-[10px] md:text-xs rounded-2xl shadow-xl shadow-emerald-900/20 flex items-center justify-center gap-3 px-4 py-3">
                 <span className="sm:hidden">Konfirmasi</span>
                 <span className="hidden sm:inline">{ANALYST_DETAIL_LABELS.travelOrder.confirmSend}</span>
                 <Send className="h-5 w-5 shrink-0" />
@@ -1081,6 +1102,47 @@ export default function AnalystJobDetailPage({ params }: { params: Promise<{ id:
                    <img src={typeof photo === 'string' ? photo : photo.url} className="w-full h-full object-contain" alt="Preview" />
                 </div>
              ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md rounded-[3rem] p-0 overflow-hidden border-none shadow-2xl">
+          <div className="bg-rose-950 p-10 text-white text-center relative overflow-hidden">
+             <div className="absolute inset-0 bg-gradient-to-b from-rose-600/20 to-transparent" />
+             <div className="relative z-10 space-y-4">
+                <div className="h-20 w-20 rounded-[2rem] bg-rose-500 flex items-center justify-center mx-auto shadow-2xl border-4 border-rose-900/50 animate-pulse">
+                   <Trash2 className="h-10 w-10 text-white" />
+                </div>
+                <div>
+                   <DialogTitle className="text-2xl font-black uppercase tracking-tight">Hapus Berkas?</DialogTitle>
+                   <p className="text-rose-400 text-[10px] font-black uppercase tracking-[0.2em] mt-2">Tindakan ini tidak dapat dibatalkan</p>
+                </div>
+             </div>
+          </div>
+          <div className="p-8 bg-white space-y-6">
+             <div className="p-6 bg-rose-50 rounded-[2rem] border-2 border-rose-100 flex items-start gap-4">
+                <AlertCircle className="h-6 w-6 text-rose-600 shrink-0" />
+                <p className="text-[11px] text-rose-900 font-bold uppercase leading-relaxed">
+                   Berkas <span className="text-rose-600 font-black">{fileTypeToDelete === "pdf" ? "Laporan Lab (PDF)" : "Data Mentah / Foto"}</span> akan dihapus permanen dari sistem dan penyimpanan cloud.
+                </p>
+             </div>
+             
+             <div className="grid grid-cols-2 gap-4">
+                <Button 
+                   variant="outline" 
+                   onClick={() => setDeleteDialogOpen(false)}
+                   className="h-14 rounded-2xl border-slate-200 text-slate-500 font-black uppercase text-[10px] tracking-widest hover:bg-slate-50"
+                >
+                   Batal
+                </Button>
+                <Button 
+                   onClick={executeDeleteFile}
+                   className="h-14 bg-rose-600 hover:bg-rose-700 text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-xl shadow-rose-900/20 flex items-center justify-center gap-2"
+                >
+                   Ya, Hapus <Trash2 className="h-4 w-4" />
+                </Button>
+             </div>
           </div>
         </DialogContent>
       </Dialog>

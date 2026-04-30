@@ -37,6 +37,7 @@ import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useNotifications } from "@/hooks/use-notifications";
+import AnalystLoading from "./loading";
 
 export default function AnalystDashboardPage() {
   const [loading, setLoading] = useState(true);
@@ -68,7 +69,7 @@ export default function AnalystDashboardPage() {
   const unreadNotifications = notifications.filter(n => !n.is_read).slice(0, 2);
 
   if (loading && !refreshing) {
-    return <div className="flex h-[80vh] items-center justify-center"><ChemicalLoader /></div>;
+    return <AnalystLoading />;
   }
 
   const statsCards = [

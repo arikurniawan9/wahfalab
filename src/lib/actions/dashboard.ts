@@ -1,6 +1,7 @@
 "use server";
 
 import prisma from "@/lib/prisma";
+import { getFromGlobalCache, setToGlobalCache } from "@/lib/cache";
 import {
   format,
   subDays,
@@ -10,6 +11,9 @@ import {
   endOfDay,
   endOfMonth,
 } from "date-fns";
+
+const DASHBOARD_CACHE_KEY = "dashboard_admin_data";
+const DASHBOARD_CACHE_TTL = 300; // 5 minutes in seconds
 
 type DashboardActivity = {
   id: string;
@@ -234,6 +238,9 @@ export async function getAdminDashboardStats() {
 }
 
 export async function getAdminDashboardData(): Promise<AdminDashboardData> {
+  const cachedData = await getFromGlobalCache(DASHBOARD_CACHE_KEY);
+  if (cachedData) return cachedData;
+
   const now = new Date();
   const currentMonthStart = startOfMonth(now);
   const lastMonthStart = startOfMonth(subMonths(now, 1));
@@ -442,7 +449,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
     unscheduledJobs,
   };
 
-  return {
+  const dashboardData: AdminDashboardData = {
     summary: {
       totalQuotations,
       activeOrders,
@@ -487,4 +494,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       fieldOfficer: item.field_officer.full_name || "-",
     })),
   };
+
+  await setToGlobalCache(DASHBOARD_CACHE_KEY, dashboardData, DASHBOARD_CACHE_TTL);
+  return dashboardData;
 }

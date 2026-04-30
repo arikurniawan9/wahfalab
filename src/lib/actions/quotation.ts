@@ -2,6 +2,7 @@
 
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { invalidateGlobalCache } from '@/lib/cache'
 import { serializeData } from '@/lib/utils/serialize'
 import { generateInvoiceNumber } from '@/lib/utils/generateNumber'
 import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
@@ -714,6 +715,10 @@ export async function updateQuotationStatus(id: string, status: any) {
     revalidatePath('/admin/quotations')
     revalidatePath('/operator/jobs')
     revalidatePath('/admin/sampling')
+    
+    // Invalidate dashboard cache as status change impacts metrics
+    await invalidateGlobalCache('dashboard_admin_data')
+    
     return { success: true }
   } catch (error) {
     console.error('Update Status Error:', error)
@@ -757,6 +762,10 @@ export async function deleteQuotation(id: string, requesterId?: string, requeste
     await audit.deleteQuotation(quotation)
 
     revalidatePath('/admin/quotations');
+    
+    // Invalidate dashboard cache
+    await invalidateGlobalCache('dashboard_admin_data')
+    
     return { success: true, message: 'Penawaran berhasil dihapus' };
   } catch (error) {
     console.error('Delete Error:', error);
@@ -781,6 +790,10 @@ export async function deleteManyQuotations(ids: string[]) {
     });
 
     revalidatePath('/admin/quotations');
+    
+    // Invalidate dashboard cache
+    await invalidateGlobalCache('dashboard_admin_data')
+    
     return { success: true, message: 'Data-data penawaran berhasil dihapus' };
   } catch (error) {
     console.error('Bulk Delete Error:', error);

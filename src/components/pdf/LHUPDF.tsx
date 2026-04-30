@@ -46,9 +46,20 @@ interface LHUData {
     phone: string;
     email: string;
     logo_url: string;
+    tagline?: string;
     npwp?: string;
   };
 }
+
+const getBaseUrl = () => {
+  if (typeof window !== 'undefined') return window.location.origin;
+  return process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000';
+};
+
+const resolveAssetUrl = (url?: string | null) => {
+  if (!url) return null;
+  return url.startsWith('/') ? `${getBaseUrl()}${url}` : url;
+};
 
 // Simple QR Code pattern generator (visual representation)
 // REMOVED - QR code feature deleted
@@ -56,45 +67,68 @@ interface LHUData {
 const styles = StyleSheet.create({
   page: {
     fontFamily: 'Helvetica',
-    fontSize: 10,
-    padding: 40,
+    fontSize: 9,
+    paddingTop: 24,
+    paddingBottom: 34,
+    paddingLeft: 46,
+    paddingRight: 46,
     backgroundColor: '#ffffff',
+    lineHeight: 1.35,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-    paddingBottom: 15,
-    borderBottomWidth: 3,
-    borderBottomColor: '#059669',
-    borderBottomStyle: 'solid',
+    marginBottom: 10,
+    paddingBottom: 5,
+    borderBottom: '2pt solid #000',
   },
-  logoSection: {
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 15,
-    flex: 1,
+    marginBottom: 2,
   },
-  logo: {
-    width: 60,
-    height: 60,
+  logoContainer: {
+    width: 70,
+    marginRight: 15,
+  },
+  logoImage: {
+    width: 65,
+    height: 65,
     objectFit: 'contain',
   },
+  companyInfoContainer: {
+    flex: 1,
+    textAlign: 'center',
+    paddingRight: 70,
+  },
+  logoFallback: {
+    width: 65,
+    height: 65,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+  },
   companyName: {
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: 'bold',
     color: '#065f46',
-    marginBottom: 3,
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  companyTagline: {
+    fontSize: 8,
+    fontWeight: 'bold',
+    color: '#059669',
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   companyInfo: {
-    fontSize: 8,
-    color: '#64748b',
-    lineHeight: 1.4,
+    fontSize: 7.5,
+    color: '#4b5563',
+    lineHeight: 1.2,
   },
   titleSection: {
     textAlign: 'center',
-    marginBottom: 20,
+    marginTop: 14,
+    marginBottom: 18,
   },
   title: {
     fontSize: 16,
@@ -254,28 +288,37 @@ const formatDate = (dateString: string) => {
 };
 
 export const LHUPDF: React.FC<{ data: LHUData }> = ({ data }) => {
+  const company = data.company || {
+    company_name: 'WahfaLab',
+    address: '',
+    phone: '',
+    email: '',
+    logo_url: '/logo-wahfalab.png',
+    tagline: 'Laboratorium Analisis Lingkungan',
+  };
+  const fullLogoUrl = resolveAssetUrl(company.logo_url || '/logo-wahfalab.png');
+
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        {/* Header */}
+        {/* Kop Surat */}
         <View style={styles.header}>
-          <View style={styles.logoSection}>
-            {data.company.logo_url ? (
-              <Image style={styles.logo} src={data.company.logo_url} />
-            ) : (
-              <View style={[styles.logo, { backgroundColor: '#10b981', borderRadius: 8 }]} />
-            )}
-            <View>
-              <Text style={styles.companyName}>{data.company.company_name}</Text>
-              {data.company.address && (
-                <Text style={styles.companyInfo}>{data.company.address}</Text>
+          <View style={styles.headerRow}>
+            <View style={styles.logoContainer}>
+              {fullLogoUrl ? (
+                <Image source={{ uri: fullLogoUrl }} style={styles.logoImage} />
+              ) : (
+                <View style={styles.logoFallback} />
               )}
-              {data.company.phone && (
-                <Text style={styles.companyInfo}>Telp: {data.company.phone}</Text>
-              )}
-              {data.company.email && (
-                <Text style={styles.companyInfo}>Email: {data.company.email}</Text>
-              )}
+            </View>
+            <View style={styles.companyInfoContainer}>
+              <Text style={styles.companyName}>{company.company_name}</Text>
+              <Text style={styles.companyTagline}>{company.tagline || 'Laboratorium Analisis Lingkungan'}</Text>
+              <Text style={styles.companyInfo}>{company.address}</Text>
+              <Text style={styles.companyInfo}>
+                {company.phone && `Telp: ${company.phone}`}
+                {company.email && ` | Email: ${company.email}`}
+              </Text>
             </View>
           </View>
         </View>
@@ -467,10 +510,10 @@ export const LHUPDF: React.FC<{ data: LHUData }> = ({ data }) => {
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            {data.company.company_name} - {data.company.address}
+            {company.company_name} - {company.address}
           </Text>
           <Text style={styles.footerText}>
-            Telp: {data.company.phone} | Email: {data.company.email}
+            Telp: {company.phone} | Email: {company.email}
           </Text>
           <Text style={styles.footerText}>
             Dokumen ini ditandatangani secara elektronik dan sah tanpa tanda tangan basah
