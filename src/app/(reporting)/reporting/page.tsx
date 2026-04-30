@@ -33,7 +33,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
-import { getLabReports, deleteLabReport } from "@/lib/actions/reporting";
+import { getLabReports, deleteLabReport, getRegulations } from "@/lib/actions/reporting";
 import { getProfile } from "@/lib/actions/auth";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -52,6 +52,7 @@ export default function LabReportListPage() {
   const [archive, setArchive] = useState<any>({ items: [], total: 0, pages: 1 });
   const [drafts, setDrafts] = useState<any>({ items: [], total: 0, pages: 1 });
   const [profile, setProfile] = useState<any>(null);
+  const [regulationTotal, setRegulationTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
@@ -70,14 +71,16 @@ export default function LabReportListPage() {
     else setLoading(true);
     
     try {
-      const [archiveResult, draftResult, profResult] = await Promise.all([
+      const [archiveResult, draftResult, profResult, regulationsResult] = await Promise.all([
         getLabReports({ page, limit: 10, search, status: "final" }),
         getLabReports({ page: 1, limit: 5, search, status: "draft" }),
-        getProfile()
+        getProfile(),
+        getRegulations()
       ]);
       setArchive(archiveResult);
       setDrafts(draftResult);
       setProfile(profResult);
+      setRegulationTotal(Array.isArray(regulationsResult) ? regulationsResult.length : 0);
     } catch (error) {
       toast.error("Gagal memuat data laporan");
     } finally {
@@ -207,19 +210,23 @@ export default function LabReportListPage() {
       )}
 
       {/* Info Banner (Compact) */}
-      <Card className="border-none shadow-xl shadow-emerald-900/5 rounded-2xl overflow-hidden bg-gradient-to-r from-slate-900 via-emerald-950 to-slate-900 text-white relative">
-        <CardContent className="p-6 md:p-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6 relative z-10">
-          <div className="space-y-2 max-w-2xl">
-            <div className="flex items-center gap-2">
-               <div className="h-6 w-6 rounded-lg bg-emerald-500 flex items-center justify-center"><Info className="h-3 w-3 text-white" /></div>
-               <p className="text-[8px] font-black uppercase tracking-[0.2em] text-emerald-400">Arsip & Dokumentasi LHU</p>
+      <Card className="border border-slate-100 shadow-lg shadow-slate-200/50 rounded-2xl overflow-hidden bg-white relative group hover:shadow-xl hover:shadow-emerald-900/10 transition-all duration-500">
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />
+        <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/0 to-teal-500/0 group-hover:from-emerald-500/[0.03] group-hover:to-teal-500/[0.06] transition-colors duration-500" />
+        <CardContent className="p-6 md:p-7 flex flex-col md:flex-row md:items-center md:justify-between gap-6 relative z-10">
+          <div className="flex items-start gap-4 max-w-2xl">
+            <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-900/15 shrink-0">
+              <Info className="h-5 w-5 text-white" />
             </div>
-            <h2 className="text-lg md:text-xl font-black tracking-tight leading-tight uppercase">Pusat dokumentasi hasil uji resmi.</h2>
-            <p className="text-xs text-emerald-100/60 font-medium leading-relaxed italic">Draft pengerjaan dikelola melalui menu antrean verifikasi.</p>
+            <div className="space-y-2">
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-600">Arsip & Dokumentasi LHU</p>
+              <h2 className="text-lg md:text-xl font-black tracking-tight leading-tight text-slate-900">Pusat dokumentasi hasil uji resmi.</h2>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">Draft pengerjaan dikelola melalui menu antrean verifikasi.</p>
+            </div>
           </div>
           <Link href="/reporting/jobs" className="w-full md:w-auto">
-            <Button className="w-full md:w-auto h-12 px-8 rounded-xl bg-white text-slate-900 hover:bg-emerald-50 font-black uppercase text-[9px] tracking-[0.1em] shadow-lg transition-all active:scale-95 group gap-3">
-              Buka Antrean <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+            <Button className="w-full md:w-auto h-12 px-7 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[9px] tracking-[0.1em] shadow-lg shadow-emerald-900/20 transition-all active:scale-95 group/btn gap-3">
+              Buka Antrean <ArrowRight className="h-4 w-4 group-hover/btn:translate-x-1 transition-transform" />
             </Button>
           </Link>
         </CardContent>
@@ -230,7 +237,7 @@ export default function LabReportListPage() {
         {[
           { label: "Total LHU Final", value: archive.total, icon: FileText, color: "text-emerald-600", bg: "bg-emerald-50" },
           { label: "Draft Tersimpan", value: drafts.total, icon: CheckCircle, color: "text-blue-600", bg: "bg-blue-50" },
-          { label: "Baku Mutu Aktif", value: "24", icon: Beaker, color: "text-amber-600", bg: "bg-amber-50" }
+          { label: "Baku Mutu Aktif", value: regulationTotal, icon: Beaker, color: "text-amber-600", bg: "bg-amber-50" }
         ].map((stat, i) => (
           <Card key={i} className="border-none shadow-lg shadow-slate-200/50 rounded-2xl bg-white overflow-hidden group hover:translate-y-[-2px] transition-all">
             <CardContent className="p-5 flex items-center gap-4">

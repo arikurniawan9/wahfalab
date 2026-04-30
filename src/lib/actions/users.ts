@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
 import { hashPassword } from '@/lib/auth-helpers'
+import { requireActionRole } from '@/lib/actions/action-guard'
 
 export async function getUsers(
   page = 1,
@@ -65,7 +66,22 @@ export async function createOrUpdateUser(formData: any, id?: string) {
   const { email, password, full_name, role = 'operator', company_name, address, phone } = formData
 
   try {
+    const actor = await requireActionRole(['admin', 'operator'])
+    if (actor.role === 'operator' && role !== 'client') {
+      return { error: 'Forbidden' }
+    }
+
     if (id) {
+      if (actor.role === 'operator') {
+        const target = await prisma.profile.findUnique({
+          where: { id },
+          select: { role: true }
+        })
+        if (target?.role !== 'client') {
+          return { error: 'Forbidden' }
+        }
+      }
+
       // Update
       const updateData: any = { full_name, role, company_name, address, phone }
 
@@ -118,6 +134,7 @@ export async function createOrUpdateUser(formData: any, id?: string) {
 
 export async function deleteUser(id: string) {
   try {
+    await requireActionRole(['admin'])
     await prisma.profile.delete({ where: { id } })
     revalidatePath('/admin/users')
     revalidatePath('/admin/customers')
@@ -130,6 +147,7 @@ export async function deleteUser(id: string) {
 
 export async function deleteManyUsers(ids: string[]) {
   try {
+    await requireActionRole(['admin'])
     await prisma.profile.deleteMany({
       where: { id: { in: ids } }
     })

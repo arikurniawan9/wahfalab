@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma";
+import { requireActionRole } from "@/lib/actions/action-guard";
 
 export async function getAuditLogs(params: {
   page?: number;
@@ -10,6 +11,8 @@ export async function getAuditLogs(params: {
   action?: string;
   entity_type?: string;
 }) {
+  await requireActionRole(["admin"]);
+
   const { page = 1, limit = 10, search, action, entity_type } = params;
   const skip = (page - 1) * limit;
 
@@ -51,6 +54,8 @@ export async function getAuditLogs(params: {
 }
 
 export async function getAuditLogStats() {
+  await requireActionRole(["admin"]);
+
   const now = new Date();
   const todayStart = new Date(now.setHours(0, 0, 0, 0));
 

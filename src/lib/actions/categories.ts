@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { handleError } from '@/lib/utils/error-handler'
 import { categorySchema, updateCategorySchema, type CategoryInput } from '@/lib/validations'
+import { requireActionRole } from '@/lib/actions/action-guard'
 
 /**
  * Get categories with pagination and search
@@ -70,6 +71,8 @@ export async function getCategoryById(id: string) {
  */
 export async function createCategory(input: CategoryInput) {
   try {
+    await requireActionRole(['admin', 'operator'])
+
     // Validate input
     const validated = categorySchema.parse(input)
 
@@ -103,6 +106,8 @@ export async function createCategory(input: CategoryInput) {
  */
 export async function updateCategory(id: string, input: Partial<CategoryInput>) {
   try {
+    await requireActionRole(['admin', 'operator'])
+
     // Validate partial input
     const validated = updateCategorySchema.parse(input)
 
@@ -148,6 +153,8 @@ export async function updateCategory(id: string, input: Partial<CategoryInput>) 
  */
 export async function deleteCategory(id: string) {
   try {
+    await requireActionRole(['admin', 'operator'])
+
     // Check if category exists and has no services
     const category = await prisma.serviceCategory.findUnique({
       where: { id },
@@ -181,6 +188,8 @@ export async function deleteCategory(id: string) {
  */
 export async function deleteManyCategories(ids: string[]) {
   try {
+    await requireActionRole(['admin', 'operator'])
+
     if (!ids || ids.length === 0) {
       throw new Error('Pilih kategori yang akan dihapus')
     }

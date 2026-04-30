@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
 import { getCachedAllServices, invalidateGlobalCache } from "@/lib/cache"
+import { requireActionRole } from '@/lib/actions/action-guard'
 
 export async function getServices(page = 1, limit = 10, search = "") {
   const skip = (page - 1) * limit
@@ -38,6 +39,8 @@ export async function getServices(page = 1, limit = 10, search = "") {
 
 export async function createOrUpdateService(formData: any, id?: string) {
   try {
+    await requireActionRole(['admin', 'operator'])
+
     let parsedParameters = null;
     
     if (formData.parameters) {
@@ -80,6 +83,8 @@ export async function createOrUpdateService(formData: any, id?: string) {
 
 export async function updateServiceParameters(id: string, parameters: string[]) {
   try {
+    await requireActionRole(['admin', 'operator'])
+
     const parsedParameters = parameters.map(p => ({ name: p }));
     await prisma.service.update({
       where: { id },
@@ -96,6 +101,8 @@ export async function updateServiceParameters(id: string, parameters: string[]) 
 
 export async function deleteService(id: string) {
   try {
+    await requireActionRole(['admin', 'operator'])
+
     await prisma.service.delete({
       where: { id }
     })
@@ -110,6 +117,8 @@ export async function deleteService(id: string) {
 
 export async function deleteManyServices(ids: string[]) {
   try {
+    await requireActionRole(['admin', 'operator'])
+
     await prisma.service.deleteMany({
       where: { id: { in: ids } }
     })

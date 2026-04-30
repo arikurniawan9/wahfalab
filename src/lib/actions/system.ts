@@ -5,12 +5,15 @@ import { revalidatePath } from "next/cache";
 import { serializeData } from "@/lib/utils/serialize";
 import { audit } from "@/lib/audit-log";
 import { STORAGE_BUCKETS, uploadToSupabaseStorage } from "@/lib/supabase/storage";
+import { requireActionRole } from "@/lib/actions/action-guard";
 
 /**
  * Get system statistics for maintenance dashboard
  */
 export async function getSystemStats() {
   try {
+    await requireActionRole(['admin']);
+
     const [
       quotations,
       jobs,
@@ -68,6 +71,8 @@ export async function getSystemStats() {
  */
 export async function getRecentMaintenanceLogs() {
   try {
+    await requireActionRole(['admin']);
+
     const logs = await prisma.auditLog.findMany({
       where: {
         action: {
@@ -89,6 +94,8 @@ export async function getRecentMaintenanceLogs() {
  */
 export async function exportSystemData(categories?: string[]) {
   try {
+    await requireActionRole(['admin']);
+
     const isFull = !categories || categories.length === 0 || categories.includes('all');
     
     // Define what tables belong to which category
@@ -191,6 +198,8 @@ export async function exportSystemData(categories?: string[]) {
  */
 export async function cleanupSpecificCategory(category: string) {
   try {
+    await requireActionRole(['admin']);
+
     switch (category) {
       case 'logs':
         await prisma.$transaction([
@@ -274,6 +283,8 @@ export async function cleanupSpecificCategory(category: string) {
  */
 export async function factoryReset() {
   try {
+    await requireActionRole(['admin']);
+
     const admins = await prisma.profile.findMany({
       where: { role: 'admin' },
       select: { id: true }
@@ -323,6 +334,8 @@ export async function factoryReset() {
  */
 export async function restoreSystemData(backupObj: any) {
   try {
+    await requireActionRole(['admin']);
+
     if (!backupObj || !backupObj.data) {
       throw new Error('Format file backup tidak valid');
     }
@@ -407,6 +420,8 @@ export async function getLandingPageConfig() {
 
 export async function updateLandingPageConfig(data: any) {
   try {
+    await requireActionRole(['admin', 'content_manager']);
+
     const existing = await prisma.landingPageConfig.findFirst();
     let config;
     
@@ -434,6 +449,8 @@ export async function updateLandingPageConfig(data: any) {
  */
 export async function uploadLocalImage(formData: FormData): Promise<{ success: boolean; url?: string; error?: string }> {
   try {
+    await requireActionRole(['admin', 'content_manager']);
+
     const file = formData.get("file");
     if (!(file instanceof File)) {
       throw new Error("File tidak ditemukan");

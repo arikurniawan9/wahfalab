@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback } from "react";
 import { 
   DataTable, 
   SearchInput, 
@@ -44,9 +44,14 @@ export default function AuditLogsPage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
 
-  // Fix: use useCallback to prevent infinite reload
   const fetchAuditLogsWrapper = useCallback(async (page?: number, limit?: number, search?: string) => {
-    const result = await getAuditLogs({ page, limit, search });
+    const [result, statsResult] = await Promise.all([
+      getAuditLogs({ page, limit, search }),
+      getAuditLogStats(),
+    ]);
+
+    setStats(statsResult);
+
     return {
       items: result.data as AuditLog[],
       total: result.meta.total,
@@ -69,20 +74,6 @@ export default function AuditLogsPage() {
       loading: "Memuat data audit log...",
     },
   });
-
-  // Fetch stats separately
-  const fetchStats = useCallback(async () => {
-    try {
-      const result = await getAuditLogStats();
-      setStats(result);
-    } catch (error) {
-      console.error("Failed to fetch audit stats:", error);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchStats();
-  }, [fetchStats, data]); // Refresh stats when data changes
 
   const getActionColor = (action: string) => {
     const act = action.toLowerCase();

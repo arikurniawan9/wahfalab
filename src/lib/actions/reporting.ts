@@ -6,11 +6,16 @@ import { serializeData } from '@/lib/utils/serialize'
 import { STORAGE_BUCKETS } from '@/lib/supabase/storage'
 import { getCurrentProfile } from '@/lib/auth-helpers'
 import { uploadManagedStorageFile } from '@/lib/storage/upload-router'
+import { requireActionRole } from '@/lib/actions/action-guard'
+
+const REPORTING_ROLES = ['admin', 'operator', 'reporting'] as const
 
 // --- REGULATION & BAKU MUTU ACTIONS ---
 
 export async function getRegulations() {
   try {
+    await requireActionRole(REPORTING_ROLES)
+
     const items = await prisma.regulation.findMany({
       include: { _count: { select: { parameters: true } } },
       orderBy: { name: 'asc' }
@@ -24,6 +29,8 @@ export async function getRegulations() {
 
 export async function getRegulationDetail(id: string) {
   try {
+    await requireActionRole(REPORTING_ROLES)
+
     const item = await prisma.regulation.findUnique({
       where: { id },
       include: { parameters: { orderBy: { sequence: 'asc' } } }
@@ -37,6 +44,8 @@ export async function getRegulationDetail(id: string) {
 
 export async function createRegulation(data: any) {
   try {
+    await requireActionRole(REPORTING_ROLES)
+
     const item = await prisma.regulation.create({
       data: {
         name: data.name,
@@ -63,6 +72,8 @@ export async function createRegulation(data: any) {
 
 export async function updateRegulation(id: string, data: any) {
   try {
+    await requireActionRole(REPORTING_ROLES)
+
     await prisma.$transaction(async (tx: any) => {
       // 1. Hapus parameter lama
       await tx.regulationParameter.deleteMany({
@@ -101,6 +112,8 @@ export async function updateRegulation(id: string, data: any) {
 // --- LAB REPORT (LHU) ACTIONS ---
 
 export async function getLabReports(options: { page?: number, limit?: number, search?: string, status?: string } = {}) {
+  await requireActionRole(REPORTING_ROLES)
+
   const { page = 1, limit = 10, search = '', status } = options
   const skip = (page - 1) * limit
 
@@ -141,6 +154,8 @@ export async function getLabReports(options: { page?: number, limit?: number, se
 
 export async function getLabReportById(id: string) {
   try {
+    await requireActionRole(REPORTING_ROLES)
+
     const item = await prisma.labReport.findUnique({
       where: { id },
       include: { 
@@ -157,6 +172,8 @@ export async function getLabReportById(id: string) {
 
 export async function createLabReport(data: any) {
   try {
+    await requireActionRole(REPORTING_ROLES)
+
     const report = await prisma.labReport.create({
       data: {
         report_number: data.report_number,
@@ -194,6 +211,8 @@ export async function createLabReport(data: any) {
 
 export async function updateLabReport(id: string, data: any) {
   try {
+    await requireActionRole(REPORTING_ROLES)
+
     await prisma.$transaction(async (tx: any) => {
       // Delete old items
       await tx.labReportItem.deleteMany({ where: { report_id: id } })
@@ -243,6 +262,8 @@ export async function updateLabReport(id: string, data: any) {
 
 export async function getReportingJobById(id: string) {
   try {
+    await requireActionRole(REPORTING_ROLES)
+
     const item = await prisma.jobOrder.findUnique({
       where: { id },
       include: {
@@ -293,6 +314,8 @@ export async function getReportingJobById(id: string) {
 
 export async function saveReportingResults(id: string, data: any) {
   try {
+    await requireActionRole(REPORTING_ROLES)
+
     const [profile, jobOrder] = await Promise.all([
       getCurrentProfile(),
       prisma.jobOrder.findUnique({
@@ -351,6 +374,8 @@ export async function saveReportingResults(id: string, data: any) {
 
 export async function generateLHU(id: string) {
   try {
+    await requireActionRole(REPORTING_ROLES)
+
     const [jobOrder, companyProfile] = await Promise.all([
       prisma.jobOrder.findUnique({
         where: { id },
@@ -432,6 +457,8 @@ export async function generateLHU(id: string) {
 
 export async function uploadLHUPDF(id: string, formData: FormData) {
   try {
+    await requireActionRole(REPORTING_ROLES)
+
     const file = formData.get('file')
     if (!(file instanceof File)) {
       throw new Error('File PDF tidak ditemukan')
@@ -454,6 +481,8 @@ export async function uploadLHUPDF(id: string, formData: FormData) {
 
 export async function publishLabReportWithLHU(jobOrderId: string, certificateUrl: string, lhuNumber: string) {
   try {
+    await requireActionRole(REPORTING_ROLES)
+
     const jobOrder = await prisma.jobOrder.findUnique({
       where: { id: jobOrderId },
       include: {
@@ -510,6 +539,8 @@ export async function publishLabReportWithLHU(jobOrderId: string, certificateUrl
 
 export async function getMyReportingJobs(page = 1, limit = 10) {
   try {
+    await requireActionRole(REPORTING_ROLES)
+
     const skip = (page - 1) * limit
 
     const [items, total] = await Promise.all([
@@ -558,6 +589,8 @@ export async function getMyReportingJobs(page = 1, limit = 10) {
 
 export async function deleteLabReport(id: string) {
   try {
+    await requireActionRole(REPORTING_ROLES)
+
     await prisma.labReport.delete({ where: { id } })
     revalidatePath('/reporting')
     return { success: true }

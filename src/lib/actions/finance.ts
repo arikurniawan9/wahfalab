@@ -3,7 +3,7 @@
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
-import { auth } from '@/lib/auth'
+import { requireActionRole } from '@/lib/actions/action-guard'
 
 const CASH_ACCOUNT_NUMBER = 'CASH-001'
 
@@ -50,6 +50,7 @@ async function ensureCashAccount() {
  */
 export async function getBankAccounts() {
   try {
+    await requireActionRole(['admin', 'finance', 'operator'])
     await ensureCashAccount()
     const accounts = await prisma.bankAccount.findMany({
       where: { is_active: true },
@@ -75,8 +76,7 @@ export async function saveBankAccount(data: {
   balance?: number
 }) {
   try {
-    const session = await auth()
-    if (!session?.user) return { error: 'Unauthorized' }
+    await requireActionRole(['admin', 'finance'])
 
     if (data.id) {
       const existing = await prisma.bankAccount.findUnique({ where: { id: data.id } })
@@ -117,8 +117,7 @@ export async function saveBankAccount(data: {
  */
 export async function getFinancialRecords(page = 1, limit = 10, type?: 'income' | 'expense', category?: string, bankAccountId?: string) {
   try {
-    const session = await auth()
-    if (!session?.user) return { error: 'Unauthorized' }
+    await requireActionRole(['admin', 'finance'])
 
     const skip = (page - 1) * limit
     const where: any = {}
@@ -152,6 +151,7 @@ export async function getFinancialRecords(page = 1, limit = 10, type?: 'income' 
 
 export async function getCashAccount() {
   try {
+    await requireActionRole(['admin', 'finance', 'operator'])
     return serializeData(await ensureCashAccount())
   } catch (error: any) {
     return null
@@ -160,8 +160,7 @@ export async function getCashAccount() {
 
 export async function getCashClosingEntries(limit = 20) {
   try {
-    const session = await auth()
-    if (!session?.user) return { items: [], total: 0 }
+    await requireActionRole(['admin', 'finance'])
 
     const logs = await prisma.auditLog.findMany({
       where: { entity_type: 'cash_closing' },
@@ -206,8 +205,7 @@ export async function saveCashClosing(input: {
   notes?: string
 }) {
   try {
-    const session = await auth()
-    if (!session?.user) return { error: 'Unauthorized' }
+    const actor = await requireActionRole(['admin', 'finance'])
 
     const cashAccount = await ensureCashAccount()
     const dateKey = toJakartaDateKey(input.date || new Date())
@@ -225,7 +223,6 @@ export async function saveCashClosing(input: {
       return { error: 'Alasan selisih wajib diisi jika saldo tidak sama' }
     }
 
-    const actor = session.user as any
     const payload = {
       date: dateKey,
       accountId: cashAccount.id,
@@ -235,8 +232,8 @@ export async function saveCashClosing(input: {
       difference,
       discrepancyReason,
       notes: String(input.notes || '').trim(),
-      closedById: actor?.id || null,
-      closedByName: actor?.name || actor?.full_name || actor?.email || 'Finance'
+      closedById: actor.id,
+      closedByName: actor.full_name || actor.email || 'Finance'
     }
 
     const existing = await prisma.auditLog.findFirst({
@@ -361,8 +358,7 @@ export async function isFinancePeriodLocked(date?: Date | string) {
 
 export async function getFinancePeriodLocks(limit = 12) {
   try {
-    const session = await auth()
-    if (!session?.user) return { items: [], total: 0 }
+    await requireActionRole(['admin', 'finance'])
 
     const logs = await prisma.auditLog.findMany({
       where: { entity_type: 'finance_period_lock' },
@@ -406,17 +402,7 @@ export async function setFinancePeriodLock(input: {
   reason?: string
 }) {
   try {
-    const session = await auth()
-    if (!session?.user) return { error: 'Unauthorized' }
-
-    const profile = await prisma.profile.findUnique({
-      where: { email: session.user.email! },
-      select: { id: true, role: true, full_name: true, email: true }
-    })
-
-    if (!profile || !['admin', 'finance'].includes(profile.role)) {
-      return { error: 'Forbidden' }
-    }
+    const profile = await requireActionRole(['admin', 'finance'])
 
     const period = String(input.period || '').trim()
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) {
@@ -493,6 +479,8 @@ export async function setFinancePeriodLock(input: {
 
 export async function getBankLedgerSummary(bankAccountId: string) {
   try {
+    await requireActionRole(['admin', 'finance'])
+
     const [income, expense, count] = await Promise.all([
       prisma.financialRecord.aggregate({
         where: { bank_account_id: bankAccountId, type: 'income' },
@@ -559,6 +547,8 @@ export async function getBankLedgerDetails(
   transactionType?: 'income' | 'expense' | 'all'
 ) {
   try {
+    await requireActionRole(['admin', 'finance'])
+
     const getJakartaDateKey = (value: Date | string) => {
       const parts = new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Asia/Jakarta',
@@ -764,6 +754,8 @@ export async function getBankLedgerDetails(
  */
 export async function getFinancialSummary() {
   try {
+    await requireActionRole(['admin', 'finance'])
+
     const income = await prisma.financialRecord.aggregate({
       where: { type: 'income' },
       _sum: { amount: true }
@@ -800,8 +792,7 @@ export async function createFinancialRecord(data: {
   date?: Date
 }) {
   try {
-    const session = await auth()
-    if (!session?.user) return { error: 'Unauthorized' }
+    const actor = await requireActionRole(['admin', 'finance'])
     const transactionDate = data.date || new Date()
     const periodLock = await resolveFinancePeriodLock(toJakartaPeriodKey(transactionDate))
 
@@ -821,7 +812,7 @@ export async function createFinancialRecord(data: {
         bank_account_id: data.bank_account_id,
         reference_id: data.reference_id,
         transaction_date: transactionDate,
-        recorded_by: (session.user as any).id
+        recorded_by: actor.id
       }
     })
 
@@ -865,6 +856,8 @@ export async function createFinancialRecord(data: {
  */
 export async function getMonthlyTrend(months = 6) {
   try {
+    await requireActionRole(['admin', 'finance'])
+
     const records = await prisma.financialRecord.findMany({
       where: {
         transaction_date: {

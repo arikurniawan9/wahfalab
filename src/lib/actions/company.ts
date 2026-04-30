@@ -3,6 +3,7 @@
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { STORAGE_BUCKETS, deleteFromSupabaseStorage, uploadToSupabaseStorage } from '@/lib/supabase/storage'
+import { requireActionRole } from '@/lib/actions/action-guard'
 
 // Helper to make string URL friendly
 function slugify(text: string) {
@@ -68,6 +69,8 @@ export async function updateCompanyProfile(data: {
   upload_storage_note?: string
 }) {
   try {
+    await requireActionRole(['admin'])
+
     // Get the first company profile
     let profile = await prisma.companyProfile.findFirst()
 
@@ -147,6 +150,8 @@ export async function uploadCompanyStamp(file: File) {
 
 async function uploadCompanyFile(file: File, type: 'logo' | 'signature' | 'stamp') {
   try {
+    await requireActionRole(['admin'])
+
     const profile = await getCompanyProfile();
     const companyName = profile?.company_name || 'wahfalab';
     
@@ -176,6 +181,8 @@ async function uploadCompanyFile(file: File, type: 'logo' | 'signature' | 'stamp
 
 export async function deleteCompanyFile(type: 'logo' | 'signature' | 'stamp') {
   try {
+    await requireActionRole(['admin'])
+
     const profile = await getCompanyProfile();
     let currentUrl = '';
     

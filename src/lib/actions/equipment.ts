@@ -3,6 +3,7 @@
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { serializeData } from '@/lib/utils/serialize'
+import { requireActionRole } from '@/lib/actions/action-guard'
 
 export async function getEquipment(page = 1, limit = 10, search = "") {
   const skip = (page - 1) * limit
@@ -27,47 +28,66 @@ export async function getEquipment(page = 1, limit = 10, search = "") {
 }
 
 export async function createOrUpdateEquipment(formData: any, id?: string) {
-  const data = {
-    name: formData.name,
-    category: formData.category,
-    specification: formData.specification,
-    price: formData.price,
-    unit: formData.unit || 'unit',
-    availability_status: formData.availability_status || 'available',
-    quantity: parseInt(formData.quantity) || 0,
-    description: formData.description,
-    image_url: formData.image_url,
-  }
+  try {
+    await requireActionRole(['admin', 'operator'])
 
-  if (id) {
-    await prisma.equipment.update({
-      where: { id },
-      data
-    })
-  } else {
-    await (prisma.equipment as any).create({
-      data
-    })
-  }
+    const data = {
+      name: formData.name,
+      category: formData.category,
+      specification: formData.specification,
+      price: formData.price,
+      unit: formData.unit || 'unit',
+      availability_status: formData.availability_status || 'available',
+      quantity: parseInt(formData.quantity) || 0,
+      description: formData.description,
+      image_url: formData.image_url,
+    }
 
-  revalidatePath('/admin/equipment')
-  return { success: true }
+    if (id) {
+      await prisma.equipment.update({
+        where: { id },
+        data
+      })
+    } else {
+      await (prisma.equipment as any).create({
+        data
+      })
+    }
+
+    revalidatePath('/admin/equipment')
+    revalidatePath('/operator/equipment')
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Gagal menyimpan data' }
+  }
 }
 
 export async function deleteEquipment(id: string) {
-  await prisma.equipment.delete({
-    where: { id }
-  })
-  revalidatePath('/admin/equipment')
-  return { success: true }
+  try {
+    await requireActionRole(['admin', 'operator'])
+    await prisma.equipment.delete({
+      where: { id }
+    })
+    revalidatePath('/admin/equipment')
+    revalidatePath('/operator/equipment')
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Gagal menghapus data' }
+  }
 }
 
 export async function deleteManyEquipment(ids: string[]) {
-  await prisma.equipment.deleteMany({
-    where: { id: { in: ids } }
-  })
-  revalidatePath('/admin/equipment')
-  return { success: true }
+  try {
+    await requireActionRole(['admin', 'operator'])
+    await prisma.equipment.deleteMany({
+      where: { id: { in: ids } }
+    })
+    revalidatePath('/admin/equipment')
+    revalidatePath('/operator/equipment')
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Gagal menghapus beberapa data' }
+  }
 }
 
 export async function getAllEquipment() {
