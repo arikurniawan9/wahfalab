@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
+import { isSuperadminEmail } from "@/lib/superadmin";
 
 export async function getCurrentUser() {
   const session = await auth();
@@ -44,7 +45,11 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   return bcrypt.compare(password, hash);
 }
 
-export async function getRedirectPath(role: string): Promise<string> {
+export async function getRedirectPath(role: string, email?: string | null): Promise<string> {
+  if (isSuperadminEmail(email)) {
+    return "/superadmin";
+  }
+
   switch (role) {
     case "admin":
       return "/admin";

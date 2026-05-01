@@ -84,7 +84,7 @@ async function getCurrentUser() {
 export async function logAudit(input: AuditLogInput) {
   try {
     const headersList = await headers()
-    const user = input.user_id ? await getCurrentUser() : null
+    const user = !input.user_id ? await getCurrentUser() : null
     
     await prisma.auditLog.create({
       data: {

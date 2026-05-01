@@ -35,7 +35,7 @@ export async function login(formData: FormData) {
   }
 
   // Redirect berdasarkan role
-  const redirectPath = await getRedirectPath(profile.role)
+  const redirectPath = await getRedirectPath(profile.role, email)
   redirect(redirectPath)
 }
 

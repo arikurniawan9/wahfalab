@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { serializeData } from "@/lib/utils/serialize";
 
+const EXCLUDED_ROLES = ["admin", "client"] as const;
+
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
@@ -25,11 +27,16 @@ export async function GET(request: NextRequest) {
     const page = Math.max(parseInt(searchParams.get("page") || "1", 10), 1);
     const limit = Math.max(parseInt(searchParams.get("limit") || "10", 10), 1);
     const search = searchParams.get("search") || "";
+    const role = searchParams.get("role") || "all";
     const skip = (page - 1) * limit;
 
     const where: any = {
-      NOT: [{ role: "admin" }, { role: "client" }],
+      NOT: EXCLUDED_ROLES.map((excluded) => ({ role: excluded })),
     };
+
+    if (role !== "all") {
+      where.role = role;
+    }
 
     if (search) {
       where.OR = [

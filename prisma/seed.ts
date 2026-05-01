@@ -10,6 +10,11 @@ const prisma = new PrismaClient()
 async function main() {
   const seedAccounts = [
     {
+      email: 'superadmin@wahfalab.com',
+      password: 'superadmin123456',
+      full_name: 'WahfaLab Superadmin',
+      role: 'admin' as const,
+    },    {
       email: 'admin@wahfalab.com',
       password: 'admin123456',
       full_name: 'WahfaLab Administrator',
@@ -130,3 +135,4 @@ main()
   .finally(async () => {
     await prisma.$disconnect()
   })
+
